@@ -1,0 +1,265 @@
+# -*- coding: utf-8 -*-
+"""
+统一配置管理 —— 从 config.yaml 加载，供应所有模块使用
+
+设计原则：
+  1. 单一配置源：所有模块通过 AppConfig 获取配置，不直接读 yaml
+  2. 懒加载 + 单例：首次调用时解析，后续共享同一实例
+  3. 类型安全：所有字段使用 dataclass 强类型，避免字符串拼写错误
+"""
+
+from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Optional
+import os
+import yaml
+
+
+# ============================================================
+# 子配置结构
+# ============================================================
+
+@dataclass
+class LLMConfigData:
+    """LLM 配置 (纯数据，与 src.core.llm.LLMConfig 互补)"""
+    provider: str = "deepseek"
+    model: str = "deepseek-chat"
+    api_key: str = ""
+    base_url: str = ""
+    temperature: float = 0.7
+    max_tokens: int = 4096
+    timeout: int = 60
+
+
+@dataclass
+class FallbackConfig:
+    """备用模型配置"""
+    provider: str = "deepseek"
+    model: str = "deepseek-chat"
+    api_key: str = ""
+
+
+@dataclass
+class ShortTermMemoryConfig:
+    """短期记忆配置"""
+    max_turns: int = 20
+    summarize_threshold: int = 10
+
+
+@dataclass
+class LongTermMemoryConfig:
+    """长期记忆配置"""
+    enabled: bool = True
+    db_path: str = "./data/memory.db"
+    collection_name: str = "agent_memory"
+
+
+@dataclass
+class MemoryConfig:
+    """记忆系统总配置"""
+    short_term: ShortTermMemoryConfig = field(default_factory=ShortTermMemoryConfig)
+    long_term: LongTermMemoryConfig = field(default_factory=LongTermMemoryConfig)
+
+
+@dataclass
+class RAGConfig:
+    """RAG 知识库配置"""
+    enabled: bool = True
+    embedding_model: str = "text-embedding-3-small"
+    embedding_provider: str = "openai"
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+    persist_dir: str = "./data/vectordb"
+    top_k: int = 5
+
+
+@dataclass
+class ToolsConfig:
+    """工具系统配置"""
+    enabled: list[str] = field(default_factory=list)
+    dangerous: list[str] = field(default_factory=list)
+    max_calls_per_turn: int = 10
+    output_dir: str = "./output"
+
+
+@dataclass
+class AgentConfig:
+    """Agent 行为配置"""
+    name: str = "SmartAgent"
+    max_iterations: int = 15
+    verbose: bool = True
+    system_prompt: str = (
+        "你是一个智能 AI 助手，具备以下能力：\n"
+        "1. 使用工具获取实时信息（搜索、浏览网页）\n"
+        "2. 读写文件和执行代码\n"
+        "3. 从知识库检索相关信息\n"
+        "4. 多步骤推理与任务规划\n\n"
+        "工作原则：\n"
+        "- 复杂任务先分解再逐步执行\n"
+        "- 不确定时主动搜索确认\n"
+        "- 代码执行后检查结果是否正确\n"
+        "- 用中文回答用户"
+    )
+
+
+@dataclass
+class ServerConfig:
+    """Web 服务器配置"""
+    host: str = "127.0.0.1"
+    port: int = 8080
+
+
+# ============================================================
+# 总配置
+# ============================================================
+
+@dataclass
+class AppConfig:
+    """应用总配置 —— 单例模式"""
+    llm: LLMConfigData = field(default_factory=LLMConfigData)
+    fallback: FallbackConfig = field(default_factory=FallbackConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
+    rag: RAGConfig = field(default_factory=RAGConfig)
+    tools: ToolsConfig = field(default_factory=ToolsConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
+
+    # ======== 可用模型列表 ========
+    available_models: list[dict] = field(default_factory=lambda: [
+        {"id": "deepseek-chat", "name": "DeepSeek Chat", "provider": "deepseek"},
+        {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner", "provider": "deepseek"},
+        {"id": "gpt-4o", "name": "GPT-4o", "provider": "openai"},
+        {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "provider": "openai"},
+        {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "provider": "openai"},
+        {"id": "qwen-plus", "name": "通义千问 Plus", "provider": "qwen"},
+        {"id": "glm-4", "name": "智谱 GLM-4", "provider": "zhipu"},
+    ])
+
+
+# ============================================================
+# 单例管理
+# ============================================================
+
+_config_instance: Optional[AppConfig] = None
+_config_path: str = ""
+
+
+def _parse_config(raw: dict) -> AppConfig:
+    """将 yaml 原始字典解析为 AppConfig"""
+    cfg = AppConfig()
+
+    # LLM
+    llm_raw = raw.get("llm", {})
+    if llm_raw:
+        cfg.llm = LLMConfigData(
+            provider=llm_raw.get("provider", cfg.llm.provider),
+            model=llm_raw.get("model", cfg.llm.model),
+            api_key=llm_raw.get("api_key", cfg.llm.api_key),
+            base_url=llm_raw.get("base_url", cfg.llm.base_url),
+            temperature=float(llm_raw.get("temperature", cfg.llm.temperature)),
+            max_tokens=int(llm_raw.get("max_tokens", cfg.llm.max_tokens)),
+            timeout=int(llm_raw.get("timeout", cfg.llm.timeout)),
+        )
+
+    # Fallback
+    fb_raw = raw.get("fallback", {})
+    if fb_raw:
+        cfg.fallback = FallbackConfig(
+            provider=fb_raw.get("provider", cfg.fallback.provider),
+            model=fb_raw.get("model", cfg.fallback.model),
+            api_key=fb_raw.get("api_key", cfg.fallback.api_key),
+        )
+
+    # Memory
+    mem_raw = raw.get("memory", {})
+    if mem_raw:
+        st_raw = mem_raw.get("short_term", {})
+        lt_raw = mem_raw.get("long_term", {})
+        cfg.memory = MemoryConfig(
+            short_term=ShortTermMemoryConfig(
+                max_turns=st_raw.get("max_turns", cfg.memory.short_term.max_turns),
+                summarize_threshold=st_raw.get("summarize_threshold", cfg.memory.short_term.summarize_threshold),
+            ),
+            long_term=LongTermMemoryConfig(
+                enabled=lt_raw.get("enabled", cfg.memory.long_term.enabled),
+                db_path=lt_raw.get("db_path", cfg.memory.long_term.db_path),
+                collection_name=lt_raw.get("collection_name", cfg.memory.long_term.collection_name),
+            ),
+        )
+
+    # RAG
+    rag_raw = raw.get("rag", {})
+    if rag_raw:
+        cfg.rag = RAGConfig(
+            enabled=rag_raw.get("enabled", cfg.rag.enabled),
+            embedding_model=rag_raw.get("embedding_model", cfg.rag.embedding_model),
+            embedding_provider=rag_raw.get("embedding_provider", cfg.rag.embedding_provider),
+            chunk_size=rag_raw.get("chunk_size", cfg.rag.chunk_size),
+            chunk_overlap=rag_raw.get("chunk_overlap", cfg.rag.chunk_overlap),
+            persist_dir=rag_raw.get("persist_dir", cfg.rag.persist_dir),
+            top_k=rag_raw.get("top_k", cfg.rag.top_k),
+        )
+
+    # Tools
+    tools_raw = raw.get("tools", {})
+    if tools_raw:
+        cfg.tools = ToolsConfig(
+            enabled=tools_raw.get("enabled", cfg.tools.enabled),
+            dangerous=tools_raw.get("dangerous", cfg.tools.dangerous),
+            max_calls_per_turn=tools_raw.get("max_calls_per_turn", cfg.tools.max_calls_per_turn),
+            output_dir=tools_raw.get("output_dir", cfg.tools.output_dir),
+        )
+
+    # Agent
+    agent_raw = raw.get("agent", {})
+    if agent_raw:
+        cfg.agent = AgentConfig(
+            name=agent_raw.get("name", cfg.agent.name),
+            max_iterations=agent_raw.get("max_iterations", cfg.agent.max_iterations),
+            verbose=agent_raw.get("verbose", cfg.agent.verbose),
+            system_prompt=agent_raw.get("system_prompt", cfg.agent.system_prompt),
+        )
+
+    # Server
+    srv_raw = raw.get("server", {})
+    if srv_raw:
+        cfg.server = ServerConfig(
+            host=srv_raw.get("host", cfg.server.host),
+            port=srv_raw.get("port", cfg.server.port),
+        )
+
+    return cfg
+
+
+def load_config(config_file: str = "config.yaml") -> AppConfig:
+    """加载配置文件（首次调用解析，后续返回缓存）"""
+    global _config_instance, _config_path
+
+    # 同路径返回缓存
+    if _config_instance is not None and _config_path == config_file:
+        return _config_instance
+
+    if os.path.exists(config_file):
+        with open(config_file, encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    else:
+        raw = {}
+
+    _config_instance = _parse_config(raw)
+    _config_path = config_file
+    return _config_instance
+
+
+def get_config() -> AppConfig:
+    """获取当前配置（必须先调用 load_config）"""
+    if _config_instance is None:
+        raise RuntimeError("配置尚未加载，请先调用 load_config()")
+    return _config_instance
+
+
+def reload_config(config_file: str = "config.yaml") -> AppConfig:
+    """强制重新加载配置"""
+    global _config_instance, _config_path
+    _config_instance = None
+    _config_path = ""
+    return load_config(config_file)

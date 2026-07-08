@@ -1,0 +1,96 @@
+# ============================================
+# SmartAgent 配置文件
+# 基于 LangChain ReAct 架构
+# ============================================
+
+llm:
+  # 模型提供商: openai / deepseek / zhipu / qwen / ollama / custom
+  provider: "deepseek"
+  model: "deepseek-chat"
+  api_key: ""          # 留空自动按 provider 从环境变量读取
+  base_url: ""         # 留空按 provider 自动补全
+  temperature: 0.7
+  max_tokens: 4096
+  timeout: 60          # 秒 (单次 API 调用超时)
+
+# --- 备用模型 (fallback) ---
+fallback:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  api_key: "${DEEPSEEK_API_KEY}"
+
+# --- 记忆系统 ---
+memory:
+  short_term:
+    max_turns: 20             # 保留最近 N 轮对话
+    summarize_threshold: 10   # 超过此轮数自动摘要压缩
+
+  long_term:
+    enabled: true
+    db_path: "./data/memory.db"
+    collection_name: "agent_memory"
+
+# --- RAG 知识库 ---
+rag:
+  enabled: true
+  embedding_model: "text-embedding-3-small"
+  embedding_provider: "openai"
+  chunk_size: 500
+  chunk_overlap: 50
+  persist_dir: "./data/vectordb"
+  top_k: 5
+
+# --- 工具系统 ---
+tools:
+  # 允许的工具列表，空列表=全部启用
+  enabled:
+    - "web_search"
+    - "fetch_url"
+    - "read_file"
+    - "write_file"
+    - "run_python"
+    - "calculator"
+
+  # 危险工具需确认
+  dangerous:
+    - "run_python"
+    - "write_file"
+    - "run_shell"
+
+  max_calls_per_turn: 10
+
+  # Agent 读写文件的根目录（相对路径自动拼接到此目录下）
+  # 部署到服务器时改为 "/data/smart_agent/output" 等绝对路径
+  output_dir: "./output"
+
+# --- Agent 行为 ---
+agent:
+  name: "SmartAgent"
+  max_iterations: 15          # 单次任务最大迭代次数
+  verbose: true               # 显示思考过程
+  system_prompt: |
+    你是 SmartAgent，一个基于 ReAct 架构构建的智能 AI 助手。你由用户定制开发，不是 DeepSeek、OpenAI 或其他任何厂商的官方助手。
+    绝对不要声称自己是 DeepSeek、ChatGPT 或其他 AI 产品——你只有一个身份：SmartAgent。
+
+    具备以下能力：
+    1. 使用工具获取实时信息（搜索、浏览网页）
+    2. 读写文件和执行代码
+    3. 从知识库检索相关信息
+    4. 多步骤推理与任务规划
+
+    工作原则：
+    - 当被问"你是谁"时，回答你是 SmartAgent
+    - 复杂任务先分解再逐步执行
+    - 不确定时主动搜索确认
+    - 代码执行后检查结果是否正确
+    - 用中文回答用户
+
+# --- Tracing 可观测性 ---
+tracing:
+  enabled: false               # 设为 true 并设置 LANGCHAIN_API_KEY 启用
+  project: "smart_agent"       # LangSmith 项目名
+
+# --- Web 服务器 ---
+server:
+  host: "127.0.0.1"
+  port: 8080

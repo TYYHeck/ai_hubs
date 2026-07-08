@@ -1,0 +1,48 @@
+# === Python 版本要求 ===
+# python_requires >= 3.11
+
+# === LangChain 核心 (Agent 架构) ===
+langchain>=0.3.0              # LangChain 核心框架
+langchain-core>=0.3.0         # LangChain 核心抽象
+langchain-openai>=0.2.0       # LangChain OpenAI 集成 (ChatOpenAI)
+langchain-community>=0.3.0    # LangChain 社区集成
+
+# === LLM API ===
+openai>=1.0.0                 # OpenAI SDK (兼容 DeepSeek/通义/智谱/Ollama)
+httpx>=0.25.0                 # 底层 HTTP 客户端
+pydantic>=2.0.0               # 数据校验
+
+# === 记忆系统 ===
+chromadb>=0.4.0               # 向量数据库 (轻量级、本地运行)
+
+# === RAG 知识库 ===
+langchain-text-splitters>=0.3.0  # 文档切片
+langchain-chroma>=0.1.0          # LangChain Chroma 集成
+tiktoken>=0.5.0                  # 精确 token 计数
+
+# === 工具系统 ===
+beautifulsoup4>=4.12.0        # 网页解析
+requests>=2.31.0              # HTTP 请求
+duckduckgo_search>=5.0        # 搜索引擎
+
+# === CLI 界面 ===
+rich>=13.0.0                  # 漂亮的终端渲染
+prompt_toolkit>=3.0.0         # 交互式输入
+pyreadline3>=3.4.0; sys_platform == "win32"  # Windows Tab 补全 / 历史
+
+# === Web 界面 ===
+fastapi>=0.110.0              # Web API 框架
+uvicorn>=0.27.0               # ASGI 服务器
+
+# === 配置 ===
+pyyaml>=6.0                   # YAML 配置文件解析
+python-dotenv>=1.0.0          # 环境变量管理
+
+# === 测试 ===
+pytest>=8.0.0                  # 测试框架
+pytest-asyncio>=0.23.0         # 异步测试支持
+pytest-mock>=3.12.0            # Mock 支持
+
+# === 可选增强 ===
+pypdf>=4.0.0                  # PDF 加载
+markdown>=3.5.0               # Markdown 解析

@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  smart_agent:
+    build: .
+    container_name: smart_agent
+    ports:
+      - "8080:8080"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    volumes:
+      # 挂载配置文件（方便在线修改）
+      - ./config.yaml:/app/config.yaml:ro
+      # 持久化运行时数据
+      - ./data:/app/data
+      - ./output:/app/output
+    restart: unless-stopped
