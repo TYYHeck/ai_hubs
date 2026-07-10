@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAppStore, createUserMessage, createAgentMessage } from '../stores/appStore';
-import { chatStream, agentsApi } from '../api/client';
+import { chatStream, agentsApi, configApi } from '../api/client';
 import type { ChatMessage } from '../types';
 
 // ── 对话即管理：斜杠命令 ──
@@ -67,6 +67,13 @@ export default function ChatView() {
   const setStreaming = useAppStore((s) => s.setStreaming);
   const agents = useAppStore((s) => s.agents);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const planningEnabled = useAppStore((s) => s.planningEnabled);
+  const ragEnabled = useAppStore((s) => s.ragEnabled);
+  const reflectionEnabled = useAppStore((s) => s.reflectionEnabled);
+  const setModeState = useAppStore((s) => s.setModeState);
+  const setCurrentModel = useAppStore((s) => s.setCurrentModel);
+  const setUserSettings = useAppStore((s) => s.setUserSettings);
+  const currentProvider = useAppStore((s) => s.currentProvider);
 
   const [input, setInput] = useState('');
   const [showCommands, setShowCommands] = useState(false);
@@ -80,6 +87,54 @@ export default function ChatView() {
   }, []);
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+
+  // ── 对话即管理：将"设置XXX为YYY"真实落地到配置 ──
+  const applyChatSetting = async (rawKey: string, rawValue: string): Promise<string> => {
+    const key = rawKey.toLowerCase().replace(/\s+/g, '');
+    const val = rawValue.toLowerCase().trim();
+    const isOn = !(val.includes('关') || val.includes('禁用') || val === 'false' || val === 'off' || val === '0' || val === 'no');
+
+    // 主题 / 外观
+    if (key.includes('主题') || key.includes('外观') || key.includes('theme') || key.includes('配色')) {
+      const light = val.includes('亮') || val.includes('浅') || val === 'light';
+      const next = light ? 'light' : 'dark';
+      setUserSettings({ theme: next });
+      return `🎨 已将界面主题切换为「${next === 'dark' ? '深色' : '浅色'}模式」。\n\n> 你也可以在「系统设置 → 外观设置」中调整。`;
+    }
+
+    // 模型
+    if (key.includes('模型') || key.includes('model')) {
+      const model = rawValue.trim();
+      if (!model) return `⚠️ 未识别到模型名称，请重试，例如："设置模型为 gpt-4o"。`;
+      try {
+        const res = await configApi.switchModel(model);
+        if (res.ok) { setCurrentModel(model, currentProvider); return `🤖 已切换模型为「${model}」。`; }
+        return `⚠️ 模型「${model}」切换失败，请到「系统设置 → 模型切换」确认该模型可用。`;
+      } catch {
+        return `⚠️ 模型切换请求失败，请稍后重试。`;
+      }
+    }
+
+    // 计划 / RAG / 反思 模式
+    let mode: 'planning' | 'rag' | 'reflection' | null = null;
+    let modeLabel = '';
+    if (key.includes('计划') || key.includes('plan')) { mode = 'planning'; modeLabel = '计划模式'; }
+    else if (key.includes('rag') || key.includes('知识库') || key.includes('检索')) { mode = 'rag'; modeLabel = 'RAG 知识库'; }
+    else if (key.includes('反思') || key.includes('reflect')) { mode = 'reflection'; modeLabel = '反思模式'; }
+
+    if (mode) {
+      const current = mode === 'planning' ? planningEnabled : mode === 'rag' ? ragEnabled : reflectionEnabled;
+      if (current !== isOn) {
+        try {
+          const res = await configApi.toggleMode(mode);
+          if (res.ok) setModeState(mode, res.enabled);
+        } catch { /* 忽略，按目标状态提示 */ }
+      }
+      return `⚙️ 已将「${modeLabel}」${isOn ? '开启' : '关闭'}。`;
+    }
+
+    return `ℹ️ 暂不支持通过对话设置「${rawKey}」。你可以到「系统设置」页面手动调整。`;
+  };
 
   const handleSend = async () => {
     const text = input.trim();
@@ -141,7 +196,7 @@ export default function ChatView() {
       addMessage(userMsg);
 
       const agentMsg = createAgentMessage();
-      agentMsg.content = `⚙️ **设置「${key}」为「${value}」**\n\n> 该设置已通过对话快速修改。你可以在「系统设置」页面查看和管理所有配置项。\n\n> 💡 提示：输入 \`/config\` 可查看当前完整配置。`;
+      agentMsg.content = await applyChatSetting(key, value);
       addMessage(agentMsg);
       return;
     }

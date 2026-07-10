@@ -26,6 +26,14 @@ function loadSettings(): UserSettings {
     clientAutoStart: false,
     clientMinimizeToTray: true,
     clientNotificationEnabled: true,
+    // IDE 设置
+    ideTheme: 'vs-dark',
+    ideFontSize: 14,
+    ideTabSize: 4,
+    ideAutoComplete: true,
+    ideWordWrap: true,
+    ideMinimap: false,
+    ideLineNumbers: true,
   };
 }
 

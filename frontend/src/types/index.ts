@@ -51,6 +51,14 @@ export interface UserSettings {
   clientAutoStart: boolean;
   clientMinimizeToTray: boolean;
   clientNotificationEnabled: boolean;
+  // IDE 设置
+  ideTheme: string;
+  ideFontSize: number;
+  ideTabSize: number;
+  ideAutoComplete: boolean;
+  ideWordWrap: boolean;
+  ideMinimap: boolean;
+  ideLineNumbers: boolean;
 }
 
 export interface EventLogEntry {

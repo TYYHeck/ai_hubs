@@ -55,6 +55,14 @@ function detectLanguage(filename: string): string {
   return LANGUAGE_MAP[ext] || 'text';
 }
 
+// IDE 主题配色（与设置页选项对应）
+const IDE_THEMES: Record<string, { bg: string; fg: string; gutter: string }> = {
+  'vs-dark': { bg: '#1e1e1e', fg: '#d4d4d4', gutter: '#858585' },
+  'vs-light': { bg: '#ffffff', fg: '#1e1e1e', gutter: '#6e6e6e' },
+  'monokai': { bg: '#272822', fg: '#f8f8f2', gutter: '#75715e' },
+  'github-dark': { bg: '#0d1117', fg: '#c9d1d9', gutter: '#6e7681' },
+};
+
 function syntaxHighlight(code: string, lang: string): string {
   // 简单的语法高亮
   let html = code
@@ -146,7 +154,11 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
   }, []);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-  const fontSize = userSettings.fontSize === 'small' ? 12 : userSettings.fontSize === 'large' ? 16 : 14;
+  const fontSize = userSettings.ideFontSize || 14;
+  const ideTheme = IDE_THEMES[userSettings.ideTheme] || IDE_THEMES['vs-dark'];
+  const showLineNumbers = userSettings.ideLineNumbers;
+  const wordWrap = userSettings.ideWordWrap;
+  const tabSize = userSettings.ideTabSize || 4;
 
   const updateContent = useCallback((content: string) => {
     setTabs((prev) =>
@@ -373,23 +385,25 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
           </div>
 
           {/* 代码编辑器 */}
-          <div className="ide-editor" onKeyDown={handleKeyDown}>
-            <div className="ide-line-numbers">
-              {activeTab.content.split('\n').map((_, i) => (
-                <div key={i} className="ide-line-num" style={{ fontSize }}>{i + 1}</div>
-              ))}
-            </div>
+          <div className="ide-editor" onKeyDown={handleKeyDown} style={{ background: ideTheme.bg, color: ideTheme.fg }}>
+            {showLineNumbers && (
+              <div className="ide-line-numbers" style={{ background: ideTheme.bg }}>
+                {activeTab.content.split('\n').map((_, i) => (
+                  <div key={i} className="ide-line-num" style={{ fontSize, color: ideTheme.gutter }}>{i + 1}</div>
+                ))}
+              </div>
+            )}
             <div className="ide-input-wrapper">
               <pre
                 className="ide-highlight"
-                style={{ fontSize }}
+                style={{ fontSize, tabSize, whiteSpace: wordWrap ? 'pre-wrap' : 'pre', wordBreak: wordWrap ? 'break-word' : 'normal' }}
                 dangerouslySetInnerHTML={{
                   __html: syntaxHighlight(activeTab.content, activeTab.language) + '\n',
                 }}
               />
               <textarea
                 className="ide-textarea"
-                style={{ fontSize }}
+                style={{ fontSize, tabSize, whiteSpace: wordWrap ? 'pre-wrap' : 'pre', wordBreak: wordWrap ? 'break-word' : 'normal' }}
                 value={activeTab.content}
                 onChange={(e) => updateContent(e.target.value)}
                 spellCheck={false}

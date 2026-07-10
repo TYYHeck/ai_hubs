@@ -60,16 +60,28 @@ export default function Settings() {
   // 活跃 Tab
   const [activeSection, setActiveSection] = useState<'llm' | 'model' | 'modes' | 'tools' | 'system' | 'appearance' | 'ide'>('llm');
 
-  // IDE 设置
-  const [ideSettings, setIdeSettings] = useState({
-    theme: 'vs-dark',
-    fontSize: 14,
-    tabSize: 4,
-    autoComplete: true,
-    wordWrap: true,
-    minimap: false,
-    lineNumbers: true,
-  });
+  // IDE 设置（直接绑定到可持久化的 userSettings，切换页面/刷新后保留）
+  const ideSettings = {
+    theme: userSettings.ideTheme,
+    fontSize: userSettings.ideFontSize,
+    tabSize: userSettings.ideTabSize,
+    autoComplete: userSettings.ideAutoComplete,
+    wordWrap: userSettings.ideWordWrap,
+    minimap: userSettings.ideMinimap,
+    lineNumbers: userSettings.ideLineNumbers,
+  };
+  const setIdeSettings = (
+    patch: { theme?: string; fontSize?: number; tabSize?: number; autoComplete?: boolean; wordWrap?: boolean; minimap?: boolean; lineNumbers?: boolean },
+  ) =>
+    setUserSettings({
+      ...(patch.theme !== undefined ? { ideTheme: patch.theme } : {}),
+      ...(patch.fontSize !== undefined ? { ideFontSize: patch.fontSize } : {}),
+      ...(patch.tabSize !== undefined ? { ideTabSize: patch.tabSize } : {}),
+      ...(patch.autoComplete !== undefined ? { ideAutoComplete: patch.autoComplete } : {}),
+      ...(patch.wordWrap !== undefined ? { ideWordWrap: patch.wordWrap } : {}),
+      ...(patch.minimap !== undefined ? { ideMinimap: patch.minimap } : {}),
+      ...(patch.lineNumbers !== undefined ? { ideLineNumbers: patch.lineNumbers } : {}),
+    });
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setStatusMsg({ type, text });
