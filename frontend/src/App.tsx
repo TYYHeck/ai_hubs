@@ -7,10 +7,12 @@ import AgentManager from './components/AgentManager';
 import KnowledgeBase from './components/KnowledgeBase';
 import Settings from './components/Settings';
 import WorkflowEditor from './components/WorkflowEditor';
+import AuthPage from './components/AuthPage';
 import { useAppStore } from './stores/appStore';
 import { configApi, systemApi, tasksApi, agentsApi, knowledgeApi } from './api/client';
 
 export default function App() {
+  const loggedIn = useAppStore((s) => s.loggedIn);
   const activeTab = useAppStore((s) => s.activeTab);
   const setDashboardStats = useAppStore((s) => s.setDashboardStats);
   const setTasks = useAppStore((s) => s.setTasks);
@@ -99,6 +101,11 @@ export default function App() {
       default: return <Dashboard />;
     }
   };
+
+  // ── 未登录显示认证页 ──
+  if (!loggedIn) {
+    return <AuthPage />;
+  }
 
   const pendingCount = queueStatus?.pending || 0;
   const runningCount = queueStatus?.running || 0;

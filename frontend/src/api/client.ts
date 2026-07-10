@@ -225,3 +225,25 @@ export const systemApi = {
   tools: () =>
     request<{ ok: boolean; tools: { name: string; description: string; parameters: string[]; dangerous: boolean }[]; count: number }>('/api/tools'),
 };
+
+// ── 认证 ──
+
+export const authApi = {
+  login: (username: string, password: string) =>
+    request<{ ok: boolean; access_token?: string; token_type?: string; user?: Record<string, unknown>; error?: string }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  sendCode: (email: string) =>
+    request<{ ok: boolean; message?: string; error?: string }>('/api/auth/send-code', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  register: (username: string, password: string, confirmPassword: string, email: string, code: string) =>
+    request<{ ok: boolean; user?: Record<string, unknown>; message?: string; error?: string }>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, confirm_password: confirmPassword, email, code }),
+    }),
+  me: () =>
+    request<{ ok: boolean; user?: Record<string, unknown> }>('/api/auth/me'),
+};

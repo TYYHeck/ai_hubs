@@ -14,6 +14,14 @@ interface AppState {
   activeTab: 'dashboard' | 'chat' | 'tasks' | 'agents' | 'knowledge' | 'workflow' | 'settings';
   setActiveTab: (tab: AppState['activeTab']) => void;
 
+  // ── 认证 ──
+  loggedIn: boolean;
+  token: string | null;
+  currentUser: Record<string, unknown> | null;
+  setLoggedIn: (v: boolean, token?: string) => void;
+  setCurrentUser: (user: Record<string, unknown>) => void;
+  logout: () => void;
+
   // ── 对话 ──
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -77,6 +85,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── UI ──
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  // ── 认证 ──
+  loggedIn: !!localStorage.getItem('token'),
+  token: localStorage.getItem('token'),
+  currentUser: null,
+  setLoggedIn: (v, token) => {
+    if (token) localStorage.setItem('token', token);
+    set({ loggedIn: v, token: token || get().token });
+  },
+  setCurrentUser: (user) => set({ currentUser: user }),
+  logout: () => { localStorage.removeItem('token'); set({ loggedIn: false, token: null, currentUser: null }); },
 
   // ── 对话 ──
   messages: [],
