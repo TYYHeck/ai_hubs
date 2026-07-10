@@ -25,7 +25,7 @@ import asyncio as _asyncio
 # ── 当前执行上下文（用于 write_file 自动关联任务）──
 _current_task_id: ContextVar[Optional[str]] = ContextVar("current_task_id", default=None)
 
-logger = logging.getLogger("smart_agent.task_manager")
+logger = logging.getLogger("ai_hubs.task_manager")
 
 
 # ============================================================

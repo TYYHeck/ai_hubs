@@ -123,7 +123,7 @@ async def api_orchestrate_task_stream(
                     progress_queue.put({"stage": stage, **safe_info}), loop
                 )
             except Exception as e:
-                _log.getLogger("smart_agent.web").warning(
+                _log.getLogger("ai_hubs.web").warning(
                     f"进度回调失败 stage={stage}: {e}", exc_info=True
                 )
 
@@ -191,6 +191,10 @@ async def api_list_modes(current_user = Depends(get_current_user)):
             {"id": "parallel", "name": "并行", "desc": "多 Agent 同时执行，汇总结果"},
             {"id": "pipeline", "name": "流水线", "desc": "Agent 串行接力"},
             {"id": "collaborative", "name": "协作讨论", "desc": "团队讨论，互审达成共识"},
+            {"id": "debate", "name": "辩论裁决", "desc": "正反方辩论 + 投票裁决 (v3.0)"},
+            {"id": "peer_review", "name": "同行评审", "desc": "执行→评审→修改→确认 (v3.0)"},
+            {"id": "round_table", "name": "圆桌会议", "desc": "多轮自由讨论 + 共识追踪 (v3.0)"},
+            {"id": "hierarchical", "name": "层级决策", "desc": "专家→经理→总监层级审批 (v3.0)"},
         ],
     }
 

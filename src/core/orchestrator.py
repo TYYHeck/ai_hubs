@@ -2,11 +2,15 @@
 """
 多 Agent 编排器 —— 根据任务特征自动选择执行策略
 
-支持四种执行模式:
+支持八种执行模式:
   SINGLE         — 单 Agent 执行 (默认)
   PARALLEL       — 多 Agent 同时执行，结果汇总
   PIPELINE       — Agent 串行接力，前一个输出 → 后一个输入
   COLLABORATIVE  — Agent 团队讨论，互相审阅后达成共识
+  DEBATE         — 正反方辩论 + 投票裁决 (v3.0)
+  PEER_REVIEW    — 执行→多人评审→修改→确认 (v3.0)
+  ROUND_TABLE    — 圆桌会议多轮自由讨论 + 共识追踪 (v3.0)
+  HIERARCHICAL   — 专家→经理→总监层级决策 (v3.0)
   AUTO           — 系统自动分析任务，选择最优模式
 
 模式选择策略:
@@ -14,7 +18,10 @@
   - "同时/分别/对比/多角度"          → PARALLEL
   - "先...再...然后...最后" 多步骤  → PIPELINE
   - "讨论/辩论/评估/评审/决策"      → COLLABORATIVE
-  - 复杂任务无明确标记              → PIPELINE (默认)
+  - "辩论/投票/正反/裁决"           → DEBATE (v3.0)
+  - "同行评审/代码审查/打分"        → PEER_REVIEW (v3.0)
+  - "圆桌/共识/头脑风暴"            → ROUND_TABLE (v3.0)
+  - "层级决策/逐级审批/总监审批"    → HIERARCHICAL (v3.0)
 """
 
 from __future__ import annotations
@@ -29,7 +36,7 @@ import re
 
 from .task_manager import TaskManager, Task, AgentProxy, TaskStatus, _current_task_id
 
-logger = logging.getLogger("smart_agent.orchestrator")
+logger = logging.getLogger("ai_hubs.orchestrator")
 
 
 # ============================================================
@@ -41,6 +48,10 @@ class ExecutionMode(Enum):
     PARALLEL = "parallel"          # 并行执行
     PIPELINE = "pipeline"          # 串行流水线
     COLLABORATIVE = "collaborative" # 协作讨论
+    DEBATE = "debate"             # 辩论模式：正反方辩论 + 投票裁决
+    PEER_REVIEW = "peer_review"   # 同行评审：执行→评审→修改→确认
+    ROUND_TABLE = "round_table"   # 圆桌会议：多轮自由讨论 + 共识追踪
+    HIERARCHICAL = "hierarchical" # 层级决策：专家→经理→总监
     AUTO = "auto"                  # 自动选择
 
 
@@ -104,11 +115,31 @@ class ModeDetector:
             "再", "下一步", "紧接着",
         ],
         ExecutionMode.COLLABORATIVE: [
-            "讨论", "辩论", "评估", "评审", "审查",
+            "讨论", "评估", "评审", "审查",
             "决策", "协商", "权衡", "判断", "意见",
-            "投票", "推荐方案", "综合考量", "利弊",
+            "综合考量", "利弊",
             "可行性", "风险分析", "头脑风暴",
-            "review", "debate", "decision",
+            "review", "decision",
+        ],
+        ExecutionMode.DEBATE: [
+            "辩论", "投票", "正反", "辩题", "裁决",
+            "de​bate", "argue", "pros and cons",
+            "赞成反对", "优势劣势",
+        ],
+        ExecutionMode.PEER_REVIEW: [
+            "同行评审", "代码审查", "质量检查", "审阅",
+            "peer review", "code review",
+            "打分", "评分", "测评",
+        ],
+        ExecutionMode.ROUND_TABLE: [
+            "圆桌", "会议", "共识", "集体讨论",
+            "round table", "团队会议",
+            "各抒己见", "头脑风暴",
+        ],
+        ExecutionMode.HIERARCHICAL: [
+            "层级决策", "逐级审批", "请示", "上报",
+            "hierarchical", "审批流程",
+            "专家意见", "总监审批", "经理审核",
         ],
     }
 
@@ -418,6 +449,14 @@ class Orchestrator:
                 self._execute_pipeline(task, agents, result, on_progress)
             elif mode == ExecutionMode.COLLABORATIVE:
                 self._execute_collaborative(task, agents, result, on_progress)
+            elif mode == ExecutionMode.DEBATE:
+                self._execute_debate(task, agents, result, on_progress)
+            elif mode == ExecutionMode.PEER_REVIEW:
+                self._execute_peer_review(task, agents, result, on_progress)
+            elif mode == ExecutionMode.ROUND_TABLE:
+                self._execute_round_table(task, agents, result, on_progress)
+            elif mode == ExecutionMode.HIERARCHICAL:
+                self._execute_hierarchical(task, agents, result, on_progress)
             else:
                 # SINGLE 模式：智能选择最匹配的 Agent
                 idle_tuples = [(a.name, a) for a in agents]
@@ -906,6 +945,287 @@ class Orchestrator:
 
     # ======== 辅助方法 ========
 
+    # ======== 辩论模式 ========
+
+    def _execute_debate(
+        self,
+        task: Task,
+        agents: list[AgentProxy],
+        result: OrchestrationResult,
+        on_progress: Callable | None,
+    ):
+        """辩论模式：正反方辩论 + 投票裁决"""
+        from .communication import DebateManager
+
+        n = len(agents)
+        if n < 2:
+            result.final_result = "辩论需要至少 2 个 Agent（正方 + 反方）"
+            result.success = False
+            return
+
+        half = max(1, n // 2)
+        pro_agents = agents[:half]
+        con_agents = agents[half:]
+        moderator = agents[0]   # 主持人
+
+        self._emit_progress(on_progress, "debate_start", {
+            "pro_agents": [a.name for a in pro_agents],
+            "con_agents": [a.name for a in con_agents],
+            "moderator": moderator.name,
+        })
+
+        # 注入 run_agent_fn
+        _self = self
+        def _run_agent(agent_proxy, tsk, prompt):
+            return _self._run_agent_with_logging(agent_proxy, tsk, prompt, on_progress)
+
+        debate_result = DebateManager.run(
+            topic=task.description,
+            pro_agents=pro_agents,
+            con_agents=con_agents,
+            moderator_agent=moderator,
+            task=task,
+            on_progress=on_progress,
+            rounds=2,
+            run_agent_fn=_run_agent,
+        )
+
+        # 构建最终结果
+        lines = [
+            f"## 辩论裁决\n\n",
+            f"**辩题**: {task.description}\n",
+            f"**获胜方**: {debate_result.winner}\n",
+            f"**正方得分**: {debate_result.pro_score:.1f} / 反方得分: {debate_result.con_score:.1f}\n\n",
+            f"### 核心论据\n",
+        ]
+        for arg in debate_result.key_arguments:
+            lines.append(f"- {arg}\n")
+        lines.append(f"\n### 最终裁决\n{debate_result.final_verdict}\n\n")
+        lines.append(f"### 辩论记录\n")
+        for t in debate_result.turns:
+            side = "正方" if t.side == "pro" else "反方"
+            lines.append(f"\n#### {side} - {t.speaker}\n{t.statement[:800]}\n")
+
+        result.final_result = "\n".join(lines)
+        result.agent_results = [
+            {"agent": t.speaker, "side": t.side, "result": t.statement}
+            for t in debate_result.turns
+        ]
+
+        self._emit_progress(on_progress, "debate_done", {"winner": debate_result.winner})
+
+    # ======== 同行评审模式 ========
+
+    def _execute_peer_review(
+        self,
+        task: Task,
+        agents: list[AgentProxy],
+        result: OrchestrationResult,
+        on_progress: Callable | None,
+    ):
+        """同行评审模式：执行→评审→修改→确认"""
+        from .communication import PeerReviewManager
+
+        n = len(agents)
+        if n < 2:
+            result.final_result = "同行评审需要至少 2 个 Agent（执行者 + 评审者）"
+            result.success = False
+            return
+
+        executor = agents[0]
+        reviewers = agents[1:]
+
+        self._emit_progress(on_progress, "peer_review_start", {
+            "executor": executor.name,
+            "reviewers": [a.name for a in reviewers],
+        })
+
+        _self = self
+        def _run_agent(agent_proxy, tsk, prompt):
+            return _self._run_agent_with_logging(agent_proxy, tsk, prompt, on_progress)
+
+        review_result = PeerReviewManager.run(
+            task_description=task.description,
+            executor_agent=executor,
+            reviewer_agents=reviewers,
+            task=task,
+            on_progress=on_progress,
+            run_agent_fn=_run_agent,
+        )
+
+        work_to_show = review_result.revised_work or review_result.original_work
+
+        lines = [
+            f"## 同行评审报告\n\n",
+            f"**任务**: {task.description}\n",
+            f"**执行者**: {executor.name}\n",
+            f"**最终评分**: {review_result.final_score:.1f} / 10\n",
+            f"**评审结果**: {'✅ 通过' if review_result.approved else '⚠️ 需修改'}\n\n",
+            f"### 评审意见\n",
+        ]
+        for rev in review_result.reviews:
+            lines.append(f"\n**{rev.get('reviewer', '?')}** (评分: {rev.get('total_score', '?')})")
+            for issue in rev.get("issues", []):
+                lines.append(f"\n- ⚠️ {issue}")
+            for sug in rev.get("suggestions", []):
+                lines.append(f"\n- 💡 {sug}")
+            if rev.get("overall_feedback"):
+                lines.append(f"\n> {rev.get('overall_feedback', '')}")
+
+        lines.append(f"\n\n### 最终成果\n{work_to_show[:3000]}")
+
+        result.final_result = "\n".join(lines)
+        result.agent_results = [
+            {"agent": executor.name, "role": "executor",
+             "result": review_result.original_work},
+        ] + [
+            {"agent": r.get("reviewer", ""), "role": "reviewer",
+             "result": r.get("overall_feedback", "")}
+            for r in review_result.reviews
+        ]
+
+        self._emit_progress(on_progress, "peer_review_done", {
+            "approved": review_result.approved,
+            "score": review_result.final_score,
+        })
+
+    # ======== 圆桌会议模式 ========
+
+    def _execute_round_table(
+        self,
+        task: Task,
+        agents: list[AgentProxy],
+        result: OrchestrationResult,
+        on_progress: Callable | None,
+    ):
+        """圆桌会议模式：多轮自由讨论 + 共识追踪"""
+        from .communication import RoundTableManager
+
+        n = len(agents)
+        if n < 2:
+            result.final_result = "圆桌会议需要至少 2 个 Agent"
+            result.success = False
+            return
+
+        facilitator = agents[0]
+        members = agents
+
+        self._emit_progress(on_progress, "roundtable_start", {
+            "members": [a.name for a in members],
+            "facilitator": facilitator.name,
+        })
+
+        _self = self
+        def _run_agent(agent_proxy, tsk, prompt):
+            return _self._run_agent_with_logging(agent_proxy, tsk, prompt, on_progress)
+
+        rt_result = RoundTableManager.run(
+            topic=task.description,
+            members=members,
+            facilitator_agent=facilitator,
+            task=task,
+            on_progress=on_progress,
+            run_agent_fn=_run_agent,
+            discussion_rounds=2,
+        )
+
+        lines = [
+            f"## 圆桌会议纪要\n\n",
+            f"**议题**: {task.description}\n",
+            f"**参与成员**: {', '.join(a.name for a in agents)}\n\n",
+        ]
+
+        if rt_result.consensus_points:
+            lines.append("### 共识点\n")
+            for p in rt_result.consensus_points:
+                lines.append(f"- {p}\n")
+
+        if rt_result.disagreements:
+            lines.append("\n### 分歧点\n")
+            for d in rt_result.disagreements:
+                lines.append(f"- {d}\n")
+
+        lines.append(f"\n{rt_result.final_summary}")
+
+        result.final_result = "\n".join(lines)
+        result.agent_results = []
+        for i, round_data in enumerate(rt_result.rounds):
+            for op in round_data:
+                result.agent_results.append({
+                    "agent": op["speaker"],
+                    "round": i + 1,
+                    "result": op["text"],
+                })
+
+        self._emit_progress(on_progress, "roundtable_done", {
+            "consensus": len(rt_result.consensus_points),
+            "disagreements": len(rt_result.disagreements),
+        })
+
+    # ======== 层级决策模式 ========
+
+    def _execute_hierarchical(
+        self,
+        task: Task,
+        agents: list[AgentProxy],
+        result: OrchestrationResult,
+        on_progress: Callable | None,
+    ):
+        """层级决策模式：专家→经理→总监"""
+        from .communication import HierarchicalManager
+
+        n = len(agents)
+        if n < 3:
+            result.final_result = "层级决策需要至少 3 个 Agent（专家 + 经理 + 总监）"
+            result.success = False
+            return
+
+        experts = agents[:-2]
+        manager = agents[-2]
+        director = agents[-1]
+
+        self._emit_progress(on_progress, "hierarchical_start", {
+            "experts": [a.name for a in experts],
+            "manager": manager.name,
+            "director": director.name,
+        })
+
+        _self = self
+        def _run_agent(agent_proxy, tsk, prompt):
+            return _self._run_agent_with_logging(agent_proxy, tsk, prompt, on_progress)
+
+        hr_result = HierarchicalManager.run(
+            problem=task.description,
+            expert_agents=experts,
+            manager_agent=manager,
+            director_agent=director,
+            task=task,
+            on_progress=on_progress,
+            run_agent_fn=_run_agent,
+        )
+
+        lines = [
+            f"## 层级决策报告\n\n",
+            f"**问题**: {task.description}\n\n",
+            f"### 专家方案\n",
+        ]
+        for ep in hr_result["expert_proposals"]:
+            lines.append(f"\n**{ep['expert']}** 的方案:\n{ep['proposal'][:800]}\n")
+
+        lines.append(f"\n### 经理评审\n{hr_result['manager_review'][:2000]}\n")
+        lines.append(f"\n### 总监最终决策\n{hr_result['final_decision']}")
+
+        result.final_result = "\n".join(lines)
+        result.agent_results = [
+            {"agent": ep["expert"], "role": "expert", "result": ep["proposal"]}
+            for ep in hr_result["expert_proposals"]
+        ] + [
+            {"agent": manager.name, "role": "manager", "result": hr_result["manager_review"]},
+            {"agent": director.name, "role": "director", "result": hr_result["final_decision"]},
+        ]
+
+        self._emit_progress(on_progress, "hierarchical_done", {})
+
     def _resolve_agents(self, agent_names: list[str] | None) -> list[AgentProxy]:
         """解析可用 Agent 列表"""
         all_agents = self.tm.list_agents_dict()
@@ -964,7 +1284,7 @@ def patch_task_manager(tm: TaskManager) -> TaskManager:
         Args:
             description: 任务描述
             title: 标题
-            mode: "single" | "parallel" | "pipeline" | "collaborative" | "auto"
+            mode: "single" | "parallel" | "pipeline" | "collaborative" | "debate" | "peer_review" | "round_table" | "hierarchical" | "auto"
             agent_names: 指定 Agent 列表
             on_progress: 进度回调
 

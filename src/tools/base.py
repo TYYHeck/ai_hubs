@@ -27,7 +27,7 @@ import json
 import asyncio
 import logging
 
-logger = logging.getLogger("smart_agent.tools")
+logger = logging.getLogger("ai_hubs.tools")
 
 
 # ============================================================

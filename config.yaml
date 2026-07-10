@@ -1,6 +1,6 @@
 # ============================================
-# SmartAgent 配置文件 (企业版 v2.0)
-# 基于 LangChain ReAct 架构
+# AI Hubs 配置文件 (v3.0)
+# 新一代智能 AI Agent 框架
 # ============================================
 
 llm:
@@ -50,12 +50,24 @@ tools:
     - "write_file"
     - "run_python"
     - "calculator"
+    - "generate_image"
+    - "database_query"
+    - "http_api_call"
+    - "read_pdf"
+    - "read_excel"
+    - "json_process"
+    - "time_tool"
+    - "text_diff"
+    - "image_analyze"
 
   # 危险工具需确认
   dangerous:
     - "run_python"
     - "write_file"
     - "run_shell"
+    - "database_query"
+    - "http_api_call"
+    - "send_email"
 
   max_calls_per_turn: 10
 
@@ -65,13 +77,13 @@ tools:
 
 # --- Agent 行为 ---
 agent:
-  name: "SmartAgent"
+  name: "AI Hubs"
   max_iterations: 15          # 单次任务最大迭代次数
   verbose: true               # 显示思考过程
   system_prompt: |
     【角色定义】
-    你是 SmartAgent，一个基于 ReAct 架构构建的智能 AI 助手。你由用户定制开发，不是 DeepSeek、OpenAI 或其他任何厂商的官方助手。
-    绝对不要声称自己是 DeepSeek、ChatGPT 或其他 AI 产品——你只有一个身份：SmartAgent。
+    你是 AI Hubs，一个新一代智能 Agent 框架的核心助手。你不是 DeepSeek、OpenAI 或其他任何厂商的官方助手。
+    绝对不要声称自己是 DeepSeek、ChatGPT 或其他 AI 产品——你只有一个身份：AI Hubs。
     你的行为风格：专业、严谨、高效，用简洁清晰的语言回应用户。
 
     【核心目标】
@@ -80,7 +92,7 @@ agent:
     3. 持续优化回答质量，代码执行后检查结果是否正确，必要时修正重试
 
     【行为规则】
-    - 当被问"你是谁"时，回答你是 SmartAgent
+    - 当被问"你是谁"时，回答你是 AI Hubs
     - 复杂任务先分解为子任务，再逐步执行，每步确认结果
     - 搜索优先于猜测：不确定的事实必须通过工具搜索确认
     - 如果有多个可行方案，选择最高效的直接执行，不要逐一列出后再等用户选择
@@ -187,8 +199,10 @@ logging:
 
 # --- 多 Agent 编排 (企业版 v3.0) ---
 orchestrator:
-  # 默认执行模式: auto, single, parallel, pipeline, collaborative
+  # 默认执行模式: auto, single, parallel, pipeline, collaborative, debate, peer_review, round_table, hierarchical
   default_mode: "auto"
+  max_agents: 6             # 最大同时使用 Agent 数
+  timeout: 600              # 全局超时（秒）
 
   # 并行执行配置
   parallel:
@@ -210,6 +224,25 @@ orchestrator:
   collaborative:
     rounds: 2                  # 讨论轮次
     synthesizer: "first"       # 综合者: first (第一个Agent) / 或指定 Agent 名
+
+  # 辩论模式配置
+  debate:
+    rounds: 2                  # 辩论轮次
+    voters: "all"              # 投票者: all(所有Agent) / moderator(主持人)
+
+  # 同行评审配置
+  peer_review:
+    approval_threshold: 7.0    # 通过分数阈值 (1-10)
+    auto_revise: true          # 是否自动修改
+
+  # 圆桌会议配置
+  round_table:
+    discussion_rounds: 2       # 讨论轮次
+    facilitator: "first"       # 主持人: first / 或指定 Agent 名
+
+  # 层级决策配置
+  hierarchical:
+    levels: ["expert", "manager", "director"]  # 决策层级
 
   # 自动模式检测阈值
   auto_detect:

@@ -40,7 +40,7 @@ from ..tools.base import ToolRegistry, get_registry, Tool
 from ..memory.memory_manager import MemoryManager
 from ..rag.knowledge_base import KnowledgeBase
 
-logger = logging.getLogger("smart_agent.agent")
+logger = logging.getLogger("ai_hubs.agent")
 
 
 # ============================================================
@@ -78,7 +78,7 @@ class AgentEvent(Enum):
 
 class AgentCallbackHandler(BaseCallbackHandler):
     """
-    将 LangChain 内部事件桥接到 SmartAgent 的事件体系
+    将 LangChain 内部事件桥接到 AI Hubs 的事件体系
 
     覆盖的回调:
       - on_llm_start/end   → THINK_START / THINK_END
@@ -208,7 +208,7 @@ class Agent:
     _thread_id: str = ""                        # 会话线程 ID (用于 checkpoint)
 
     # --- 配置 ---
-    name: str = "SmartAgent"
+    name: str = "AI Hubs"
     max_iterations: int = 15
     verbose: bool = True
     system_prompt: str = "你是一个智能 AI 助手。"
@@ -365,8 +365,8 @@ class Agent:
 
             # 身份保护
             template_parts.append(
-                "重要：你的名字是 SmartAgent，你不是 DeepSeek、ChatGPT 或任何其他 AI 产品。"
-                "当用户问你的身份时，回答你是 SmartAgent。"
+                "重要：你的名字是 AI Hubs，你不是 DeepSeek、ChatGPT 或任何其他 AI 产品。"
+                "当用户问你的身份时，回答你是 AI Hubs。"
             )
 
             # 能力说明 —— 强制工具优先
@@ -412,8 +412,8 @@ class Agent:
         """字符串拼接回退方案"""
         parts = [self.system_prompt]
         parts.append(
-            "\n重要：你的名字是 SmartAgent，你不是 DeepSeek、ChatGPT 或任何其他 AI 产品。"
-            "当用户问你的身份时，回答你是 SmartAgent。"
+            "\n重要：你的名字是 AI Hubs，你不是 DeepSeek、ChatGPT 或任何其他 AI 产品。"
+            "当用户问你的身份时，回答你是 AI Hubs。"
         )
         if self.tools and len(self.tools) > 0:
             tool_names = [t.name for t in self.tools.list_all()]

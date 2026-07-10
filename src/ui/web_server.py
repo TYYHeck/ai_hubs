@@ -55,7 +55,7 @@ CHAT_PAGE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2358a6ff'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Arial,sans-serif' font-size='28' font-weight='bold' fill='white'%3ESA%3C/text%3E%3C/svg%3E">
-<title>SmartAgent - 智能AI助手</title>
+<title>AI Hubs - 智能AI助手</title>
 <style>
 :root {
   --bg: #0d1117; --sidebar: #161b22; --card: #21262d;
@@ -480,7 +480,7 @@ body { font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:var
 <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="菜单">☰</button>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 <div class="sidebar">
-  <div class="sidebar-header"><h1>SmartAgent</h1><p>智能 AI 助手</p></div>
+  <div class="sidebar-header"><h1>AI Hubs</h1><p>智能 AI 平台</p></div>
   <div class="sidebar-section model-selector">
     <label class="title">模型</label>
     <div class="combo-wrapper" id="modelComboWrapper">
@@ -1198,7 +1198,7 @@ async function sendUnified() {
 }
 
 async function executeUnifiedChat(text) {
-  currentUnifiedMsg = addUnifiedMsg('agent', 'SmartAgent');
+  currentUnifiedMsg = addUnifiedMsg('agent', 'AI Hubs');
   currentUnifiedMsg.querySelector('.msg-body').innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
   unifiedFullText = '';
   unifiedAbortController = new AbortController();
@@ -1273,7 +1273,7 @@ async function executeUnifiedOrchestrate(text) {
 }
 
 function handleUnifiedEvent(data) {
-  const agentName = data.agent_name || 'SmartAgent';
+  const agentName = data.agent_name || 'AI Hubs';
   if (data.type === 'agent_think') {
     if (data.status === 'started') addThinkStep(agentName, '💭', '开始思考...');
     else if (data.status === 'ended') addThinkStep(agentName, '✅', '思考完成');
@@ -2672,7 +2672,7 @@ function initApp() {
     $('toggleReflect').checked = c.reflection;
     $('stat-tools').textContent = c.tools;
     $('stat-lc').textContent = c.langchain?'启用':'兼容模式';
-    const wm = addUnifiedMsg('agent', 'SmartAgent'); wm.querySelector('.msg-body').textContent = '你好！我是 SmartAgent。左侧「仪表盘」查看数据概览，「对话」进行交互，「任务管理」发布任务，「Agent管理」管理智能体，「配置」编辑系统参数。';
+    const wm = addUnifiedMsg('agent', 'AI Hubs'); wm.querySelector('.msg-body').textContent = '你好！我是 AI Hubs。左侧「仪表盘」查看数据概览，「对话」进行交互，「任务管理」发布任务，「Agent管理」管理智能体，「配置」编辑系统参数。';
   }).catch(e => { console.error(e); if(e.message.includes('401')) logout(); });
 }
 
@@ -2707,7 +2707,7 @@ document.addEventListener('visibilitychange', () => {
 # FastAPI 应用
 # ============================================================
 
-app = FastAPI(title="SmartAgent", docs_url=None, redoc_url=None)
+app = FastAPI(title="AI Hubs", docs_url=None, redoc_url=None)
 
 # --- CORS 中间件 ---
 app.add_middleware(
@@ -3219,7 +3219,7 @@ async def api_orchestrate_task_stream(request: Request, req: OrchestrateTaskRequ
                 event_queue.put({"stage": "stage_" + stage, "info": safe_info}), loop
             )
         except Exception as e:
-            _log.getLogger("smart_agent.web").warning(
+            _log.getLogger("ai_hubs.web").warning(
                 f"进度回调失败 stage={stage}: {e}", exc_info=True
             )
 
@@ -3547,7 +3547,7 @@ async def api_delete_file(file: str, current_user = Depends(get_current_user)):
 async def api_batch_delete_files(req: dict, current_user = Depends(get_current_user)):
     """批量删除输出文件"""
     import logging
-    _log = logging.getLogger("smart_agent.web")
+    _log = logging.getLogger("ai_hubs.web")
     files = req.get("files", [])
     if not files:
         raise HTTPException(status_code=400, detail="未指定文件")
@@ -3712,7 +3712,7 @@ async def _persist_agent_to_db(
 ):
     """将 Agent 配置写入 MySQL agent_configs 表"""
     import logging as _logging
-    _log = _logging.getLogger("smart_agent.web")
+    _log = _logging.getLogger("ai_hubs.web")
 
     if not name or not name.strip():
         _log.warning(f"Agent 持久化跳过: 名称为空")
@@ -3771,7 +3771,7 @@ async def _restore_agents(tm):
     from src.infrastructure.models import AgentConfigModel
     from sqlalchemy import select
     import logging as _logging
-    _logger = _logging.getLogger("smart_agent.web")
+    _logger = _logging.getLogger("ai_hubs.web")
 
     async with _session_factory() as session:
         result = await session.execute(select(AgentConfigModel))
@@ -4229,7 +4229,7 @@ def init_agent():
     except Exception:
         logging.basicConfig(level=logging.INFO)
 
-    logger = logging.getLogger("smart_agent.web")
+    logger = logging.getLogger("ai_hubs.web")
 
     # ---- 数据库初始化 ----
     db_cfg = cfg.get("database", {})
@@ -4246,9 +4246,9 @@ def init_agent():
         if db_cfg:
             os.environ["DB_HOST"] = str(db_cfg.get("host", "127.0.0.1"))
             os.environ["DB_PORT"] = str(db_cfg.get("port", 3306))
-            os.environ["DB_USER"] = str(db_cfg.get("user", "smart_agent"))
+            os.environ["DB_USER"] = str(db_cfg.get("user", "ai_hubs"))
             os.environ["DB_PASSWORD"] = str(db_cfg.get("password", ""))
-            os.environ["DB_NAME"] = str(db_cfg.get("database", "smart_agent"))
+            os.environ["DB_NAME"] = str(db_cfg.get("database", "ai_hubs"))
             os.environ.pop("DATABASE_URL", None)
 
         from src.infrastructure.database import create_engine, get_db_url
@@ -4456,7 +4456,7 @@ async def _load_history_async():
             tm._history.append(task)
             count += 1
     if count > 0:
-        _logging.getLogger("smart_agent.web").info(f"从数据库恢复了 {count} 个历史任务")
+        _logging.getLogger("ai_hubs.web").info(f"从数据库恢复了 {count} 个历史任务")
 
 
 def start(host: str = "127.0.0.1", port: int = 8080):
@@ -4465,7 +4465,7 @@ def start(host: str = "127.0.0.1", port: int = 8080):
 
     init_agent()
 
-    logger = logging.getLogger("smart_agent.web")
+    logger = logging.getLogger("ai_hubs.web")
 
     # 注册默认 Agent 到任务管理器并启动调度器
     tm = get_task_manager()
@@ -4489,7 +4489,7 @@ def start(host: str = "127.0.0.1", port: int = 8080):
 
     db_status = "MySQL" if _db_initialized else "内存"
     print(f"\n  {'='*50}")
-    print(f"  SmartAgent v2.0 已启动")
+    print(f"  AI Hubs v3.0 已启动")
     print(f"  地址: http://{host}:{port}")
     print(f"  Agent: {_agent.name} 已注册  |  任务调度器已启动")
     print(f"  存储: {db_status}  |  日志: ./logs/")

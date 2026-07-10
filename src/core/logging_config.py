@@ -205,7 +205,7 @@ def setup_logging(
         logging.getLogger(lib).setLevel(logging.WARNING)
 
     # 记录启动信息
-    logger = logging.getLogger("smart_agent")
+    logger = logging.getLogger("ai_hubs")
     logger.info(f"日志系统已初始化 (level={level}, json={json_format}, mysql={enable_mysql})")
 
     return root_logger

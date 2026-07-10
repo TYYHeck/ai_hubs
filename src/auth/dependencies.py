@@ -21,7 +21,7 @@ from . import decode_access_token
 from ..infrastructure.database import get_session
 from ..infrastructure.models import UserModel
 
-logger = logging.getLogger("smart_agent.auth_deps")
+logger = logging.getLogger("ai_hubs.auth_deps")
 
 # Bearer Token 提取器
 security = HTTPBearer(auto_error=False)

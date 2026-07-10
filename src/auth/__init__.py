@@ -10,7 +10,7 @@ import logging
 import bcrypt
 from jose import JWTError, jwt
 
-logger = logging.getLogger("smart_agent.auth")
+logger = logging.getLogger("ai_hubs.auth")
 
 # JWT 配置
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "smart-agent-secret-change-in-production-2024")

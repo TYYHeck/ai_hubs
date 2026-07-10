@@ -51,7 +51,7 @@ async def _persist_agent_to_db(
 ):
     """将 Agent 配置写入 MySQL agent_configs 表"""
     import logging
-    _log = logging.getLogger("smart_agent.web")
+    _log = logging.getLogger("ai_hubs.web")
 
     if not name or not name.strip():
         return
@@ -126,7 +126,7 @@ async def api_list_agents(current_user = Depends(get_current_user)):
 async def api_get_agent_config(name: str, current_user = Depends(get_current_user)):
     """获取 Agent 完整配置（含 system_prompt，供编辑表单使用）"""
     import logging as _logging
-    _log = _logging.getLogger("smart_agent.web")
+    _log = _logging.getLogger("ai_hubs.web")
 
     from src.infrastructure.database import _session_factory
     from src.infrastructure.models import AgentConfigModel

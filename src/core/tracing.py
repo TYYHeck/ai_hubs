@@ -8,21 +8,21 @@ LangChain 1.x 内置 LangSmith 回调自动检测机制：
   环境变量:
     LANGCHAIN_TRACING_V2=true
     LANGCHAIN_API_KEY=ls__...
-    LANGCHAIN_PROJECT=smart_agent  (可选)
+    LANGCHAIN_PROJECT=ai_hubs  (可选)
 
 用法:
     from src.core.tracing import init_tracing
-    init_tracing(project="smart_agent")
+    init_tracing(project="ai_hubs")
 """
 
 from __future__ import annotations
 import os
 import logging
 
-logger = logging.getLogger("smart_agent.tracing")
+logger = logging.getLogger("ai_hubs.tracing")
 
 
-def init_tracing(project: str = "smart_agent", enabled: bool = True):
+def init_tracing(project: str = "ai_hubs", enabled: bool = True):
     """启用 LangSmith tracing"""
     if not enabled:
         return False
@@ -43,6 +43,6 @@ def get_tracing_stats() -> dict:
     """获取 tracing 状态"""
     return {
         "enabled": os.getenv("LANGCHAIN_TRACING_V2") == "true",
-        "project": os.getenv("LANGCHAIN_PROJECT", "smart_agent"),
+        "project": os.getenv("LANGCHAIN_PROJECT", "ai_hubs"),
         "has_api_key": bool(os.getenv("LANGCHAIN_API_KEY")),
     }

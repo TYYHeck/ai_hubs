@@ -20,7 +20,7 @@ import json
 import uuid
 import logging
 
-logger = logging.getLogger("smart_agent.message")
+logger = logging.getLogger("ai_hubs.message")
 
 
 # ============================================================

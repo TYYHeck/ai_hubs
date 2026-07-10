@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncEngine,
 )
-logger = logging.getLogger("smart_agent.database")
+logger = logging.getLogger("ai_hubs.database")
 
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[async_sessionmaker] = None
@@ -38,7 +38,7 @@ def get_db_url() -> str:
 
     host = os.getenv("DB_HOST", "127.0.0.1")
     port = os.getenv("DB_PORT", "3306")
-    user = os.getenv("DB_USER", "smart_agent")
+    user = os.getenv("DB_USER", "ai_hubs")
     password = os.getenv("DB_PASSWORD", "")
     # MySQL 驱动限制密码不能超过 72 字节
     password_bytes = password.encode("utf-8")
@@ -46,7 +46,7 @@ def get_db_url() -> str:
     if len(password_bytes) > 72:
         logger.warning(f"DB_PASSWORD 过长 ({len(password_bytes)} 字节)，截断至 72 字节")
         password = password_bytes[:72].decode("utf-8", errors="ignore")
-    database = os.getenv("DB_NAME", "smart_agent")
+    database = os.getenv("DB_NAME", "ai_hubs")
 
     # URL 编码，防止特殊字符导致连接串解析错误
     from urllib.parse import quote_plus

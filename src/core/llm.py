@@ -24,7 +24,7 @@ import logging
 
 from .message import Message, ToolCall
 
-logger = logging.getLogger("smart_agent.llm")
+logger = logging.getLogger("ai_hubs.llm")
 
 
 # ============================================================

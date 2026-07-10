@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
-logger = logging.getLogger("smart_agent.metrics")
+logger = logging.getLogger("ai_hubs.metrics")
 
 
 @dataclass

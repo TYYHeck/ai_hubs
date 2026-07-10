@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
 """
-SmartAgent - 智能 AI Agent 框架
-基于 LangChain ReAct 架构
+AI Hubs - 新一代智能 Agent 框架
+基于 LangChain ReAct 架构，支持多 Agent 协作
 
 用法:
-    python main.py             命令行模式
+    python main.py             命令行模式 (CLI)
     python main.py --web       网页可视化模式
     python main.py --web --port 9090   自定义端口
+    python main.py --admin     后台管理模式
 """
 
 import sys

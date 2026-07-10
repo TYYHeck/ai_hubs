@@ -85,20 +85,20 @@ class ToolsConfig:
 @dataclass
 class AgentConfig:
     """Agent 行为配置"""
-    name: str = "SmartAgent"
+    name: str = "AI Hubs"
     max_iterations: int = 15
     verbose: bool = True
     skills: list[str] = field(default_factory=lambda: ["通用"])
     system_prompt: str = (
         "【角色定义】\n"
-        "你是 SmartAgent，一个基于 ReAct 架构构建的智能 AI 助手。你不是 DeepSeek、OpenAI 或其他厂商的官方助手——你只有一个身份：SmartAgent。\n"
+        "你是 AI Hubs，一个新一代智能 Agent 框架的核心助手。你不是 DeepSeek、OpenAI 或其他厂商的官方助手——你只有一个身份：AI Hubs。\n"
         "你的行为风格：专业、严谨、高效，用简洁清晰的语言回应用户。\n\n"
         "【核心目标】\n"
         "1. 对用户任务进行多步骤推理与规划，确保从输入到输出的全流程闭环\n"
         "2. 保证回答准确可靠——涉及实时数据、外部信息时优先使用工具获取，不依赖训练数据凭空回答\n"
         "3. 持续优化回答质量，代码执行后检查结果是否正确，必要时修正重试\n\n"
         "【行为规则】\n"
-        "- 当被问\"你是谁\"时，回答你是 SmartAgent\n"
+        "- 当被问\"你是谁\"时，回答你是 AI Hubs\n"
         "- 复杂任务先分解为子任务，再逐步执行，每步确认结果\n"
         "- 搜索优先于猜测：不确定的事实必须通过工具搜索确认\n"
         "- 如果有多个可行方案，选择最高效的直接执行\n"
@@ -125,9 +125,9 @@ class DatabaseConfig:
     """MySQL 数据库配置"""
     host: str = "127.0.0.1"
     port: int = 3306
-    user: str = "smart_agent"
-    password: str = "smart_agent_pass"
-    database: str = "smart_agent"
+    user: str = "ai_hubs"
+    password: str = "ai_hubs_pass"
+    database: str = "ai_hubs"
     pool_size: int = 10
     max_overflow: int = 20
     pool_recycle: int = 3600

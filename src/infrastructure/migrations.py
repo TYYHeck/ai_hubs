@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from .models import Base
 
-logger = logging.getLogger("smart_agent.migrations")
+logger = logging.getLogger("ai_hubs.migrations")
 
 INIT_SQL = """
 -- 用户表
@@ -158,7 +158,7 @@ async def seed_default_admin(engine: AsyncEngine):
 
     admin_user = os.getenv("ADMIN_USER", "admin")
     admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@smartagent.local")
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@aihubs.local")
 
     # bcrypt 限制密码不超过 72 字节
     admin_bytes = admin_pass.encode("utf-8")

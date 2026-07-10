@@ -490,7 +490,7 @@ class CLI:
     def _print_banner(self):
         banner = r"""
   +==========================================+
-  |    SmartAgent - 智能 AI 助手              |
+  |    AI Hubs - 智能 AI 助手              |
   |    思考 · 行动 · 观察 · 学习              |
   +==========================================+
 """
@@ -1308,7 +1308,7 @@ class CLI:
 
     def _show_help(self):
         help_text = """
-        --- SmartAgent 命令列表 ---
+        --- AI Hubs 命令列表 ---
         ─────────────────────────────────────────
         对话命令:
           /help, /?           显示此帮助
@@ -1507,7 +1507,7 @@ def main():
     from src.core.tracing import init_tracing
     tracing_cfg = config_data.get("tracing", {})
     init_tracing(
-        project=tracing_cfg.get("project", "smart_agent"),
+        project=tracing_cfg.get("project", "ai_hubs"),
         enabled=tracing_cfg.get("enabled", False),
     )
 
@@ -1528,7 +1528,7 @@ def main():
     # 5.5. 自动注册当前 Agent 到 TaskManager
     from src.core.task_manager import get_task_manager, AgentProxy
     tm = get_task_manager()
-    agent_name = config_data.get("agent", {}).get("name", "SmartAgent")
+    agent_name = config_data.get("agent", {}).get("name", "AI Hubs")
     proxy = AgentProxy(
         name=agent_name,
         agent=agent,

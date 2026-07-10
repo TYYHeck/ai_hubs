@@ -12,7 +12,7 @@ from typing import Optional
 import logging
 import threading
 
-logger = logging.getLogger("smart_agent.task_repo")
+logger = logging.getLogger("ai_hubs.task_repo")
 
 
 class TaskRepository:

@@ -21,7 +21,7 @@ import logging
 
 from ..core.message import Message
 
-logger = logging.getLogger("smart_agent.memory")
+logger = logging.getLogger("ai_hubs.memory")
 
 
 # ============================================================
