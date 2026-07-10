@@ -1,13 +1,16 @@
 // AI Hubs Desktop — Electron 主进程
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, Notification } = require('electron');
 const path = require('path');
-const { fork } = require('child_process');
+const { spawn } = require('child_process');
 
 let mainWindow = null;
 let backendProcess = null;
 
-const BACKEND_PORT = 8001;
+// 后端端口需与 config.yaml 的 server.port 保持一致（默认 8080）
+const BACKEND_PORT = 8080;
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+
+const REPO_URL = 'https://github.com/TYYHeck/ai_hubs';
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -70,8 +73,8 @@ function createWindow() {
     {
       label: '帮助',
       submenu: [
-        { label: '文档', click: () => shell.openExternal('https://github.com/your-repo/ai-hubs') },
-        { label: '报告问题', click: () => shell.openExternal('https://github.com/your-repo/ai-hubs/issues') },
+        { label: '文档', click: () => shell.openExternal(`${REPO_URL}`) },
+        { label: '报告问题', click: () => shell.openExternal(`${REPO_URL}/issues`) },
       ],
     },
   ];
@@ -89,12 +92,12 @@ function showAbout() {
   });
 }
 
+// 使用 spawn 启动 Python 后端（fork 仅适用于 Node.js 模块，不能用于 python）
 function startBackend() {
-  // 启动 Python 后端服务
   const pythonScript = path.join(__dirname, '..', 'main.py');
-  backendProcess = fork(pythonScript, ['--web'], {
+  backendProcess = spawn('python3', [pythonScript, '--web', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
     env: { ...process.env },
-    silent: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   backendProcess.stdout?.on('data', (data) => {
@@ -107,7 +110,7 @@ function startBackend() {
 
   backendProcess.on('exit', (code) => {
     console.log(`[Backend] 进程退出, 代码: ${code}`);
-    if (code !== 0) {
+    if (code !== 0 && code !== null) {
       dialog.showErrorBox('后端错误', `AI Hubs 后端异常退出 (${code})`);
     }
   });
@@ -120,12 +123,46 @@ function stopBackend() {
   }
 }
 
-// ── 应用生命周期 ──
+// ── IPC：窗口控制（供 preload 调用）──
+ipcMain.on('window-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+ipcMain.on('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+  }
+});
+ipcMain.on('window-close', () => {
+  if (mainWindow) mainWindow.close();
+});
 
+// ── IPC：文件对话框 ──
+ipcMain.handle('dialog:openFile', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+  });
+  if (result.canceled) return [];
+  return result.filePaths;
+});
+ipcMain.handle('dialog:saveFile', async (event, defaultName) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultName || 'untitled',
+  });
+  if (result.canceled) return null;
+  return result.filePath;
+});
+
+// 供渲染进程触发的系统通知
+ipcMain.on('notify', (event, { title, body }) => {
+  new Notification({ title, body }).show();
+});
+
+// ── 应用生命周期 ──
 app.whenReady().then(() => {
   startBackend();
   // 等待后端启动
-  setTimeout(createWindow, 2000);
+  setTimeout(createWindow, 3000);
 });
 
 app.on('window-all-closed', () => {

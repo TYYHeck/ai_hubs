@@ -17,6 +17,6 @@ contextBridge.exposeInMainWorld('aiHubsDesktop', {
 
   // 系统通知
   notify: (title, body) => {
-    new Notification(title, { body });
+    ipcRenderer.send('notify', { title, body });
   },
 });
