@@ -8,9 +8,9 @@ import bcrypt
 # --- 服务器数据库配置（与 docker-compose.yml 保持一致）---
 os.environ.setdefault("DB_HOST", "mysql")
 os.environ.setdefault("DB_PORT", "3306")
-os.environ.setdefault("DB_USER", "smart_agent")
-os.environ.setdefault("DB_PASSWORD", "smart_agent_pass")
-os.environ.setdefault("DB_NAME", "smart_agent")
+os.environ.setdefault("DB_USER", "ai_hubs")
+os.environ.setdefault("DB_PASSWORD", "ai_hubs_pass")
+os.environ.setdefault("DB_NAME", "ai_hubs")
 os.environ["DATABASE_URL"] = (
     f"mysql+aiomysql://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}@"
     f"{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"

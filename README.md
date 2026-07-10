@@ -140,7 +140,7 @@
 ### 1. 安装依赖
 
 ```bash
-cd smart_agent
+cd ai_hubs
 pip install -r requirements.txt
 cd frontend && npm install && cd ..
 ```
@@ -338,7 +338,7 @@ Electron 特性：
 ### 项目结构
 
 ```
-smart_agent/
+ai_hubs/
 ├── main.py                    # 入口 (CLI + Web)
 ├── config.yaml                # 配置文件
 ├── requirements.txt           # Python 依赖

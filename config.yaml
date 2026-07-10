@@ -72,7 +72,7 @@ tools:
   max_calls_per_turn: 10
 
   # Agent 读写文件的根目录（相对路径自动拼接到此目录下）
-  # 部署到服务器时改为 "/data/smart_agent/output" 等绝对路径
+  # 部署到服务器时改为 "/data/ai_hubs/output" 等绝对路径
   output_dir: "./output"
 
 # --- Agent 行为 ---
@@ -155,7 +155,7 @@ predefined_skills:
 # --- Tracing 可观测性 ---
 tracing:
   enabled: false               # 设为 true 并设置 LANGCHAIN_API_KEY 启用
-  project: "smart_agent"       # LangSmith 项目名
+  project: "ai_hubs"       # LangSmith 项目名
 
 # --- Web 服务器 ---
 server:
@@ -167,9 +167,9 @@ server:
 database:
   host: "127.0.0.1"
   port: 3306
-  user: "smart_agent"
+  user: "ai_hubs"
   password: ""
-  database: "smart_agent"
+  database: "ai_hubs"
   # 连接池配置
   pool_size: 10
   max_overflow: 20

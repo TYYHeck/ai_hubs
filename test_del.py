@@ -1,7 +1,7 @@
 import os, json, sys
-sys.path.insert(0, '/root/smart_agent')
+sys.path.insert(0, '/root/ai_hubs')
 
-os.chdir('/root/smart_agent')
+os.chdir('/root/ai_hubs')
 
 # 手动模拟 _get_output_dir 和 _safe_file_path
 from src.core.config import get_config
