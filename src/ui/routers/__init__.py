@@ -30,6 +30,7 @@ from .files import router as files_router
 from .knowledge import router as knowledge_router
 from .skills import router as skills_router
 from .memory import router as memory_router
+from .datasets import router as datasets_router
 from .system import system_router, config_router, model_router
 
 all_routers = [
@@ -41,6 +42,7 @@ all_routers = [
     knowledge_router,
     skills_router,
     memory_router,
+    datasets_router,
     system_router,
     config_router,
     model_router,
