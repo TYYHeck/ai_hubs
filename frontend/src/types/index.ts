@@ -141,3 +141,16 @@ export interface SystemInfo {
   memory_used_mb: number;
   uptime_seconds: number;
 }
+
+export interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  prompt_template: string;
+  tags: string[];
+  source: string;
+  installed: boolean;
+  version: string;
+  author: string;
+}

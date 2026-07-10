@@ -11,7 +11,7 @@ import type {
 
 interface AppState {
   // ── UI 状态 ──
-  activeTab: 'dashboard' | 'chat' | 'tasks' | 'agents' | 'knowledge' | 'workflow' | 'settings';
+  activeTab: 'dashboard' | 'chat' | 'tasks' | 'agents' | 'knowledge' | 'workflow' | 'settings' | 'skills';
   setActiveTab: (tab: AppState['activeTab']) => void;
 
   // ── 认证 ──

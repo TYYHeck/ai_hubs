@@ -247,3 +247,36 @@ export const authApi = {
   me: () =>
     request<{ ok: boolean; user?: Record<string, unknown> }>('/api/auth/me'),
 };
+
+// ── 技能市场 ──
+
+export const skillsApi = {
+  list: (category = '', installedOnly = false) =>
+    request<{ ok: boolean; skills: import('../types').SkillInfo[]; categories: { id: string; name: string; count: number }[] }>(
+      `/api/skills/list?category=${encodeURIComponent(category)}&installed_only=${installedOnly}`
+    ),
+  get: (id: string) =>
+    request<{ ok: boolean; skill: import('../types').SkillInfo }>(`/api/skills/${encodeURIComponent(id)}`),
+  install: (id: string) =>
+    request<{ ok: boolean; message: string }>(`/api/skills/${encodeURIComponent(id)}/install`, { method: 'POST' }),
+  uninstall: (id: string) =>
+    request<{ ok: boolean; message: string }>(`/api/skills/${encodeURIComponent(id)}/uninstall`, { method: 'POST' }),
+  delete: (id: string) =>
+    request<{ ok: boolean }>(`/api/skills/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  create: (data: Record<string, unknown>) =>
+    request<{ ok: boolean; skill: import('../types').SkillInfo }>('/api/skills/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  searchGitHub: (q: string, category = '', page = 1) =>
+    request<{ ok: boolean; skills: import('../types').SkillInfo[]; total: number }>(
+      `/api/skills/github/search?q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}&page=${page}`
+    ),
+  importFromGitHub: (data: Record<string, unknown>) =>
+    request<{ ok: boolean; skill: import('../types').SkillInfo }>('/api/skills/github/import', {
+      method: 'POST',
+      body: JSON.stringify({ data }),
+    }),
+  categories: () =>
+    request<{ ok: boolean; categories: { id: string; name: string; count: number }[] }>('/api/skills/categories/list'),
+};
