@@ -36,3 +36,6 @@ astar_pathfinding.py
 # OS
 .DS_Store
 Thumbs.db
+
+# Node 前端依赖
+node_modules/
