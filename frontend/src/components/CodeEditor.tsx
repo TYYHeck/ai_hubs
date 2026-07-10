@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useAppStore } from '../stores/appStore';
 
 interface CodeEditorProps {
   onClose?: () => void;
@@ -11,6 +12,25 @@ interface FileTab {
   language: string;
   saved: boolean;
 }
+
+interface PluginInfo {
+  id: string;
+  name: string;
+  description: string;
+  installed: boolean;
+  icon: string;
+}
+
+const BUILTIN_PLUGINS: PluginInfo[] = [
+  { id: 'python-runner', name: 'Python 运行器', description: '在 IDE 中运行 Python 代码', installed: true, icon: '🐍' },
+  { id: 'js-runner', name: 'JavaScript 运行器', description: '在浏览器中运行 JS 代码', installed: true, icon: '🟨' },
+  { id: 'prettier', name: '代码格式化', description: '自动格式化代码排版', installed: false, icon: '✨' },
+  { id: 'linter', name: '代码检查', description: '语法和风格检查', installed: false, icon: '🔍' },
+  { id: 'git-integration', name: 'Git 集成', description: '内置 Git 版本控制', installed: false, icon: '🔀' },
+  { id: 'theme-customizer', name: '主题定制', description: '自定义编辑器配色方案', installed: false, icon: '🎨' },
+  { id: 'snippets', name: '代码片段', description: '常用代码模板快速插入', installed: false, icon: '📋' },
+  { id: 'vscode-remote', name: 'VS Code 远程', description: '连接 VS Code Server 远程开发', installed: false, icon: '🔗' },
+];
 
 const LANGUAGE_MAP: Record<string, string> = {
   py: 'python',
@@ -95,6 +115,7 @@ function syntaxHighlight(code: string, lang: string): string {
 }
 
 export default function CodeEditor({ onClose }: CodeEditorProps) {
+  const userSettings = useAppStore((s) => s.userSettings);
   const [tabs, setTabs] = useState<FileTab[]>([
     {
       id: 'welcome',
@@ -106,8 +127,13 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
   ]);
   const [activeTabId, setActiveTabId] = useState('welcome');
   const [explorerVisible, setExplorerVisible] = useState(true);
+  const [pluginPanel, setPluginPanel] = useState(false);
+  const [plugins, setPlugins] = useState<PluginInfo[]>(BUILTIN_PLUGINS);
+  const [runOutput, setRunOutput] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const fontSize = userSettings.fontSize === 'small' ? 12 : userSettings.fontSize === 'large' ? 16 : 14;
 
   const updateContent = useCallback((content: string) => {
     setTabs((prev) =>
@@ -163,6 +189,54 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
     }
   };
 
+  const runCode = async () => {
+    setRunning(true);
+    setRunOutput(null);
+    const code = activeTab.content;
+    const lang = activeTab.language;
+
+    if (lang === 'javascript' || lang === 'typescript') {
+      try {
+        const originalLog = console.log;
+        const logs: string[] = [];
+        console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+        // eslint-disable-next-line no-eval
+        const result = eval(code);
+        console.log = originalLog;
+        const output = logs.length > 0 ? logs.join('\n') : String(result ?? '执行完成（无输出）');
+        setRunOutput(output);
+      } catch (e: unknown) {
+        setRunOutput(`错误: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    } else if (lang === 'python') {
+      setRunOutput(
+        '🐍 Python 代码需要在服务器端运行。\n' +
+        '提示：将代码保存后通过终端或 Agent 执行。\n' +
+        '或使用 Ctrl+S 下载后在本地 Python 环境运行。\n\n' +
+        '--- 即将支持远程执行 ---\n' +
+        '代码行数: ' + code.split('\n').length + ' · 字符数: ' + code.length
+      );
+    } else if (lang === 'html') {
+      const win = window.open('', '_blank', 'width=800,height=600');
+      if (win) {
+        win.document.write(code);
+        win.document.close();
+        setRunOutput('HTML 已在新窗口中打开');
+      } else {
+        setRunOutput('弹窗被阻止，请允许弹出窗口后重试');
+      }
+    } else {
+      setRunOutput(`暂不支持运行 ${lang} 代码。已支持: Python(即将支持), JavaScript, HTML`);
+    }
+    setRunning(false);
+  };
+
+  const togglePlugin = (id: string) => {
+    setPlugins((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, installed: !p.installed } : p))
+    );
+  };
+
   return (
     <div className="ide-container">
       {/* 工具栏 */}
@@ -177,6 +251,21 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
           </button>
           <button className="ide-toolbar-btn" onClick={newFile} title="新建文件">
             📄 +
+          </button>
+          <button
+            className={`ide-toolbar-btn run-btn${running ? ' running' : ''}`}
+            onClick={runCode}
+            disabled={running}
+            title={`运行 (${activeTab.language})`}
+          >
+            {running ? '⏳' : '▶'} 运行
+          </button>
+          <button
+            className={`ide-toolbar-btn${pluginPanel ? ' active' : ''}`}
+            onClick={() => setPluginPanel(!pluginPanel)}
+            title="扩展插件"
+          >
+            🧩 扩展
           </button>
           <span className="ide-toolbar-title">AI Hubs IDE</span>
         </div>
@@ -249,18 +338,20 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
           <div className="ide-editor" onKeyDown={handleKeyDown}>
             <div className="ide-line-numbers">
               {activeTab.content.split('\n').map((_, i) => (
-                <div key={i} className="ide-line-num">{i + 1}</div>
+                <div key={i} className="ide-line-num" style={{ fontSize }}>{i + 1}</div>
               ))}
             </div>
             <div className="ide-input-wrapper">
               <pre
                 className="ide-highlight"
+                style={{ fontSize }}
                 dangerouslySetInnerHTML={{
                   __html: syntaxHighlight(activeTab.content, activeTab.language) + '\n',
                 }}
               />
               <textarea
                 className="ide-textarea"
+                style={{ fontSize }}
                 value={activeTab.content}
                 onChange={(e) => updateContent(e.target.value)}
                 spellCheck={false}
@@ -271,15 +362,56 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
             </div>
           </div>
 
+          {/* 运行输出面板 */}
+          {runOutput !== null && (
+            <div className="ide-run-output">
+              <div className="ide-run-header">
+                <span>▶ 运行输出 ({activeTab.language})</span>
+                <button className="ide-toolbar-btn" onClick={() => setRunOutput(null)}>✕</button>
+              </div>
+              <pre className="ide-run-content">{runOutput}</pre>
+            </div>
+          )}
+
           {/* 底部状态栏 */}
           <div className="ide-statusbar">
-            <span>{activeTab.name} · {activeTab.language}</span>
+            <span>{activeTab.name} · {activeTab.language} · 字号: {fontSize}px</span>
             <span>
               {activeTab.content.split('\n').length} 行 · {activeTab.content.length} 字符
               {activeTab.saved ? '' : ' · 未保存'}
             </span>
           </div>
         </div>
+
+        {/* 扩展插件面板 */}
+        {pluginPanel && (
+          <div className="ide-plugin-panel">
+            <div className="ide-plugin-header">
+              <span>🧩 扩展插件 ({plugins.filter(p => p.installed).length}/{plugins.length} 已安装)</span>
+              <button className="ide-toolbar-btn" onClick={() => setPluginPanel(false)}>✕</button>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 10px' }}>
+              安装扩展增强 IDE 功能。支持接入外部编程工具（VS Code Remote等）
+            </p>
+            <div className="ide-plugin-list">
+              {plugins.map((p) => (
+                <div key={p.id} className={`ide-plugin-item${p.installed ? ' installed' : ''}`}>
+                  <span className="ide-plugin-icon">{p.icon}</span>
+                  <div className="ide-plugin-info">
+                    <div className="ide-plugin-name">{p.name}</div>
+                    <div className="ide-plugin-desc">{p.description}</div>
+                  </div>
+                  <button
+                    className={`btn btn-xs${p.installed ? ' btn-primary' : ''}`}
+                    onClick={() => togglePlugin(p.id)}
+                  >
+                    {p.installed ? '已安装' : '安装'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
