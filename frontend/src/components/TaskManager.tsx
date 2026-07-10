@@ -143,7 +143,7 @@ export default function TaskManager() {
 
       {/* 筛选栏 */}
       <div className="filter-bar">
-        {['', 'pending', 'running', 'completed', 'failed'].map((f) => (
+        {['', 'pending', 'running', 'paused', 'completed', 'failed'].map((f) => (
           <button
             key={f}
             className={`btn btn-sm ${taskFilter === f ? 'btn-primary' : ''}`}
@@ -184,7 +184,15 @@ export default function TaskManager() {
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-xs" onClick={() => viewTaskDetail(t.id)}>详情</button>
-                      {(t.status === 'pending' || t.status === 'running') && (
+                      {t.status === 'running' && (
+                        <button className="btn btn-xs" style={{ background: 'var(--warn)', color: '#000' }}
+                          onClick={async () => { await tasksApi.pause(t.id); refresh(); }}>暂停</button>
+                      )}
+                      {t.status === 'paused' && (
+                        <button className="btn btn-xs btn-primary"
+                          onClick={async () => { await tasksApi.resume(t.id); refresh(); }}>恢复</button>
+                      )}
+                      {(t.status === 'pending' || t.status === 'running' || t.status === 'paused') && (
                         <button className="btn btn-xs btn-danger" onClick={async () => { await tasksApi.cancel(t.id); refresh(); }}>取消</button>
                       )}
                       <button className="btn btn-xs btn-danger" onClick={async () => { await tasksApi.delete(t.id); refresh(); }}>删除</button>
@@ -262,7 +270,7 @@ function QueueStat({ label, value, color }: { label: string; value: number | str
 
 function statusLabel(s: string): string {
   const m: Record<string, string> = {
-    pending: '等待中', running: '运行中', completed: '已完成', failed: '失败', cancelled: '已取消',
+    pending: '等待中', running: '运行中', paused: '已暂停', completed: '已完成', failed: '失败', cancelled: '已取消',
   };
   return m[s] || s;
 }
@@ -274,7 +282,9 @@ function formatDate(iso: string): string {
 
 // ── 任务详情弹窗 ──
 function TaskDetailModal({ task, onClose, onRefresh }: { task: TaskInfo; onClose: () => void; onRefresh: () => void }) {
-  const isRunning = task.status === 'running' || task.status === 'pending';
+  const isRunning = task.status === 'running';
+  const isPaused = task.status === 'paused';
+  const isPending = task.status === 'pending';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -294,7 +304,8 @@ function TaskDetailModal({ task, onClose, onRefresh }: { task: TaskInfo; onClose
         <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
           <div><span style={{ color: 'var(--muted)', fontSize: 12 }}>状态: </span><span className={`status-badge ${task.status}`}>{statusLabel(task.status)}</span></div>
           <div><span style={{ color: 'var(--muted)', fontSize: 12 }}>Agent: </span><span style={{ color: 'var(--text-bright)' }}>{task.assigned_agent || '未分配'}</span></div>
-          <div><span style={{ color: 'var(--muted)', fontSize: 12 }}>输出文件: </span><span style={{ color: 'var(--primary)' }}>{task.output_files.length} 个</span></div>
+          <div><span style={{ color: 'var(--muted)', fontSize: 12 }}>分析模式: </span><span style={{ color: 'var(--primary)' }}>{task.analysis_mode === 'ai' ? 'AI 智能分析' : '关键词匹配'}</span></div>
+          <div><span style={{ color: 'var(--muted)', fontSize: 12 }}>思考: </span><span style={{ color: 'var(--text-bright)' }}>深度{task.think_depth || 1} · {task.think_visibility === 'hidden' ? '隐藏' : task.think_visibility === 'summary' ? '仅摘要' : '可见'}</span></div>
         </div>
 
         {task.result && (
@@ -335,7 +346,9 @@ function TaskDetailModal({ task, onClose, onRefresh }: { task: TaskInfo; onClose
         )}
 
         <div className="modal-actions">
-          {isRunning && <button className="btn btn-danger" onClick={async () => { await tasksApi.cancel(task.id); onRefresh(); onClose(); }}>取消任务</button>}
+          {isRunning && <button className="btn" style={{ background: 'var(--warn)', color: '#000' }} onClick={async () => { await tasksApi.pause(task.id); onRefresh(); }}>⏸ 暂停任务</button>}
+          {isPaused && <button className="btn btn-primary" onClick={async () => { await tasksApi.resume(task.id); onRefresh(); }}>▶ 恢复任务</button>}
+          {(isRunning || isPaused || isPending) && <button className="btn btn-danger" onClick={async () => { await tasksApi.cancel(task.id); onRefresh(); onClose(); }}>取消任务</button>}
           <button className="btn btn-danger" onClick={async () => { await tasksApi.delete(task.id); onRefresh(); onClose(); }}>删除任务</button>
           <button className="btn" onClick={onClose}>关闭</button>
         </div>

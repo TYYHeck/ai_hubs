@@ -386,20 +386,21 @@ export default function WorkflowEditor() {
     setProgressLog([]);
 
     try {
-      await orchestrateStream(
+      orchestrateStream(
         description,
+        '',
         workflow.mode,
         workflow.nodes.filter((n) => n.agentName).map((n) => n.agentName),
-        (stage: string, data: OrchestrationProgress) => {
-          const line = `[${stage}] ${JSON.stringify(data).slice(0, 150)}`;
+        (_evt) => {
+          const line = `[${(_evt as Record<string,unknown>).stage}] ${JSON.stringify(_evt).slice(0, 150)}`;
           setProgressLog((prev) => [...prev.slice(-30), line]);
         },
+        () => { setRunning(false); setResult('工作流执行完成'); },
+        (err) => { setRunning(false); setResult(`执行失败: ${err.message}`); },
       );
-      setResult('工作流执行完成。请在任务管理器中查看详情。');
-    } catch (err: any) {
-      setResult(`执行失败: ${err.message}`);
-    } finally {
+    } catch (err: unknown) {
       setRunning(false);
+      setResult(`执行失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [description, workflow]);
 

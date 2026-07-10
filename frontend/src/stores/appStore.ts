@@ -6,13 +6,29 @@ import { create } from 'zustand';
 import type {
   AgentInfo, TaskInfo, QueueStatus, KnowledgeSource,
   KnowledgeStats, ChatMessage, OrchestrationProgress, ModelInfo,
-  OrchestrationMode, DashboardStats,
+  OrchestrationMode, DashboardStats, UserSettings,
 } from '../types';
+
+function loadSettings(): UserSettings {
+  try {
+    const saved = localStorage.getItem('ai_hubs_settings');
+    if (saved) return JSON.parse(saved);
+  } catch { /* ignore */ }
+  return { theme: 'dark', fontSize: 'medium', cliAutoComplete: true, cliHistorySize: 100 };
+}
+
+function saveSettings(s: UserSettings) {
+  localStorage.setItem('ai_hubs_settings', JSON.stringify(s));
+}
 
 interface AppState {
   // ── UI 状态 ──
   activeTab: 'dashboard' | 'chat' | 'tasks' | 'agents' | 'knowledge' | 'workflow' | 'settings' | 'skills' | 'memory' | 'ide';
   setActiveTab: (tab: AppState['activeTab']) => void;
+
+  // ── 用户界面设置 ──
+  userSettings: UserSettings;
+  setUserSettings: (s: Partial<UserSettings>) => void;
 
   // ── 认证 ──
   loggedIn: boolean;
@@ -85,6 +101,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── UI ──
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  // ── 用户界面设置 ──
+  userSettings: loadSettings(),
+  setUserSettings: (partial) => {
+    const current = get().userSettings;
+    const updated = { ...current, ...partial };
+    saveSettings(updated);
+    set({ userSettings: updated });
+  },
 
   // ── 认证 ──
   loggedIn: !!localStorage.getItem('token'),

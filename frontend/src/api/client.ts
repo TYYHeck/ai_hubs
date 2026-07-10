@@ -136,6 +136,10 @@ export const tasksApi = {
     }),
   cancel: (id: string) =>
     request<{ ok: boolean }>(`/api/tasks/${id}/cancel`, { method: 'POST' }),
+  pause: (id: string) =>
+    request<{ ok: boolean; message?: string }>(`/api/tasks/${id}/pause`, { method: 'POST' }),
+  resume: (id: string) =>
+    request<{ ok: boolean; message?: string }>(`/api/tasks/${id}/resume`, { method: 'POST' }),
   delete: (id: string) =>
     request<{ ok: boolean }>(`/api/tasks/${id}`, { method: 'DELETE' }),
   detectMode: (description: string) =>

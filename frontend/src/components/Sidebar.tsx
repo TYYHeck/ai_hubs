@@ -1,4 +1,5 @@
 import { useAppStore } from '../stores/appStore';
+import { LogoText } from './Logo';
 
 const icons: Record<string, string> = {
   dashboard: '📊',
@@ -41,8 +42,7 @@ export default function Sidebar({ pendingCount, runningCount, agentCount }: Prop
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h1>AI Hubs</h1>
-        <div className="subtitle">新一代智能 Agent 平台 v3.0</div>
+        <LogoText size="small" />
       </div>
 
       <nav className="sidebar-nav">

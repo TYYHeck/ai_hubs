@@ -19,7 +19,7 @@ export interface TaskInfo {
   id: string;
   title: string;
   description: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -31,6 +31,16 @@ export interface TaskInfo {
   event_log: EventLogEntry[];
   output_files: string[];
   metadata_: Record<string, unknown>;
+  analysis_mode?: string;
+  think_depth?: number;
+  think_visibility?: string;
+}
+
+export interface UserSettings {
+  theme: 'dark' | 'light';
+  fontSize: 'small' | 'medium' | 'large';
+  cliAutoComplete: boolean;
+  cliHistorySize: number;
 }
 
 export interface EventLogEntry {

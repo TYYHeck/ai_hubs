@@ -140,7 +140,7 @@ export default function MemoryViewer() {
       </div>
 
       {/* Stats bar */}
-      {stats.ok && (
+      {(stats as { ok: boolean;[k: string]: unknown }).ok && (
         <div className="memory-stats-bar">
           <div className="memory-stat-item">
             <span className="memory-stat-val">{String((stats.short_term as Record<string,unknown>)?.message_count || 0)}</span>

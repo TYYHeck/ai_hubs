@@ -29,11 +29,13 @@ export default function Settings() {
   const models = useAppStore((s) => s.models);
   const toolsCount = useAppStore((s) => s.toolsCount);
   const systemInfo = useAppStore((s) => s.systemInfo);
+  const userSettings = useAppStore((s) => s.userSettings);
   const setCurrentModel = useAppStore((s) => s.setCurrentModel);
   const setModels = useAppStore((s) => s.setModels);
   const setModeState = useAppStore((s) => s.setModeState);
   const setSystemInfo = useAppStore((s) => s.setSystemInfo);
   const setToolsCount = useAppStore((s) => s.setToolsCount);
+  const setUserSettings = useAppStore((s) => s.setUserSettings);
 
   // LLM 配置表单
   const [llmForm, setLlmForm] = useState<LLMForm>({
@@ -56,7 +58,7 @@ export default function Settings() {
   const [tools, setTools] = useState<{ name: string; description: string; parameters: string[]; dangerous: boolean }[]>([]);
 
   // 活跃 Tab
-  const [activeSection, setActiveSection] = useState<'llm' | 'model' | 'modes' | 'tools' | 'system'>('llm');
+  const [activeSection, setActiveSection] = useState<'llm' | 'model' | 'modes' | 'tools' | 'system' | 'appearance'>('llm');
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setStatusMsg({ type, text });
@@ -163,6 +165,7 @@ export default function Settings() {
     { id: 'modes', label: '功能模式', icon: '🎛️' },
     { id: 'tools', label: '工具管理', icon: '🔧' },
     { id: 'system', label: '系统信息', icon: '🖥️' },
+    { id: 'appearance', label: '外观设置', icon: '🎨' },
   ];
 
   return (
@@ -387,6 +390,70 @@ export default function Settings() {
         <SystemInfoPanel systemInfo={systemInfo} />
       )}
 
+      {/* ── 外观设置 ── */}
+      {activeSection === 'appearance' && (
+        <div className="card">
+          <div className="card-header">界面外观</div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>
+            自定义界面主题、字体大小等显示偏好，设置自动保存到本地
+          </p>
+
+          <div className="form-group">
+            <label>主题模式</label>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {(['dark', 'light'] as const).map((t) => (
+                <button
+                  key={t}
+                  className={`theme-chip ${userSettings.theme === t ? 'selected' : ''}`}
+                  onClick={() => setUserSettings({ theme: t })}
+                >
+                  <span className="theme-icon">{t === 'dark' ? '🌙' : '☀️'}</span>
+                  <span>{t === 'dark' ? '深色模式' : '浅色模式'}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: 20 }}>
+            <label>字体大小</label>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {(['small', 'medium', 'large'] as const).map((s) => (
+                <button
+                  key={s}
+                  className={`theme-chip ${userSettings.fontSize === s ? 'selected' : ''}`}
+                  onClick={() => setUserSettings({ fontSize: s })}
+                >
+                  <span style={{ fontSize: s === 'small' ? 12 : s === 'large' ? 18 : 14 }}>
+                    {s === 'small' ? '小' : s === 'large' ? '大' : '中'}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="form-help">调整后将应用于整个界面</div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: 20 }}>
+            <label>各端独立设置</label>
+            <div className="mode-list">
+              <ModeCard
+                icon="💻"
+                title="CLI 命令补全"
+                desc="在命令行界面中启用 Tab 自动补全"
+                enabled={userSettings.cliAutoComplete}
+                onToggle={() => setUserSettings({ cliAutoComplete: !userSettings.cliAutoComplete })}
+              />
+              <ModeCard
+                icon="📜"
+                title="CLI 历史记录"
+                desc={`保留 ${userSettings.cliHistorySize} 条历史命令`}
+                enabled={userSettings.cliHistorySize > 0}
+                onToggle={() => setUserSettings({ cliHistorySize: userSettings.cliHistorySize > 0 ? 0 : 100 })}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .settings-container { padding: 20px 24px; max-width: 900px; }
         .settings-header { margin-bottom: 20px; }
@@ -435,6 +502,13 @@ export default function Settings() {
         .sys-label { font-size: 12px; color: var(--muted); }
         .sys-value { font-size: 14px; font-weight: 600; color: var(--text-bright); font-family: monospace; }
         .sys-subtitle { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+        .theme-chip { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-lg);
+          border: 1px solid var(--border); background: var(--code-bg); color: var(--text); font-size: 13px;
+          cursor: pointer; transition: all .15s; }
+        .theme-chip:hover { border-color: var(--primary); }
+        .theme-chip.selected { border-color: var(--primary); background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+        .theme-icon { font-size: 18px; }
       `}</style>
     </div>
   );
