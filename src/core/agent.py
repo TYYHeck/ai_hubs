@@ -38,6 +38,7 @@ from uuid import UUID
 from .llm import BaseLLM, create_llm, LLMConfig
 from ..tools.base import ToolRegistry, get_registry, Tool
 from ..memory.memory_manager import MemoryManager
+from ..memory.enhanced_memory import EnhancedMemoryManager
 from ..rag.knowledge_base import KnowledgeBase
 
 logger = logging.getLogger("ai_hubs.agent")
@@ -198,6 +199,7 @@ class Agent:
     llm: Optional[BaseLLM] = None
     tools: ToolRegistry = field(default_factory=get_registry)
     memory: MemoryManager = field(default_factory=MemoryManager)
+    enhanced_memory: Optional[EnhancedMemoryManager] = None
     knowledge: Optional[KnowledgeBase] = None
 
     # --- LangChain 内部组件 ---
@@ -294,6 +296,14 @@ class Agent:
         """
         self.llm = create_llm(llm_config)
         self.memory.set_system(self._build_system_prompt())
+        # 初始化增强记忆系统
+        session_id = f"session_{self.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self.enhanced_memory = EnhancedMemoryManager(
+            base_manager=self.memory,
+            llm=self.llm,
+            session_id=session_id,
+            auto_commit_turns=10,
+        )
         self._callback_handler = AgentCallbackHandler(self)
         self._rebuild_graph()
         return self

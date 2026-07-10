@@ -10,6 +10,7 @@
   ├── tasks.py      ← /api/tasks/*     任务管理 + 编排
   ├── agents.py     ← /api/agents/*    Agent CRUD
   ├── skills.py     ← /api/skills/*    技能市场
+  ├── memory.py     ← /api/memory/*    记忆管理
   ├── system.py     ← /health, /metrics, /api/system/*, /api/config/*, /api/models
   └── files.py      ← /api/files/*     文件管理
 
@@ -28,6 +29,7 @@ from .agents import router as agents_router
 from .files import router as files_router
 from .knowledge import router as knowledge_router
 from .skills import router as skills_router
+from .memory import router as memory_router
 from .system import system_router, config_router, model_router
 
 all_routers = [
@@ -38,6 +40,7 @@ all_routers = [
     files_router,
     knowledge_router,
     skills_router,
+    memory_router,
     system_router,
     config_router,
     model_router,

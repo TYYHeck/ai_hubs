@@ -280,3 +280,44 @@ export const skillsApi = {
   categories: () =>
     request<{ ok: boolean; categories: { id: string; name: string; count: number }[] }>('/api/skills/categories/list'),
 };
+
+// ── 记忆管理 ──
+
+export const memoryApi = {
+  stats: () =>
+    request<{ ok: boolean; short_term: { message_count: number }; vcs: { commit_count: number; head: string }; graph: { node_count: number; edge_count: number } }>(
+      '/api/memory/stats'
+    ),
+  vcsLog: (limit = 20) =>
+    request<{ ok: boolean; commits: { id: string; message: string; timestamp: string; messages_count: number; messages_summary: string }[]; total: number }>(
+      `/api/memory/vcs/log?limit=${limit}`
+    ),
+  vcsCommit: (message = '') =>
+    request<{ ok: boolean; commit_id: string; message: string }>('/api/memory/vcs/commit', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+  vcsCheckout: (commitId: string) =>
+    request<{ ok: boolean; message: string }>('/api/memory/vcs/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ commit_id: commitId }),
+    }),
+  vcsDiff: (commit1: string, commit2: string) =>
+    request<{ ok: boolean; diff: { added: string[]; removed: string[]; count_before: number; count_after: number } }>(
+      '/api/memory/vcs/diff',
+      { method: 'POST', body: JSON.stringify({ commit1, commit2 }) }
+    ),
+  graphData: () =>
+    request<{ ok: boolean; graph: { nodes: { id: string; label: string; role: string; keywords: string[] }[]; links: { source: string; target: string }[] }; node_count: number; edge_count: number }>(
+      '/api/memory/graph/visualize'
+    ),
+  graphClusters: () =>
+    request<{ ok: boolean; clusters: { keywords: string[]; nodes: string[]; size: number }[] }>('/api/memory/graph/clusters'),
+  recall: (query: string, n = 5) =>
+    request<{ ok: boolean; result: string }>('/api/memory/recall', {
+      method: 'POST',
+      body: JSON.stringify({ query, n }),
+    }),
+  compress: () =>
+    request<{ ok: boolean; summary: string }>('/api/memory/compress', { method: 'POST' }),
+};

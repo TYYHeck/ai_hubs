@@ -8,6 +8,7 @@ import KnowledgeBase from './components/KnowledgeBase';
 import Settings from './components/Settings';
 import WorkflowEditor from './components/WorkflowEditor';
 import SkillMarket from './components/SkillMarket';
+import MemoryViewer from './components/MemoryViewer';
 import AuthPage from './components/AuthPage';
 import { useAppStore } from './stores/appStore';
 import { configApi, systemApi, tasksApi, agentsApi, knowledgeApi } from './api/client';
@@ -99,6 +100,7 @@ export default function App() {
       case 'knowledge': return <KnowledgeBase />;
       case 'workflow': return <WorkflowEditor />;
       case 'skills': return <SkillMarket />;
+      case 'memory': return <MemoryViewer />;
       case 'settings': return <Settings />;
       default: return <Dashboard />;
     }
