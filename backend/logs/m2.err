@@ -1,0 +1,10 @@
+INFO:     Started server process [24020]
+INFO:     Waiting for application startup.
+04:48:25 [ai_hubs] INFO: AI Hubs v4.0 启动中...
+04:48:25 [ai_hubs.database] INFO: 强制使用 SQLite 模式
+04:48:25 [ai_hubs.database] INFO: 使用 SQLite: G:\Documents\Agents_Projetcts\ai_hubs\data\ai_hubs.db
+04:48:25 [ai_hubs.database] INFO: 数据库表已就绪 (sqlite)
+04:48:25 [ai_hubs] INFO: 数据库就绪: sqlite
+04:48:25 [ai_hubs] INFO: AI Hubs v4.0 启动完成
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8102 (Press CTRL+C to quit)

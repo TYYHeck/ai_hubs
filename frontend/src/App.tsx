@@ -1,6 +1,7 @@
 // AI Hubs — 应用根组件
 
 import { useEffect } from 'react'
+import { RouterProvider } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { AppRouter } from './router'
 
@@ -21,5 +22,5 @@ export default function App() {
     )
   }
 
-  return <AppRouter />
+  return <RouterProvider router={AppRouter} />
 }
