@@ -148,6 +148,20 @@ class _CommandCompleter(Completer):
                         return ["openai", "deepseek", "zhipu", "qwen", "ollama", "custom", "--key", "--url"]
                     return CLI.CONFIG_LLM_SUB
 
+        # ── /vcs 子命令 ──
+        if first == "/vcs":
+            if len(tokens) == 1:
+                return CLI.VCS_SUB
+            if len(tokens) == 2 and tokens[1] not in CLI.VCS_SUB:
+                return CLI.VCS_SUB
+            if tokens[1] in ("checkout", "diff") and len(tokens) >= 2:
+                return self._get_vcs_commits()
+
+        # ── /graph 子命令 ──
+        if first == "/graph":
+            if len(tokens) == 1:
+                return CLI.GRAPH_SUB
+
         # ── /recall → 不补全（自由文本）──
         if first == "/recall":
             return []
@@ -171,6 +185,15 @@ class _CommandCompleter(Completer):
             return [t["id"] for t in tasks]
         except Exception:
             return []
+
+    def _get_vcs_commits(self) -> list[str]:
+        try:
+            em = self.cli.agent.enhanced_memory
+            if em:
+                return [c["id"] for c in em.get_vcs_log()]
+        except Exception:
+            pass
+        return []
 
     def _get_model_ids(self) -> list[str]:
         try:
@@ -362,6 +385,7 @@ class CLI:
         "/recall", "/kb_stats", "/model",
         "/task", "/agent",
         "/orchestrate", "/kb", "/files", "/sysinfo", "/config",
+        "/vcs", "/graph", "/compress",
     ]
     TASK_SUB = ["publish", "list", "status", "queue", "cancel"]
     AGENT_SUB = ["list", "register", "unregister", "create", "update", "delete", "cleanup"]
@@ -369,6 +393,8 @@ class CLI:
     ORCH_SUB = ["run", "detect", "modes"]
     CONFIG_SUB = ["show", "get", "llm"]
     CONFIG_LLM_SUB = ["show", "set", "models"]
+    VCS_SUB = ["log", "commit", "checkout", "diff"]
+    GRAPH_SUB = ["show", "clusters"]
 
     def __init__(self, agent: Agent):
         self.agent = agent
@@ -580,11 +606,29 @@ class CLI:
 
         elif command == "/recall" and len(parts) > 1:
             query = " ".join(parts[1:])
-            results = self.agent.memory.recall(query)
-            if results:
-                print(f"[Memory] {results}")
+            # 使用增强记忆的双路检索
+            em = self.agent.enhanced_memory
+            if em:
+                results = em.recall(query)
+                if results:
+                    print(f"[记忆] {results}")
+                else:
+                    print("[记忆] 没有找到相关记忆")
             else:
-                print("[Memory] 没有找到相关记忆")
+                results = self.agent.memory.recall(query)
+                if results:
+                    print(f"[Memory] {results}")
+                else:
+                    print("[Memory] 没有找到相关记忆")
+
+        elif command == "/vcs":
+            self._handle_vcs_command(parts)
+
+        elif command == "/graph":
+            self._handle_graph_command(parts)
+
+        elif command == "/compress":
+            self._handle_compress_command()
 
         elif command == "/kb_stats":
             if self.agent.knowledge:
@@ -1450,6 +1494,89 @@ class CLI:
                 continue
 
             self._print_response(result)
+
+    # ── 增强记忆命令处理 ──
+
+    def _handle_vcs_command(self, parts: list[str]):
+        """处理 /vcs 命令"""
+        em = self.agent.enhanced_memory
+        if not em:
+            print("[VCS] 增强记忆系统未启用")
+            return
+
+        sub = parts[1] if len(parts) > 1 else "log"
+
+        if sub == "log":
+            commits = em.get_vcs_log()
+            if not commits:
+                print("[VCS] 暂无提交历史")
+                return
+            print("\n[VCS] 版本历史:")
+            for c in reversed(commits):
+                print(f"  {c['id'][:12]}... {c['timestamp'][:19].replace('T',' ')} - {c['message']} ({c['messages_count']}条)")
+
+        elif sub == "commit":
+            msg = " ".join(parts[2:]) if len(parts) > 2 else "手动提交"
+            commit_id = em.commit(msg)
+            print(f"[VCS] 已提交: {commit_id}" if commit_id else "[VCS] 无消息可提交")
+
+        elif sub == "checkout" and len(parts) > 2:
+            success = em.checkout(parts[2])
+            print(f"[VCS] {'已回退到 ' + parts[2] if success else '回退失败：版本不存在'}")
+
+        elif sub == "diff" and len(parts) > 3:
+            diff = em.get_vcs_diff(parts[2], parts[3])
+            print(f"[VCS] 对比: {diff['count_before']} → {diff['count_after']} 条消息")
+            for a in diff.get("added", []):
+                print(f"  + {a[:80]}")
+            for r in diff.get("removed", []):
+                print(f"  - {r[:80]}")
+
+        else:
+            print("[VCS] 用法: /vcs [log|commit|checkout <id>|diff <id1> <id2>]")
+
+    def _handle_graph_command(self, parts: list[str]):
+        """处理 /graph 命令"""
+        em = self.agent.enhanced_memory
+        if not em:
+            print("[Graph] 增强记忆系统未启用")
+            return
+
+        sub = parts[1] if len(parts) > 1 else "show"
+
+        if sub == "show":
+            data = em.get_graph_data()
+            print(f"[Graph] 图谱: {len(data['nodes'])} 节点, {len(data['links'])} 关联边")
+            if data["nodes"]:
+                for n in data["nodes"][:10]:
+                    kw = ", ".join(n.get("keywords", [])[:4])
+                    print(f"  [{n['role']}] {n['label'][:60]}  |  {kw}")
+
+        elif sub == "clusters":
+            clusters = em.get_clusters()
+            if not clusters:
+                print("[Graph] 暂无主题聚类")
+                return
+            print("\n[Graph] 记忆主题聚类:")
+            for i, c in enumerate(clusters):
+                print(f"  主题{i+1}: {', '.join(c['keywords'][:5])} ({c['size']}条)")
+
+        else:
+            print("[Graph] 用法: /graph [show|clusters]")
+
+    def _handle_compress_command(self):
+        """处理 /compress 命令 —— LLM 高无损压缩"""
+        em = self.agent.enhanced_memory
+        if not em:
+            print("[Compress] 增强记忆系统未启用")
+            return
+
+        print("[Compress] 正在使用 LLM 压缩对话历史...")
+        summary = em.compress_history()
+        if summary:
+            print(f"\n[Compress] 压缩结果:\n{summary}\n")
+        else:
+            print("[Compress] 无可压缩内容（需要至少 4 条对话消息）")
 
 
 def main():
