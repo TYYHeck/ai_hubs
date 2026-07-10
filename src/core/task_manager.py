@@ -35,6 +35,7 @@ logger = logging.getLogger("ai_hubs.task_manager")
 class TaskStatus(Enum):
     PENDING = "pending"       # 等待执行
     RUNNING = "running"       # 执行中
+    PAUSED = "paused"         # 已暂停（可恢复）
     COMPLETED = "completed"   # 已完成
     FAILED = "failed"         # 执行失败
     CANCELLED = "cancelled"   # 已取消
@@ -60,6 +61,13 @@ class Task:
     event_log: list[dict] = field(default_factory=list)  # [{time, event, data}, ...]
     # ── 输出文件追踪 ──
     output_files: list[str] = field(default_factory=list)  # Agent 执行中写入的文件路径列表
+    # ── v3.0 新增：任务分析模式 ──
+    analysis_mode: str = "direct"            # "direct"=关键词分析 / "ai"=AI分析模式
+    # ── v3.0 新增：思考深度与可见性 ──
+    think_depth: int = 1                     # 思考深度 1-5 (1=简洁 5=深度推理)
+    think_visibility: str = "visible"        # "visible"=显示思考 / "summary"=仅摘要 / "hidden"=隐藏
+    # ── 暂停/恢复 ──
+    _pause_checkpoint: Optional[dict] = None  # 暂停时的中间状态快照
 
     def to_dict(self) -> dict:
         return {
@@ -75,9 +83,12 @@ class Task:
             "error": self.error,
             "priority": self.priority,
             "tags": self.tags,
-            "event_log": self.event_log[-20:],  # 最近 20 条事件
+            "event_log": self.event_log[-30:],  # 最近 30 条事件
             "output_files": self.output_files,   # 输出文件列表
             "metadata_": dict(self.metadata),     # 编排信息等
+            "analysis_mode": self.analysis_mode,  # 分析模式
+            "think_depth": self.think_depth,      # 思考深度
+            "think_visibility": self.think_visibility,  # 思考可见性
         }
 
     def add_event(self, event: str, data: Any = None):
@@ -259,6 +270,9 @@ class TaskManager:
         priority: int = 0,
         tags: list[str] | None = None,
         target_agent: str = "",
+        analysis_mode: str = "direct",
+        think_depth: int = 1,
+        think_visibility: str = "visible",
     ) -> str:
         """
         发布一项新任务
@@ -269,6 +283,9 @@ class TaskManager:
             priority: 优先级 0-10，越大越优先
             tags: 标签列表
             target_agent: 指定由哪个 Agent 执行（空=自动分配）
+            analysis_mode: "direct"=关键词分析 / "ai"=AI分析模式
+            think_depth: 思考深度 1-5
+            think_visibility: "visible"=显示 / "summary"=仅摘要 / "hidden"=隐藏
 
         Returns:
             任务 ID
@@ -279,6 +296,9 @@ class TaskManager:
             priority=priority,
             tags=tags or [],
             assigned_agent=target_agent or None,
+            analysis_mode=analysis_mode,
+            think_depth=min(max(think_depth, 1), 5),
+            think_visibility=think_visibility,
         )
         with self._lock:
             self._queue.append(task)
@@ -392,15 +412,73 @@ class TaskManager:
         task = None
         with self._lock:
             task = self._find_task(task_id)
-            if task and task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
+            if task and task.status in (TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.PAUSED):
                 task.status = TaskStatus.CANCELLED
                 task.finished_at = datetime.now()
+                # 释放 Agent
+                if task.assigned_agent:
+                    agent = self._agents.get(task.assigned_agent)
+                    if agent:
+                        agent.status = "idle"
+                        agent.current_task_id = None
                 if task not in self._history:
                     self._history.append(task)
 
         if task:
             self._persist_task(task)
             self._persist_events(task)
+
+    def pause_task(self, task_id: str) -> bool:
+        """暂停正在执行的任务"""
+        task = None
+        with self._lock:
+            task = self._find_task(task_id)
+            if task and task.status == TaskStatus.RUNNING:
+                task.status = TaskStatus.PAUSED
+                task.add_event("paused", {"message": "用户手动暂停任务"})
+                # 保存检查点快照
+                task._pause_checkpoint = {
+                    "paused_at": datetime.now().isoformat(),
+                    "event_count": len(task.event_log),
+                    "result_sofar": (task.result or "")[:500],
+                }
+                # 释放 Agent
+                if task.assigned_agent:
+                    agent = self._agents.get(task.assigned_agent)
+                    if agent:
+                        agent.status = "idle"
+                        agent.current_task_id = None
+
+        if task:
+            self._persist_task(task)
+            self._persist_events(task)
+            return True
+        return False
+
+    def resume_task(self, task_id: str) -> bool:
+        """恢复已暂停的任务（重新放入队列）"""
+        task = None
+        with self._lock:
+            task = self._find_task(task_id)
+            if task and task.status == TaskStatus.PAUSED:
+                task.status = TaskStatus.PENDING
+                task.assigned_agent = None
+                task.add_event("resumed", {"message": "用户恢复任务"})
+                # 从 history 移回队列
+                if task in self._history:
+                    self._history.remove(task)
+                self._queue.append(task)
+                # 按优先级排序
+                self._queue = deque(
+                    sorted(self._queue, key=lambda t: t.priority, reverse=True)
+                )
+
+        if task:
+            self._persist_task(task)
+            self._persist_events(task)
+            self._notify_dispatcher()
+            return True
+        return False
 
     def delete_task(self, task_id: str) -> bool:
         """永久删除任务记录（从内存和数据库移除）"""

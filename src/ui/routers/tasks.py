@@ -27,13 +27,19 @@ class PublishTaskRequest(BaseModel):
     priority: int = Field(0, ge=0, le=10, description="优先级 0-10")
     tags: list[str] = Field(default_factory=list, description="标签列表")
     target_agent: str = Field("", description="指定 Agent 名称")
+    analysis_mode: str = Field("direct", description="分析模式: direct=关键词分析 / ai=AI分析")
+    think_depth: int = Field(1, ge=1, le=5, description="思考深度 1-5")
+    think_visibility: str = Field("visible", description="思考可见性: visible/summary/hidden")
 
 
 class OrchestrateTaskRequest(BaseModel):
     description: str = Field(..., min_length=1, description="任务描述")
     title: str = Field("", description="任务标题")
-    mode: str = Field("auto", description="执行模式: single/parallel/pipeline/collaborative/auto")
+    mode: str = Field("auto", description="执行模式: single/parallel/pipeline/collaborative/debate/peer_review/round_table/hierarchical/auto")
     agent_names: list[str] | None = Field(None, description="指定 Agent 列表")
+    analysis_mode: str = Field("direct", description="分析模式: direct=关键词 / ai=AI分析")
+    think_depth: int = Field(1, ge=1, le=5, description="思考深度 1-5")
+    think_visibility: str = Field("visible", description="思考可见性: visible/summary/hidden")
 
 
 class UpdateTaskRequest(BaseModel):
@@ -51,6 +57,9 @@ async def api_publish_task(req: PublishTaskRequest, current_user = Depends(get_c
         priority=req.priority,
         tags=req.tags,
         target_agent=req.target_agent,
+        analysis_mode=req.analysis_mode,
+        think_depth=req.think_depth,
+        think_visibility=req.think_visibility,
     )
     return {"ok": True, "task_id": task_id}
 
@@ -99,12 +108,44 @@ async def api_orchestrate_task_stream(
 
     # 先做模式检测（同步，不在线程池中）
     if req.mode == "auto" and hasattr(tm, 'detect_best_mode'):
-        detection = tm.detect_best_mode(req.description)
-        detected_mode = detection.get("mode", "single")
-        detected_reason = detection.get("reason", "")
+        if req.analysis_mode == "ai":
+            # AI 分析模式：使用 LLM 智能分配工作流
+            from src.core.llm import LLMEngine
+            from src.core.config import get_config
+            cfg = get_config()
+            try:
+                llm = LLMEngine(
+                    provider=cfg.llm.provider,
+                    model=cfg.llm.model,
+                    api_key=cfg.llm.api_key,
+                    base_url=cfg.llm.base_url,
+                )
+                from src.core.orchestrator import LLMWorkflowAllocator
+                all_agents = tm.list_agents_dict()
+                agents_info = [
+                    {"name": p.name, "skills": p.skills, "description": p.description}
+                    for p in all_agents.values()
+                ]
+                workflow = LLMWorkflowAllocator.allocate(req.description, agents_info, llm)
+                detected_mode = workflow.get("mode", "single")
+                detected_reason = workflow.get("reason", "AI 智能分析")
+                llm_workflow = workflow
+            except Exception as e:
+                logger = __import__('logging').getLogger("ai_hubs.web")
+                logger.warning(f"AI 分析模式回退: {e}")
+                detection = tm.detect_best_mode(req.description)
+                detected_mode = detection.get("mode", "single")
+                detected_reason = detection.get("reason", "")
+                llm_workflow = None
+        else:
+            detection = tm.detect_best_mode(req.description)
+            detected_mode = detection.get("mode", "single")
+            detected_reason = detection.get("reason", "")
+            llm_workflow = None
     else:
         detected_mode = req.mode
         detected_reason = "手动指定"
+        llm_workflow = None
 
     async def generate():
         progress_queue: asyncio.Queue = asyncio.Queue()
@@ -226,6 +267,26 @@ async def api_cancel_task(task_id: str, current_user = Depends(get_current_user)
     return {"ok": True}
 
 
+@router.post("/{task_id}/pause")
+async def api_pause_task(task_id: str, current_user = Depends(get_current_user)):
+    """暂停正在执行的任务"""
+    tm = get_task_manager()
+    ok = tm.pause_task(task_id)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "任务无法暂停（仅运行中的任务可暂停）"}, status_code=400)
+    return {"ok": True, "message": "任务已暂停"}
+
+
+@router.post("/{task_id}/resume")
+async def api_resume_task(task_id: str, current_user = Depends(get_current_user)):
+    """恢复已暂停的任务"""
+    tm = get_task_manager()
+    ok = tm.resume_task(task_id)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "任务无法恢复（仅已暂停的任务可恢复）"}, status_code=400)
+    return {"ok": True, "message": "任务已恢复，重新进入队列"} 
+
+
 @router.delete("/{task_id}")
 async def api_delete_task(task_id: str, current_user = Depends(get_current_user)):
     tm = get_task_manager()
@@ -268,6 +329,9 @@ async def api_watch_task(task_id: str, request: Request, current_user = Depends(
             status = current_task.get("status", "")
             if status in ("completed", "failed", "cancelled"):
                 yield f"data: {json.dumps({'type': 'done', 'task': current_task}, ensure_ascii=False)}\n\n"
+                break
+            if status == "paused":
+                yield f"data: {json.dumps({'type': 'paused', 'task': current_task}, ensure_ascii=False)}\n\n"
                 break
 
             # 检测事件日志变化
