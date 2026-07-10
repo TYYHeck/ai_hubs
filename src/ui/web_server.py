@@ -28,9 +28,16 @@ warnings.filterwarnings("ignore", message=".*msg.*argument to (Task|Future)\\.ca
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+# 前端构建产物目录（生产 React 前端）。存在时由本服务直接托管，
+# 使 `python main.py --web` 与 Electron 桌面客户端也能使用完整界面；
+# 不存在时回退到内嵌 CHAT_PAGE，保证无构建也可运行。
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+FRONTEND_DIST = os.path.join(_ROOT_DIR, "frontend", "dist")
+
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 import uvicorn
 
@@ -3062,6 +3069,9 @@ async def api_system_info(current_user = Depends(get_current_user)):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    index_html = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_html):
+        return FileResponse(index_html)
     return CHAT_PAGE
 
 
@@ -4590,6 +4600,33 @@ async def _load_history_async():
         _logging.getLogger("ai_hubs.web").info(f"从数据库恢复了 {count} 个历史任务")
 
 
+# ============================================================
+# 静态资源：已构建 React 前端时挂载 /assets
+# 必须在 SPA 兜底路由【之前】注册，否则 /assets/* 会被兜底路由拦截
+# ============================================================
+UI_MODE = "内嵌网页 (CHAT_PAGE)"
+if os.path.isdir(FRONTEND_DIST):
+    _assets_dir = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.isdir(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+    UI_MODE = "React 前端 (frontend/dist)"
+
+
+# ============================================================
+# SPA 兜底：已构建 React 前端时，未知的非 API / 非资源路径返回 index.html
+# （必须在所有 /api 等具体路由之后注册，否则会拦截它们）
+# ============================================================
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    index_html = os.path.join(FRONTEND_DIST, "index.html")
+    if not os.path.exists(index_html):
+        raise HTTPException(status_code=404, detail="Not Found")
+    # 放行 API / WebSocket / 监控 / 文件下载 / 带扩展名的静态资源
+    if full_path.startswith(("api/", "ws", "health", "metrics", "files/")) or "." in full_path:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(index_html)
+
+
 def start(host: str = "127.0.0.1", port: int = 8080):
     """启动 Web 服务"""
     import logging
@@ -4619,9 +4656,11 @@ def start(host: str = "127.0.0.1", port: int = 8080):
         logger.warning(f"编排器加载失败: {e}")
 
     db_status = "MySQL" if _db_initialized else "内存"
+
     print(f"\n  {'='*50}")
     print(f"  AI Hubs v3.0 已启动")
     print(f"  地址: http://{host}:{port}")
+    print(f"  界面: {UI_MODE}")
     print(f"  Agent: {_agent.name} 已注册  |  任务调度器已启动")
     print(f"  存储: {db_status}  |  日志: ./logs/")
     print(f"  健康检查: http://{host}:{port}/health")
