@@ -1,6 +1,6 @@
-# SmartAgent v3.0 — 企业级多 Agent 智能编排平台
+# AI Hubs v3.0 — 新一代智能 Agent 平台
 
-> 基于 LangGraph ReAct 架构的多 Agent 智能协作平台。支持 **8 种执行模式**、**17 个内置工具**、**SSE 流式响应**、**可视化工作流编排**、**JWT 认证**、**Prometheus 监控**。
+> 基于 LangGraph ReAct 架构的智能 Agent 平台。支持 **8 种多Agent编排模式**、**17 个内置工具**、**Git式记忆版本控制**、**技能市场**、**内置IDE**、**多端部署（Web/CLI/Electron桌面端）**。
 
 <p align="center">
   <strong>Python</strong> 后端 · <strong>React 18</strong> 前端 · <strong>LangChain</strong> 推理 · <strong>ChromaDB</strong> 记忆 · <strong>MySQL</strong> 持久化
@@ -15,17 +15,18 @@
 - [快速开始](#-快速开始)
 - [配置说明](#-配置说明)
 - [执行模式](#-执行模式)
-- [工具生态](#-工具生态)
+- [技能市场](#-技能市场)
+- [增强记忆系统](#-增强记忆系统)
 - [API 接口](#-api-接口)
 - [前端界面](#-前端界面)
-- [部署指南](#-部署指南)
+- [多端部署](#-多端部署)
 - [开发指南](#-开发指南)
 
 ---
 
 ## ✨ 功能亮点
 
-### 🤖 多 Agent 编排 (8 种模式)
+### 🤖 多 Agent 编排 (8种模式)
 
 | 模式 | 说明 | 适用场景 |
 |------|------|----------|
@@ -36,85 +37,95 @@
 | `debate` ⭐ | 正反方辩论 + 投票裁决 | 技术选型、利弊分析 |
 | `peer_review` ⭐ | 执行→评审→修改→确认 | 代码审查、质量保障 |
 | `round_table` ⭐ | 圆桌会议 + 共识追踪 | 头脑风暴、团队决策 |
-| `hierarchical` ⭐ | 专家→经理→总监层级决策 | 审批流程、重大决策 |
+| `hierarchical` ⭐ | 专家→经理→总监层级 | 审批流程、重大决策 |
 
-⭐ = v3.0 新增
+### 🔐 邮箱验证码注册
 
-### 🛠 工具生态 (17 个工具)
+- QQ邮箱 SMTP 验证码发送（HTML格式邮件）
+- 密码强度校验 + 确认密码
+- 客户端预校验 + 60秒冷却倒计时
+- JWT Token 认证（含 uid/role）
 
-**基础工具**: `web_search`, `fetch_url`, `read_file`, `write_file`, `run_python`, `calculator`, `generate_image`
+### 🎯 技能市场
 
-**扩展工具** ⭐: `database_query` (SQLite/MySQL/PG), `http_api_call`, `run_shell`, `send_email`, `read_pdf`, `read_excel`, `json_process`, `time_tool`, `text_diff`, `image_analyze`
+- **8个内置技能**: Python开发、Web全栈、数据分析、文档写作、代码审查、DevOps、调研分析、UI设计
+- **GitHub技能探索**: 搜索开源AI技能仓库，一键导入安装
+- **自定义创建**: 定义提示词模板、分类、标签
+- **完整CRUD**: 安装/卸载/删除/创建
 
-### 🎨 前端 SPA (React 18 + TypeScript)
+### 🧠 增强记忆系统
 
-- **仪表盘**: 8 张统计卡 + Agent 状态表 + 系统信息
-- **对话**: SSE 流式渲染 + Markdown 渲染 (代码高亮/表格/引用)
-- **任务编排**: SSE 进度日志 + 任务队列 + 详情面板
-- **Agent 管理**: 卡片网格 + 创建/编辑弹窗 + 技能选择
-- **工作流编辑** ⭐: Canvas 拖拽 DAG 画布 + 4 套内置模板
-- **知识库**: 拖拽上传 + 语义搜索 + 文件管理
-- **系统设置**: LLM 配置 + 模型切换 + 功能开关
+- **Git式VCS**: commit/checkout/log/diff 记忆版本控制
+- **记忆图谱索引**: 关键词提取、语义关联边、主题聚类
+- **高无损LLM压缩**: 替代简单截断，信息损失<5%
+- **双路检索**: 图谱关键词 + 向量语义检索
 
-### 🔐 企业特性
+### 📁 内置IDE
 
-- **JWT 认证**: 完整的注册/登录/Token 刷新
-- **速率限制**: 令牌桶算法，每 IP 限流
-- **MySQL 持久化**: Agent/用户/任务/日志
-- **Prometheus 监控**: `/metrics` 端点 + 请求计数
-- **ChromaDB 记忆**: 短期会话 + 长期记忆 + RAG 知识库
+- 多文件标签管理（新建/保存/关闭）
+- 语法高亮（Python/JS/TS/HTML/CSS/JSON/MD/SQL/YAML）
+- 行号 + 文件浏览器 + 底部状态栏
+- Ctrl+S 下载保存
+
+### 💬 对话即管理
+
+- **斜杠命令**: /agent /task /clear /recall /code /skill /search /config
+- **快捷操作面板**: 一键跳转Agent/任务/技能/IDE
+- SSE 实时流式对话 + Markdown 渲染
+
+### 📊 数据集管理
+
+- CRUD + JSON/CSV/纯文本导入导出
+- 文件上传 + 追加记录
+- 分类系统：训练数据/测试数据/提示词模板/知识问答/自定义
+
+### 🖥 多端支持
+
+- **Web端**: React 18 + TypeScript + Vite
+- **CLI端**: prompt_toolkit + Tab补全 + 历史回溯 + Rich渲染
+- **桌面端**: Electron 桌面应用（Win/Mac/Linux）
 
 ---
 
 ## 🏗 系统架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    前端 SPA (React 18)                     │
-│  Dashboard │ ChatView │ TaskManager │ AgentManager │      │
-│  WorkflowEditor │ KnowledgeBase │ Settings              │
-└─────────────────┬───────────────────────────────────────┘
-                  │ REST API + SSE Streaming
-┌─────────────────▼───────────────────────────────────────┐
-│                FastAPI Web Server (127.0.0.1:8080)       │
-│  /api/chat  │  /api/tasks  │  /api/agents  │  /api/kb   │
-│  /api/auth  │  /api/config │  /health  │  /metrics      │
-└─────────────────┬───────────────────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────────────────┐
-│                    核心引擎 (LangGraph)                    │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │  Agent   │  │ Orchestrator │  │  TaskManager      │  │
-│  │ ReAct推理 │  │ 8种执行模式  │  │ 优先级队列        │  │
-│  │ 工具调用  │  │ LLM工作流分配│  │ 智能Agent匹配     │  │
-│  └──────────┘  └──────────────┘  └───────────────────┘  │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │Communication│ │  ToolRegistry│  │  LLM Engine      │  │
-│  │ 辩论/评审   │ │ 17个内置工具 │  │ 5种提供商         │  │
-│  │ 圆桌/层级   │ │ @tool装饰器  │  │ OpenAI/DS/Qwen... │  │
-│  └──────────┘  └──────────────┘  └───────────────────┘  │
-└─────────────────┬───────────────────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────────────────┐
-│                    数据层                                  │
-│  ChromaDB (记忆)  │  MySQL (持久化)  │  FileSystem (输出)  │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                   多端接入                                     │
+│    Web SPA (React 18)  │  CLI (prompt_toolkit)  │  Electron  │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ REST API + SSE Streaming
+┌─────────────────────▼───────────────────────────────────────┐
+│                  FastAPI Web Server (12个路由模块)            │
+│  auth │ chat │ tasks │ agents │ skills │ memory │ datasets   │
+│  knowledge │ files │ system │ config │ models │ workflow     │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                    核心引擎 (LangGraph)                        │
+│  Agent (ReAct) │ Orchestrator (8模式) │ TaskManager (队列)    │
+│  SkillManager │ EnhancedMemory (VCS+Graph+Compress)          │
+│  ToolRegistry (17工具) │ LLM Engine (5种提供商)               │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                    数据层                                      │
+│  ChromaDB (记忆+RAG) │ MySQL (认证/任务/Agent) │ FileSystem    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### 技术栈
 
-| 层级 | 技术 | 版本 |
-|------|------|------|
-| 运行时 | Python | 3.11+ |
-| 推理框架 | LangChain + LangGraph | latest |
-| LLM 提供商 | OpenAI / DeepSeek / 智谱 / Qwen / Ollama | — |
-| Web 框架 | FastAPI + Uvicorn | latest |
-| 前端 | React 18 + TypeScript + Vite 6 | — |
-| 状态管理 | Zustand 5 | — |
-| 向量数据库 | ChromaDB | — |
-| 关系数据库 | MySQL + PyMySQL | 8.0+ |
-| 监控 | Prometheus | — |
-| 认证 | JWT + bcrypt | — |
+| 层级 | 技术 | 
+|------|------|
+| 运行时 | Python 3.11+ / Node.js 18+ |
+| 推理框架 | LangChain + LangGraph |
+| LLM | OpenAI / DeepSeek / 智谱 / Qwen / Ollama |
+| Web | FastAPI + Uvicorn |
+| 前端 | React 18 + TypeScript + Vite 6 + Zustand 5 |
+| 向量库 | ChromaDB |
+| 数据库 | MySQL 8.0+ |
+| 桌面端 | Electron 28 |
 
 ---
 
@@ -124,338 +135,201 @@
 
 - Python 3.11+
 - Node.js 18+
-- （可选）MySQL 8.0+
-- （可选）ChromaDB
+- （可选）MySQL 8.0+ / ChromaDB
 
-### 1. 克隆项目
+### 1. 安装依赖
 
 ```bash
-git clone <repo-url>
 cd smart_agent
-```
-
-### 2. 安装后端依赖
-
-```bash
 pip install -r requirements.txt
+cd frontend && npm install && cd ..
 ```
 
-### 3. 配置 LLM
-
-编辑 `config.yaml` 或设置环境变量：
+### 2. 配置 LLM
 
 ```bash
-# 例如使用 DeepSeek
+# 设置 API Key
 export DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxx"
+
+# 或编辑 config.yaml
+# llm.provider: "deepseek"
+# llm.model: "deepseek-chat"
 ```
 
-```yaml
-# config.yaml
-llm:
-  provider: "deepseek"
-  model: "deepseek-chat"
-  # api_key 留空自动从环境变量读取
-```
-
-### 4. 启动后端
+### 3. 启动后端
 
 ```bash
 python main.py --web
-# FastAPI 服务启动在 http://127.0.0.1:8080
+# FastAPI → http://127.0.0.1:8080
 ```
 
-### 5. 启动前端（开发模式）
+### 4. 启动前端
 
 ```bash
-cd frontend
-npm install
-npm run dev
-# Vite 开发服务器启动在 http://localhost:5173
+cd frontend && npm run dev
+# Vite → http://localhost:5173
 ```
 
-### 6. 构建前端（生产模式）
+### 4a. 启动桌面端（Electron）
 
 ```bash
-cd frontend
-npm run build
-# 构建产物在 frontend/dist/
+npm run electron:dev
 ```
 
 ---
 
 ## ⚙️ 配置说明
 
-详见 `config.yaml`，主要配置项：
-
-### LLM 配置
+详见 `config.yaml`：
 
 ```yaml
-llm:
-  provider: "deepseek"       # openai / deepseek / zhipu / qwen / ollama / custom
-  model: "deepseek-chat"     # 模型名称
-  temperature: 0.7           # 生成温度
-  max_tokens: 4096
-  timeout: 60
-```
-
-### 工具配置
-
-```yaml
-tools:
-  enabled:                   # 启用列表，空列表=全部
-    - "web_search"
-    - "fetch_url"
-    - "run_python"
-    # ... 共 17 个可选工具
-  dangerous:                 # 需用户确认的危险工具
-    - "run_python"
-    - "write_file"
-    - "run_shell"
-    - "database_query"
-    - "http_api_call"
-  output_dir: "./output"
-```
-
-### 编排器配置
-
-```yaml
-orchestrator:
-  default_mode: "auto"       # 默认执行模式
-  parallel:
-    max_agents: 4
-  debate:                    # v3.0 新增
-    rounds: 2
-  peer_review:               # v3.0 新增
-    approval_threshold: 7.0
-  round_table:               # v3.0 新增
-    discussion_rounds: 2
-```
-
-### 认证配置
-
-```yaml
-auth:
-  enabled: true
-  jwt_secret_key: ""         # 生产环境务必设置！
-  jwt_expire_minutes: 480
-```
-
-### 数据库配置
-
-```yaml
-database:
-  host: "127.0.0.1"
-  port: 3306
-  user: "smart_agent"
-  password: ""
-  database: "smart_agent"
+llm:                    # LLM提供商和模型配置
+memory:                 # 短期记忆(轮数/阈值) + 长期记忆(ChromaDB)
+agent:                  # Agent名称/系统提示词/迭代次数
+tools:                  # 工具启用列表 + 危险工具 + 输出目录
+orchestrator:           # 编排器：模式/并行数/辩论轮数等
+auth:                   # JWT认证配置
+database:               # MySQL连接配置
+rag:                    # RAG知识库配置
 ```
 
 ---
 
-## 🎯 执行模式
+## 🎯 技能市场
 
-### 自动模式检测 (AUTO)
+### 内置技能（8个）
 
-系统自动分析任务描述中的关键词，选择最佳执行模式：
+| ID | 名称 | 分类 |
+|----|------|------|
+| python_dev | Python 开发 | 编程 |
+| web_dev | Web 全栈开发 | 编程 |
+| data_analysis | 数据分析 | 数据 |
+| writing_assistant | 文档写作助手 | 写作 |
+| code_reviewer | 代码审查员 | 编程 |
+| devops_helper | DevOps 运维 | 运维 |
+| research_analyst | 调研分析 | 调研 |
+| ui_designer | UI 设计顾问 | 设计 |
 
-```python
-# 简单问答 → SINGLE
-"什么是 LangChain？"
+### API
 
-# 多角度分析 → PARALLEL
-"从技术、市场、成本三个维度对比分析云计算方案"
-
-# 多步骤流程 → PIPELINE
-"先调研最新的前端框架，然后对比优缺点，最后给出推荐方案"
-
-# 决策评估 → COLLABORATIVE
-"评估是否应该从 MySQL 迁移到 PostgreSQL"
-
-# 辩论决策 → DEBATE (v3.0)
-"辩论：微服务架构 vs 单体架构，哪个更适合创业团队"
-
-# 质量审查 → PEER_REVIEW (v3.0)
-"审查这段 Python 代码的安全性和性能问题"
-
-# 头脑风暴 → ROUND_TABLE (v3.0)
-"团队讨论：我们的产品下个季度的功能优先级"
-```
-
-### LLM 驱动的智能工作流分配
-
-启用 `use_llm_allocation=True` 后，系统使用 LLM 分析任务并自动分配 Agent 角色和工作流，非硬编码关键词匹配。
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/skills/list` | 技能列表（支持分类/安装状态过滤） |
+| POST | `/api/skills/{id}/install` | 安装技能 |
+| POST | `/api/skills/{id}/uninstall` | 卸载技能 |
+| GET | `/api/skills/github/search` | GitHub搜索 |
+| POST | `/api/skills/create` | 创建自定义技能 |
 
 ---
 
-## 🛠 工具生态
+## 🧠 增强记忆系统
 
-### 工具注册
+### Git式版本控制
 
-```python
-from src.tools.base import tool
-
-@tool(description="执行 SQL 查询", dangerous=True)
-def database_query(connection: str, query: str, limit: int = 20) -> str:
-    ...
+```
+对话过程自动 commit → 可回退到任意版本
+/vcs log     → 查看提交历史
+/vcs commit  → 手动创建快照
+/vcs checkout <id> → 回退到指定版本
+/vcs diff <id1> <id2> → 版本对比
 ```
 
-### 基础工具 (7 个)
+### 记忆图谱
 
-| 工具 | 说明 |
-|------|------|
-| `web_search` | DuckDuckGo 互联网搜索 |
-| `fetch_url` | HTTP 网页内容抓取 |
-| `read_file` | 读取文本/.docx 文件 |
-| `write_file` | 写入文件（自动关联任务） |
-| `run_python` | 沙箱化 Python 执行 |
-| `calculator` | 数学表达式计算 |
-| `generate_image` | Matplotlib 图表生成 |
+- 自动提取关键词，建立语义关联边
+- 主题聚类：发现记忆中的核心主题
+- BFS图谱查询：找到关联的记忆链
 
-### 扩展工具 (10 个，v3.0 新增)
+### LLM压缩
 
-| 工具 | 说明 |
-|------|------|
-| `database_query` | SQL 查询（SQLite/MySQL/PostgreSQL） |
-| `http_api_call` | HTTP API 调用（GET/POST/PUT/DELETE） |
-| `run_shell` | 受限 Shell 命令执行 |
-| `send_email` | SMTP 邮件发送 |
-| `read_pdf` | PDF 文本提取（PyMuPDF/pdfplumber/PyPDF2） |
-| `read_excel` | Excel/CSV 表格读取（table/json 格式） |
-| `json_process` | JSON 数据查询与转换 |
-| `time_tool` | 时间日期计算与格式化 |
-| `text_diff` | 文本差异对比（unified diff） |
-| `image_analyze` | 图片信息提取（OCR + EXIF） |
+- `/compress` → 调用LLM智能压缩对话历史
+- 保留：主题/事实/决策/上下文依赖
+- 压缩率5-10x，信息损失<5%
+
+### API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/memory/vcs/log` | 版本历史 |
+| POST | `/api/memory/vcs/commit` | 创建快照 |
+| POST | `/api/memory/vcs/checkout` | 回退版本 |
+| GET | `/api/memory/graph/visualize` | 图谱数据 |
+| POST | `/api/memory/recall` | 双路检索 |
+| POST | `/api/memory/compress` | LLM压缩 |
 
 ---
 
 ## 📡 API 接口
 
-### 对话
+### 完整路由表（12个模块）
 
-| 方法 | 路径 | 说明 |
+| 模块 | 前缀 | 说明 |
 |------|------|------|
-| `POST` | `/api/chat/stream` | SSE 流式对话 |
-
-### 任务编排
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/tasks/orchestrate` | SSE 编排执行任务 |
-| `GET` | `/api/tasks` | 获取任务列表和队列状态 |
-| `GET` | `/api/tasks/{id}` | 获取任务详情 |
-| `GET` | `/api/tasks/modes` | 获取可用执行模式列表 |
-
-### Agent 管理
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/agents` | 获取 Agent 列表 |
-| `POST` | `/api/agents` | 创建 Agent |
-| `PUT` | `/api/agents/{name}` | 更新 Agent |
-| `DELETE` | `/api/agents/{name}` | 删除 Agent |
-
-### 知识库
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/kb/upload` | 上传文件 |
-| `GET` | `/api/kb/files` | 文件列表 |
-| `GET` | `/api/kb/search` | 语义搜索 |
-| `DELETE` | `/api/kb/files/{filename}` | 删除文件 |
-| `DELETE` | `/api/kb/clear` | 清空知识库 |
-
-### 认证
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/auth/register` | 用户注册 |
-| `POST` | `/api/auth/login` | 用户登录 |
-| `POST` | `/api/auth/refresh` | 刷新 Token |
-
-### 系统
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/config` | 获取当前配置 |
-| `PUT` | `/api/config` | 更新配置 |
-| `POST` | `/api/config/switch-model` | 切换 LLM 模型 |
-| `GET` | `/health` | 健康检查 |
-| `GET` | `/metrics` | Prometheus 指标 |
+| auth | `/api/auth` | 登录/注册(验证码)/用户信息 |
+| chat | `/api/chat` | SSE流式对话 |
+| tasks | `/api/tasks` | 任务编排+队列管理 |
+| agents | `/api/agents` | Agent CRUD |
+| skills | `/api/skills` | 技能市场 |
+| memory | `/api/memory` | 记忆系统(VCS+图谱+压缩) |
+| datasets | `/api/datasets` | 数据集管理 |
+| knowledge | `/api/knowledge` | RAG知识库 |
+| files | `/api/files` | 文件管理 |
+| system | `/api/system` | 系统信息+监控 |
+| config | `/api/config` | 配置管理 |
+| models | `/api/models` | 模型管理 |
 
 ---
 
 ## 🎨 前端界面
 
-### 界面概览
-
 ```
 ┌───────────┬──────────────────────────────────────────┐
 │  Sidebar  │              Main Content                 │
 │           │                                           │
-│ 📊 仪表盘 │  ┌─────────────────────────────────────┐  │
-│ 💬 对话   │  │  Dashboard / Chat / Tasks / ...     │  │
-│ 📋 任务   │  │                                     │  │
-│ 🤖 Agent  │  │  7 个功能页面，暗色主题设计          │  │
-│ 🔀 工作流 │  │  SSE 实时更新，15秒自动刷新          │  │
-│ 📚 知识库 │  │                                     │  │
-│ ⚙️ 设置   │  └─────────────────────────────────────┘  │
-│           │                                           │
-│ 统计信息  │                                           │
+│ 📊 仪表盘 │  Dashboard / Chat / Tasks / Agents        │
+│ 💬 对话   │  Skills / Memory / IDE / Workflow         │
+│ 📋 任务   │  Knowledge / Settings                     │
+│ 🤖 Agent  │                                           │
+│ 🎯 技能   │  暗色主题 · 实时SSE · 15秒自动刷新        │
+│ 🧠 记忆   │  Zustand 状态管理 · 9个功能模块            │
+│ 📁 IDE    │                                           │
+│ 🔀 工作流 │                                           │
+│ 📚 知识库 │                                           │
+│ ⚙️ 设置   │                                           │
 └───────────┴──────────────────────────────────────────┘
-```
-
-### 开发模式启动
-
-```bash
-cd frontend
-npm install
-npm run dev       # http://localhost:5173
-```
-
-### 生产构建
-
-```bash
-npm run build     # 输出到 frontend/dist/
 ```
 
 ---
 
-## 🚢 部署指南
+## 🖥 多端部署
 
-### Docker 部署
-
-```dockerfile
-# Dockerfile (示例)
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 8080
-CMD ["python", "main.py", "--web"]
-```
+### Web端
 
 ```bash
-docker build -t smart-agent .
-docker run -p 8080:8080 \
-  -e DEEPSEEK_API_KEY=sk-xxx \
-  -e JWT_SECRET_KEY=your-secret \
-  -v ./data:/app/data \
-  -v ./output:/app/output \
-  smart-agent
+cd frontend && npm run build
+# 静态文件部署到 Nginx / CDN
 ```
 
-### 生产环境检查清单
+### CLI端
 
-- [ ] 设置 `auth.jwt_secret_key` 为随机强密码
-- [ ] 配置 MySQL 数据库连接
-- [ ] 设置 LLM API Key 环境变量
-- [ ] 配置 Nginx 反向代理 + SSL
-- [ ] 设置日志级别为 INFO
-- [ ] 启用速率限制
-- [ ] 配置 Prometheus 抓取 `/metrics`
-- [ ] 设置 `tools.output_dir` 为持久化存储路径
+```bash
+python main.py
+# 交互式命令行，支持 Tab 补全、命令历史
+# 输入 /help 查看所有命令
+```
+
+### 桌面端（Electron）
+
+```bash
+npm run electron:dev        # 开发模式
+npm run electron:build      # 打包 (Win/Mac/Linux)
+```
+
+Electron 特性：
+- 自定义应用菜单
+- 后端进程生命周期管理
+- 系统通知 + 文件对话框
+- 窗口控制（最小化/最大化/关闭）
 
 ---
 
@@ -468,131 +342,101 @@ smart_agent/
 ├── main.py                    # 入口 (CLI + Web)
 ├── config.yaml                # 配置文件
 ├── requirements.txt           # Python 依赖
+├── package.json               # Electron 桌面端配置
+├── electron/
+│   ├── main.js                # Electron 主进程
+│   └── preload.js             # 预加载脚本
 ├── src/
-│   ├── core/
-│   │   ├── agent.py           # Agent 核心 (LangGraph ReAct)
-│   │   ├── llm.py             # LLM 引擎 (5 种提供商)
-│   │   ├── orchestrator.py    # 多 Agent 编排器
-│   │   ├── communication.py   # 高级通信模式 (v3.0)
-│   │   ├── task_manager.py    # 任务队列管理
+│   ├── core/                  # 核心引擎
+│   │   ├── agent.py           # ReAct Agent (LangGraph)
+│   │   ├── llm.py             # LLM 引擎
+│   │   ├── orchestrator.py    # 多Agent编排器(8模式)
+│   │   ├── communication.py   # 高级通信模式
+│   │   ├── task_manager.py    # 任务队列
 │   │   └── config.py          # 配置管理
-│   ├── tools/
-│   │   ├── base.py            # 工具注册系统 (@tool 装饰器)
-│   │   ├── builtin_tools.py   # 7 个基础工具
-│   │   └── extended_tools.py  # 10 个扩展工具 (v3.0)
-│   ├── memory/
-│   │   └── memory_manager.py  # 短期 + 长期记忆
-│   ├── rag/
-│   │   └── knowledge_base.py  # RAG 知识库
-│   └── ui/
-│       ├── web_server.py      # FastAPI 主服务器
-│       └── routers/           # API 路由
-│           ├── chat.py        # 对话 SSE
-│           ├── tasks.py       # 任务编排
-│           ├── agents.py      # Agent CRUD
-│           ├── knowledge.py   # 知识库
-│           └── system.py      # 系统管理
+│   ├── tools/                 # 工具生态(17个)
+│   ├── memory/                # 记忆系统
+│   │   ├── memory_manager.py  # 短期+长期记忆
+│   │   └── enhanced_memory.py # VCS+图谱+LLM压缩
+│   ├── skills/                # 技能市场
+│   │   ├── skill_manager.py   # 技能CRUD+内置技能
+│   │   └── github_scanner.py  # GitHub搜索
+│   ├── datasets/              # 数据集管理
+│   ├── rag/                   # RAG知识库
+│   ├── auth/                  # JWT认证
+│   └── ui/                    # 界面层
+│       ├── web_server.py      # FastAPI主服务
+│       ├── cli.py             # CLI交互界面
+│       └── routers/           # 12个路由模块
 ├── frontend/
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── tsconfig.json
 │   └── src/
-│       ├── main.tsx
-│       ├── App.tsx            # 主框架 (7 个 Tab)
-│       ├── index.css          # 暗色主题 CSS 变量
-│       ├── types/index.ts     # TypeScript 类型
-│       ├── api/client.ts      # API 客户端 (SSE + REST)
-│       ├── stores/appStore.ts # Zustand 全局状态
-│       └── components/
-│           ├── Sidebar.tsx         # 导航侧边栏
-│           ├── Dashboard.tsx       # 仪表盘
-│           ├── ChatView.tsx        # 对话界面
-│           ├── TaskManager.tsx     # 任务管理
-│           ├── AgentManager.tsx    # Agent 管理
-│           ├── WorkflowEditor.tsx  # 工作流编辑器 (v3.0)
-│           ├── KnowledgeBase.tsx   # 知识库
-│           └── Settings.tsx        # 系统设置
-├── data/                       # 数据目录
-│   ├── memory.db               # ChromaDB 长期记忆
-│   └── vectordb/               # RAG 向量库
-├── output/                     # Agent 输出文件
-└── logs/                       # 日志文件
+│       ├── App.tsx            # 主框架(9个Tab)
+│       ├── index.css          # 暗色主题
+│       ├── stores/            # Zustand状态管理
+│       ├── api/               # API客户端
+│       ├── types/             # TypeScript类型
+│       └── components/        # 9个核心组件
+└── data/                      # 数据目录
+```
+
+### 添加自定义技能
+
+```python
+# POST /api/skills/create
+{
+  "id": "my_skill",
+  "name": "我的技能",
+  "category": "coding",
+  "prompt_template": "你是一个...",
+  "tags": ["标签1", "标签2"]
+}
 ```
 
 ### 添加自定义工具
 
 ```python
-# 1. 在 src/tools/ 下创建新文件或在 extended_tools.py 中添加
-
 from src.tools.base import tool
 
-@tool(description="你的工具描述", dangerous=False)
-def my_tool(param1: str, param2: int = 10) -> str:
-    """工具实现"""
-    return f"结果: {param1} x {param2}"
+@tool(description="工具描述", dangerous=False)
+def my_tool(param: str) -> str:
+    """实现"""
+    return result
 
-# 2. 注册工具
-from src.tools.base import get_registry
-registry = get_registry()
-registry.register(my_tool)
-
-# 3. 在 config.yaml 的 tools.enabled 列表中添加 "my_tool"
+# 注册到 config.yaml tools.enabled 列表
 ```
 
-### 添加自定义执行模式
-
-```python
-# 在 src/core/orchestrator.py 的 ExecutionMode 枚举中添加
-# 在 src/core/communication.py 中实现具体逻辑
-# 在 Orchestrator 的 execute() 方法中添加分支
-# 在 ModeDetector 的 MODE_KEYWORDS 中添加触发关键词
-```
-
-### 运行测试
+### 后端验证
 
 ```bash
-# 工具系统测试
-python -m src.tools.builtin_tools
-python -m src.tools.extended_tools
-python -m src.tools.base
+python -c "import py_compile; py_compile.compile('src/core/agent.py', doraise=True)"
+```
 
-# 前端类型检查
+### 前端验证
+
+```bash
 cd frontend && npx tsc --noEmit
-
-# 前端构建
-cd frontend && npm run build
 ```
 
 ---
 
-## 📊 变更日志
+## 📊 版本历史
 
 ### v3.0.0 (当前)
 
-- 🆕 **10 个扩展工具**: database_query, http_api_call, run_shell, send_email, read_pdf, read_excel, json_process, time_tool, text_diff, image_analyze
-- 🆕 **4 种高级协作模式**: debate (辩论), peer_review (同行评审), round_table (圆桌会议), hierarchical (层级决策)
-- 🆕 **可视化工作流编辑器**: Canvas 拖拽 DAG 画布 + 4 套内置模板
-- 🆕 **专业 React SPA 前端**: 7 个功能页面 + 暗色主题 + SSE 实时更新
-- 🔧 编排器扩展支持 8 种执行模式
-- 🔧 配置系统新增 debate/peer_review/round_table/hierarchical 参数
-
-### v2.0.0
-
-- LangGraph ReAct Agent 核心
-- 4 种基础执行模式 (SINGLE/PARALLEL/PIPELINE/COLLABORATIVE)
-- 7 个基础工具
-- FastAPI Web 服务器 + JWT 认证
-- MySQL 持久化 + Prometheus 监控
-- ChromaDB 记忆系统 + RAG 知识库
-
----
-
-## 📄 License
-
-MIT License
+- 🆕 **品牌重塑**: SmartAgent → AI Hubs
+- 🆕 **邮箱验证码注册**: QQ SMTP + 验证码校验 + 密码强度
+- 🆕 **技能市场**: 8内置技能 + GitHub探索 + 自定义创建
+- 🆕 **Git式记忆VCS**: commit/checkout/log/diff
+- 🆕 **记忆图谱索引**: 关键词关联 + 主题聚类
+- 🆕 **LLM高无损压缩**: 替代简单截断
+- 🆕 **内置IDE**: 多文件编辑 + 语法高亮
+- 🆕 **对话即管理**: 斜杠命令 + 快捷操作
+- 🆕 **数据集管理**: JSON/CSV导入导出
+- 🆕 **Electron桌面端**: Win/Mac/Linux
+- 🆕 **CLI增强**: /vcs /graph /compress 命令
 
 ---
 
 <p align="center">
-  <strong>SmartAgent v3.0</strong> — 让 AI Agent 协作更智能
+  <strong>AI Hubs v3.0</strong> — 新一代智能 Agent 平台
 </p>
