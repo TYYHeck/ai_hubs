@@ -93,9 +93,11 @@ function showAbout() {
 }
 
 // 使用 spawn 启动 Python 后端（fork 仅适用于 Node.js 模块，不能用于 python）
+// 跨平台：Windows 上命令是 python，linux/mac 上通常是 python3
 function startBackend() {
   const pythonScript = path.join(__dirname, '..', 'main.py');
-  backendProcess = spawn('python3', [pythonScript, '--web', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  backendProcess = spawn(pythonCmd, [pythonScript, '--web', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
     env: { ...process.env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
