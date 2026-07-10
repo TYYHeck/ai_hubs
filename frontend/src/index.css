@@ -1011,3 +1011,358 @@ a:hover {
   border-radius: var(--radius-lg);
   padding: 16px;
 }
+
+/* ── 内置 IDE ── */
+
+.ide-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ide-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ide-toolbar-left,
+.ide-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ide-toolbar-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.ide-toolbar-btn:hover {
+  background: var(--card);
+  color: var(--text);
+}
+
+.ide-toolbar-btn.active {
+  color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.ide-toolbar-title {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.ide-unsaved {
+  font-size: 11px;
+  color: var(--warn);
+  margin-right: 8px;
+}
+
+.ide-close-btn:hover {
+  color: var(--error);
+}
+
+.ide-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ide-explorer {
+  width: 180px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.ide-explorer-header {
+  padding: 10px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.ide-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.ide-file-item:hover {
+  background: var(--card);
+}
+
+.ide-file-item.active {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.ide-file-icon {
+  font-size: 12px;
+  width: 18px;
+  text-align: center;
+}
+
+.ide-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-file-dirty {
+  font-size: 8px;
+  color: var(--warn);
+}
+
+.ide-editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ide-tabs {
+  display: flex;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.ide-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.ide-tab:hover {
+  color: var(--text);
+  background: var(--card);
+}
+
+.ide-tab.active {
+  background: var(--bg);
+  color: var(--text-bright);
+  border-bottom: 2px solid var(--primary);
+}
+
+.ide-tab-dirty {
+  font-size: 8px;
+  color: var(--warn);
+}
+
+.ide-tab-close {
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ide-tab:hover .ide-tab-close {
+  opacity: 1;
+}
+
+.ide-tab-close:hover {
+  background: var(--error);
+  color: #fff;
+}
+
+.ide-editor {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background: var(--bg);
+  position: relative;
+}
+
+.ide-line-numbers {
+  width: 44px;
+  background: var(--sidebar);
+  padding: 12px 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  text-align: right;
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+
+.ide-line-num {
+  padding: 0 8px 0 4px;
+  font-size: 12px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  line-height: 1.6;
+  color: var(--muted);
+  height: 19.2px;
+}
+
+.ide-input-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+}
+
+.ide-highlight {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ide-highlight .ide-keyword { color: #ff7b72; }
+.ide-highlight .ide-string { color: #a5d6ff; }
+.ide-highlight .ide-comment { color: #8b949e; font-style: italic; }
+.ide-highlight .ide-number { color: #79c0ff; }
+.ide-highlight .ide-tag { color: #7ee787; }
+
+.ide-textarea {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--primary);
+  font-size: 12px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  tab-size: 4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.ide-textarea::selection {
+  background: rgba(88, 166, 255, 0.3);
+}
+
+.ide-statusbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 14px;
+  background: var(--sidebar);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* ── 对话增强：斜杠命令 ── */
+
+.chat-commands-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+  animation: slideUp 0.15s;
+}
+
+.chat-command-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-command-item:last-child {
+  border-bottom: none;
+}
+
+.chat-command-item:hover,
+.chat-command-item.active {
+  background: var(--primary-bg);
+}
+
+.chat-command-cmd {
+  font-size: 12px;
+  font-family: 'Consolas', monospace;
+  color: var(--primary);
+  font-weight: 600;
+  min-width: 50px;
+}
+
+.chat-command-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── 对话增强：快速操作 ── */
+
+.chat-quick-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 0;
+}
+
+.chat-quick-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.chat-quick-btn {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chat-quick-btn:hover {
+  background: var(--primary-bg);
+  color: var(--primary);
+  border-color: var(--primary);
+}

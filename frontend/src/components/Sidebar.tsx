@@ -19,6 +19,7 @@ const navItems = [
   { id: 'agents' as const, label: 'Agent 管理', icon: icons.agents },
   { id: 'skills' as const, label: '技能市场', icon: icons.skills },
   { id: 'memory' as const, label: '记忆系统', icon: icons.memory },
+  { id: 'ide' as const, label: '内置 IDE', icon: '📁' },
   { id: 'workflow' as const, label: '工作流编辑', icon: icons.workflow },
   { id: 'knowledge' as const, label: '知识库', icon: icons.knowledge },
   { id: 'settings' as const, label: '系统设置', icon: icons.settings },

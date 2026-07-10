@@ -3,6 +3,18 @@ import { useAppStore, createUserMessage, createAgentMessage } from '../stores/ap
 import { chatStream } from '../api/client';
 import type { ChatMessage } from '../types';
 
+// ── 对话即管理：斜杠命令 ──
+const SLASH_COMMANDS: Record<string, { desc: string; action: (setInput: (v: string) => void) => void }> = {
+  '/agent': { desc: '查看 Agent 列表', action: (setInput) => setInput('列出当前所有可用的 Agent') },
+  '/task': { desc: '创建新任务', action: (setInput) => setInput('创建一个新任务：') },
+  '/clear': { desc: '清空对话', action: () => { /* handled in component */ } },
+  '/recall': { desc: '检索相关记忆', action: (setInput) => setInput('回忆一下之前关于 ') },
+  '/code': { desc: '编写代码', action: (setInput) => setInput('写一段 Python 代码：') },
+  '/skill': { desc: '使用技能', action: (setInput) => setInput('帮我用以下技能完成任务：') },
+  '/search': { desc: '联网搜索', action: (setInput) => setInput('搜索：') },
+  '/config': { desc: '系统配置', action: (setInput) => setInput('当前系统配置是什么？') },
+};
+
 export default function ChatView() {
   const messages = useAppStore((s) => s.messages);
   const isStreaming = useAppStore((s) => s.isStreaming);
@@ -11,11 +23,14 @@ export default function ChatView() {
   const clearMessages = useAppStore((s) => s.clearMessages);
   const setStreaming = useAppStore((s) => s.setStreaming);
   const agents = useAppStore((s) => s.agents);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
 
   const [input, setInput] = useState('');
+  const [showCommands, setShowCommands] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const quickPanelRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -26,7 +41,16 @@ export default function ChatView() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || isStreaming) return;
+
+    // 处理斜杠命令
+    if (text === '/clear') {
+      clearMessages();
+      setInput('');
+      return;
+    }
+
     setInput('');
+    setShowCommands(false);
 
     const userMsg = createUserMessage(text);
     const agentMsg = createAgentMessage();
@@ -71,10 +95,18 @@ export default function ChatView() {
     setStreaming(false);
   };
 
+  const handleInputChange = (value: string) => {
+    setInput(value);
+    setShowCommands(value.startsWith('/') && value.length <= 8);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+    if (e.key === 'Escape') {
+      setShowCommands(false);
     }
   };
 
@@ -151,13 +183,46 @@ export default function ChatView() {
 
       {/* 输入区域 */}
       <div className="chat-input-area">
+        {/* 斜杠命令面板 */}
+        {showCommands && (
+          <div className="chat-commands-panel">
+            {Object.entries(SLASH_COMMANDS).map(([cmd, { desc, action }]) => (
+              <div
+                key={cmd}
+                className={`chat-command-item${input === cmd ? ' active' : ''}`}
+                onClick={() => action(setInput)}
+              >
+                <span className="chat-command-cmd">{cmd}</span>
+                <span className="chat-command-desc">{desc}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 快速操作面板 */}
+        {!showCommands && messages.length === 0 && (
+          <div className="chat-quick-panel" ref={quickPanelRef}>
+            <span className="chat-quick-label">快捷操作：</span>
+            {[
+              { icon: '🤖', label: 'Agent', onClick: () => setActiveTab('agents') },
+              { icon: '📋', label: '任务', onClick: () => setActiveTab('tasks') },
+              { icon: '🎯', label: '技能', onClick: () => setActiveTab('skills') },
+              { icon: '📁', label: 'IDE', onClick: () => setActiveTab('ide') },
+            ].map((btn) => (
+              <button key={btn.label} className="chat-quick-btn" onClick={btn.onClick}>
+                {btn.icon} {btn.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="chat-input-row">
           <textarea
             ref={inputRef}
             className="chat-input"
-            placeholder="输入你的任务，Shift+Enter 换行，Enter 发送..."
+            placeholder={showCommands ? '输入命令或继续输入...' : '输入你的任务，Shift+Enter 换行，Enter 发送...（输入 / 查看命令）'}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
             disabled={isStreaming}

@@ -9,6 +9,7 @@ import Settings from './components/Settings';
 import WorkflowEditor from './components/WorkflowEditor';
 import SkillMarket from './components/SkillMarket';
 import MemoryViewer from './components/MemoryViewer';
+import CodeEditor from './components/CodeEditor';
 import AuthPage from './components/AuthPage';
 import { useAppStore } from './stores/appStore';
 import { configApi, systemApi, tasksApi, agentsApi, knowledgeApi } from './api/client';
@@ -101,6 +102,7 @@ export default function App() {
       case 'workflow': return <WorkflowEditor />;
       case 'skills': return <SkillMarket />;
       case 'memory': return <MemoryViewer />;
+      case 'ide': return <CodeEditor />;
       case 'settings': return <Settings />;
       default: return <Dashboard />;
     }
