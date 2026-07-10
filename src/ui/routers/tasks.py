@@ -61,6 +61,12 @@ async def api_publish_task(req: PublishTaskRequest, current_user = Depends(get_c
         think_depth=req.think_depth,
         think_visibility=req.think_visibility,
     )
+    # 实时广播给所有在线客户端
+    try:
+        from ..web_server import broadcast_event
+        broadcast_event("task_created", {"task_id": task_id, "title": req.title})
+    except Exception:
+        pass
     return {"ok": True, "task_id": task_id}
 
 
@@ -80,6 +86,8 @@ async def api_orchestrate_task(req: OrchestrateTaskRequest, current_user = Depen
         title=req.title,
         mode=req.mode,
         agent_names=req.agent_names,
+        think_depth=req.think_depth,
+        think_visibility=req.think_visibility,
     )
     return {"ok": True, "result": result.to_dict()}
 
@@ -176,6 +184,8 @@ async def api_orchestrate_task_stream(
                     mode=detected_mode,
                     agent_names=req.agent_names,
                     on_progress=_on_progress,
+                    think_depth=req.think_depth,
+                    think_visibility=req.think_visibility,
                 )
                 asyncio.run_coroutine_threadsafe(
                     progress_queue.put({"stage": "done", "result": result.to_dict()}), loop

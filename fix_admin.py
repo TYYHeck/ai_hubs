@@ -19,7 +19,7 @@ os.environ["DATABASE_URL"] = (
 
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASSWORD", "admin123")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@smartagent.local")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@aihubs.local")
 
 
 async def main():

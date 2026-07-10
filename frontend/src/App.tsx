@@ -10,6 +10,8 @@ import WorkflowEditor from './components/WorkflowEditor';
 import SkillMarket from './components/SkillMarket';
 import MemoryViewer from './components/MemoryViewer';
 import CodeEditor from './components/CodeEditor';
+import AdminPanel from './components/AdminPanel';
+import DatasetManager from './components/DatasetManager';
 import AuthPage from './components/AuthPage';
 import { useAppStore } from './stores/appStore';
 import { configApi, systemApi, tasksApi, agentsApi, knowledgeApi } from './api/client';
@@ -92,6 +94,42 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── WebSocket 实时同步（多端推送）──
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let retry = 0;
+    let timer: number | undefined;
+
+    const connect = () => {
+      try {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${proto}://${location.host}/ws`);
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            const evName = msg.event as string;
+            if (['task_created', 'agent_created', 'agent_deleted'].includes(evName)) {
+              loadAll();
+            }
+          } catch { /* ignore */ }
+        };
+        ws.onclose = () => {
+          // 断线自动重连（指数退避，最多 10 秒）
+          retry = Math.min(retry + 1, 6);
+          timer = window.setTimeout(connect, retry * 1500);
+        };
+        ws.onerror = () => { ws?.close(); };
+      } catch { /* ignore */ }
+    };
+    connect();
+    return () => {
+      if (timer) clearTimeout(timer);
+      ws?.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   const renderTab = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
@@ -103,6 +141,8 @@ export default function App() {
       case 'skills': return <SkillMarket />;
       case 'memory': return <MemoryViewer />;
       case 'ide': return <CodeEditor />;
+      case 'datasets': return <DatasetManager />;
+      case 'admin': return <AdminPanel />;
       case 'settings': return <Settings />;
       default: return <Dashboard />;
     }

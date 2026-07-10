@@ -54,8 +54,8 @@ CHAT_PAGE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2358a6ff'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Arial,sans-serif' font-size='28' font-weight='bold' fill='white'%3ESA%3C/text%3E%3C/svg%3E">
-<title>AI Hubs - 智能AI助手</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2358a6ff'/%3E%3Cstop offset='100%25' stop-color='%23a371f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Arial,sans-serif' font-size='24' font-weight='bold' fill='white'%3EAH%3C/text%3E%3C/svg%3E">
+<title>AI Hubs AI集群 · 新一代智能 Agent 平台</title>
 <style>
 :root {
   --bg: #0d1117; --sidebar: #161b22; --card: #21262d;
@@ -480,7 +480,7 @@ body { font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:var
 <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="菜单">☰</button>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 <div class="sidebar">
-  <div class="sidebar-header"><h1>AI Hubs</h1><p>智能 AI 平台</p></div>
+  <div class="sidebar-header"><h1>AI Hubs</h1><p>AI集群 · 智能平台</p></div>
   <div class="sidebar-section model-selector">
     <label class="title">模型</label>
     <div class="combo-wrapper" id="modelComboWrapper">
@@ -2723,6 +2723,79 @@ from src.ui.routers import all_routers
 for r in all_routers:
     app.include_router(r)
 
+# --- WebSocket 实时同步（多端推送） ---
+from fastapi import WebSocket as _FastAPIWebSocket
+
+
+class ConnectionManager:
+    """管理所有 WebSocket 客户端连接，提供广播能力"""
+
+    def __init__(self) -> None:
+        self._active: set[_FastAPIWebSocket] = set()
+
+    async def connect(self, ws: _FastAPIWebSocket) -> None:
+        await ws.accept()
+        self._active.add(ws)
+
+    def disconnect(self, ws: _FastAPIWebSocket) -> None:
+        self._active.discard(ws)
+
+    async def broadcast(self, message: dict) -> None:
+        """向所有连接的客户端广播一条消息"""
+        if not self._active:
+            return
+        import json as _json
+        payload = _json.dumps(message, ensure_ascii=False)
+        dead = set()
+        for ws in list(self._active):
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                dead.add(ws)
+        for ws in dead:
+            self._active.discard(ws)
+
+
+ws_manager = ConnectionManager()
+
+
+def broadcast_event(event: str, data: dict) -> None:
+    """跨端实时广播（供各路由在状态变更时调用）"""
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.run_coroutine_threadsafe(
+                ws_manager.broadcast({"event": event, "data": data, "ts": _now_iso()}),
+                loop,
+            )
+    except Exception:
+        pass
+
+
+def _now_iso() -> str:
+    from datetime import datetime
+    return datetime.now().isoformat()
+
+
+@app.websocket("/ws")
+async def ws_endpoint(websocket: _FastAPIWebSocket):
+    """WebSocket 实时通道：连接后接收任务/Agent/系统的实时变更推送"""
+    await ws_manager.connect(websocket)
+    try:
+        # 发送欢迎消息，确认连接建立
+        await websocket.send_text(json.dumps(
+            {"event": "connected", "data": {"server": "AI Hubs", "version": "3.0"}, "ts": _now_iso()},
+            ensure_ascii=False,
+        ))
+        while True:
+            # 仅接收客户端心跳/关闭，不主动解析业务消息
+            await websocket.receive_text()
+    except Exception:
+        pass
+    finally:
+        ws_manager.disconnect(websocket)
+
 # --- 速率限制、监控中间件 (延迟加载，避免循环导入) ---
 _rate_limit_middleware = None
 _prometheus_middleware = None
@@ -3071,6 +3144,14 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, current_user = Depends(get_current_user)):
     agent = get_agent()
+
+    # ── 记录用户偏好 ──
+    try:
+        from src.memory.preference_memory import get_preference_memory
+        prefs = get_preference_memory()
+        prefs.record_message()
+    except Exception:
+        pass
 
     async def generate():
         async for event in agent.stream_events(req.message):
@@ -4159,6 +4240,56 @@ async def api_config_full(current_user = Depends(get_current_user)):
     else:
         cfg = {}
     return {"ok": True, "config": cfg}
+
+
+# ── 用户偏好记忆 API ──
+
+@app.get("/api/preferences")
+async def api_get_preferences(current_user = Depends(get_current_user)):
+    """获取用户使用偏好和推荐"""
+    try:
+        from src.memory.preference_memory import get_preference_memory
+        prefs = get_preference_memory()
+        return {
+            "ok": True,
+            "preferences": prefs.to_dict(),
+            "recommendations": {
+                "model": prefs.get_recommended_model()[0],
+                "provider": prefs.get_recommended_model()[1],
+                "skills": prefs.get_recommended_skills(),
+                "agent_category": prefs.get_recommended_agent_category(),
+            },
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/preferences/record")
+async def api_record_preference(req: dict, current_user = Depends(get_current_user)):
+    """记录用户偏好操作"""
+    try:
+        from src.memory.preference_memory import get_preference_memory
+        prefs = get_preference_memory()
+
+        action = req.get("action", "")
+        if action == "model_usage":
+            prefs.record_model_usage(req.get("model", ""), req.get("provider", ""))
+        elif action == "skill_usage":
+            prefs.record_skill_usage(req.get("skill_id", ""))
+        elif action == "agent_creation":
+            prefs.record_agent_creation(req.get("category", "general"))
+        elif action == "thinking_preference":
+            prefs.record_thinking_preference(req.get("depth", "medium"), req.get("visible", True))
+        elif action == "ui_preference":
+            prefs.record_ui_preference(req.get("theme"), req.get("font_size"))
+        elif action == "session":
+            prefs.record_session()
+        elif action == "task":
+            prefs.record_task()
+
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 class UpdateConfigRequest(BaseModel):

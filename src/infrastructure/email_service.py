@@ -6,6 +6,7 @@
 import smtplib
 import random
 import logging
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
@@ -14,12 +15,12 @@ import threading
 
 logger = logging.getLogger("ai_hubs.email")
 
-# 邮件配置
-SMTP_HOST = "smtp.qq.com"
-SMTP_PORT = 587
-SMTP_USER = "3526145827@qq.com"
-SMTP_PASS = "jnaoofgohquidbed"
-SENDER_NAME = "AI Hubs"
+# 邮件配置 —— 敏感信息从环境变量读取
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.qq.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "3526145827@qq.com")
+SMTP_PASS = os.getenv("SMTP_PASS", "")  # 生产环境务必设置环境变量
+SENDER_NAME = "AI Hubs AI集群"
 
 # 验证码存储（内存 + 过期时间）
 _verification_codes: dict[str, dict] = {}

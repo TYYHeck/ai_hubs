@@ -30,6 +30,9 @@ class CreateAgentRequest(BaseModel):
     enable_planning: bool = Field(False, description="启用计划模式")
     enable_rag: bool = Field(True, description="启用 RAG 知识库")
     enable_reflection: bool = Field(False, description="启用反思模式")
+    tags: list[str] = Field(default_factory=list, description="Agent 标签（如: 编程、写作、数据分析）")
+    category: str = Field("general", description="数据库分类（如: general/coding/research/writing/data）")
+    setup_mode: str = Field("detailed", description="配置模式: quick(快速) | detailed(详细)")
 
 
 class UpdateAgentRequest(BaseModel):
@@ -41,6 +44,9 @@ class UpdateAgentRequest(BaseModel):
     enable_planning: bool | None = Field(None, description="更新计划模式开关")
     enable_rag: bool | None = Field(None, description="更新 RAG 开关")
     enable_reflection: bool | None = Field(None, description="更新反思模式开关")
+    tags: list[str] | None = Field(None, description="更新标签")
+    category: str | None = Field(None, description="更新数据库分类")
+    setup_mode: str | None = Field(None, description="更新配置模式")
 
 
 async def _persist_agent_to_db(
@@ -48,6 +54,9 @@ async def _persist_agent_to_db(
     system_prompt: str = "", max_iterations: int = 15,
     enable_planning: bool = False, enable_rag: bool = True,
     enable_reflection: bool = False,
+    tags: list[str] | None = None,
+    category: str = "general",
+    setup_mode: str = "detailed",
 ):
     """将 Agent 配置写入 MySQL agent_configs 表"""
     import logging
@@ -84,6 +93,9 @@ async def _persist_agent_to_db(
                 existing.enable_planning = enable_planning
                 existing.enable_rag = enable_rag
                 existing.enable_reflection = enable_reflection
+                existing.tags = tags or []
+                existing.category = category or "general"
+                existing.setup_mode = setup_mode or "detailed"
             else:
                 cfg = AgentConfigModel(
                     name=name, model=model, provider=provider,
@@ -91,6 +103,9 @@ async def _persist_agent_to_db(
                     system_prompt=sp, max_iterations=max_iterations,
                     enable_planning=enable_planning, enable_rag=enable_rag,
                     enable_reflection=enable_reflection,
+                    tags=tags or [],
+                    category=category or "general",
+                    setup_mode=setup_mode or "detailed",
                 )
                 session.add(cfg)
             await session.commit()
@@ -220,7 +235,17 @@ async def api_create_agent(req: CreateAgentRequest, current_user = Depends(get_c
         system_prompt=sp, max_iterations=req.max_iterations,
         enable_planning=req.enable_planning, enable_rag=req.enable_rag,
         enable_reflection=req.enable_reflection,
+        tags=req.tags or [],
+        category=req.category or "general",
+        setup_mode=req.setup_mode or "detailed",
     )
+
+    # 实时广播给所有在线客户端
+    try:
+        from ..web_server import broadcast_event
+        broadcast_event("agent_created", {"agent": proxy.to_dict()})
+    except Exception:
+        pass
 
     return {"ok": True, "agent": proxy.to_dict()}
 
@@ -240,6 +265,12 @@ async def api_update_agent(
         proxy.skills = req.skills
     if req.description is not None:
         proxy.description = req.description
+    if req.tags is not None:
+        proxy.tags = req.tags
+    if req.category is not None:
+        proxy.category = req.category
+    if req.setup_mode is not None:
+        proxy.setup_mode = req.setup_mode
 
     # ── 更新 Agent runtime 属性 ──
     agent_obj = proxy.agent
@@ -273,6 +304,9 @@ async def api_update_agent(
         enable_planning=agent_obj.enable_planning,
         enable_rag=agent_obj.enable_rag,
         enable_reflection=agent_obj.enable_reflection,
+        tags=getattr(proxy, 'tags', []) or [],
+        category=getattr(proxy, 'category', 'general') or 'general',
+        setup_mode=getattr(proxy, 'setup_mode', 'detailed') or 'detailed',
     )
 
     return {"ok": True, "agent": proxy.to_dict()}
@@ -285,6 +319,14 @@ async def api_delete_agent(name: str, current_user = Depends(get_current_user)):
         return JSONResponse({"ok": False, "error": "Agent 未找到"}, status_code=404)
 
     await _do_delete_agent(name, tm)
+
+    # 实时广播给所有在线客户端
+    try:
+        from ..web_server import broadcast_event
+        broadcast_event("agent_deleted", {"name": name})
+    except Exception:
+        pass
+
     return {"ok": True}
 
 

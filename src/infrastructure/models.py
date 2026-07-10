@@ -155,6 +155,9 @@ class AgentConfigModel(Base):
     enable_planning = Column(Boolean, default=False)
     enable_rag = Column(Boolean, default=True)
     enable_reflection = Column(Boolean, default=False)
+    tags = Column(JSON, default=list)                    # Agent 标签
+    category = Column(String(64), default="general")     # 数据库分类
+    setup_mode = Column(String(16), default="detailed")  # quick | detailed
     status = Column(String(16), default="idle")
     current_task_id = Column(String(32), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -172,6 +175,9 @@ class AgentConfigModel(Base):
             "enable_planning": self.enable_planning,
             "enable_rag": self.enable_rag,
             "enable_reflection": self.enable_reflection,
+            "tags": self.tags or [],
+            "category": self.category or "general",
+            "setup_mode": self.setup_mode or "detailed",
             "status": self.status,
             "current_task_id": self.current_task_id,
         }

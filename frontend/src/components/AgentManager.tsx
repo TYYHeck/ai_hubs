@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
-import { agentsApi } from '../api/client';
+import { agentsApi, skillsApi } from '../api/client';
 import type { AgentInfo } from '../types';
 
 const ALL_PROVIDERS = ['openai', 'deepseek', 'zhipu', 'qwen', 'ollama', 'custom'] as const;
@@ -9,7 +9,8 @@ interface CreateForm {
   name: string;
   provider: string;
   model: string;
-  skills: string;
+  skills: string[];
+  useAllSkills: boolean;
   description: string;
   system_prompt: string;
   max_iterations: number;
@@ -22,7 +23,8 @@ const emptyForm: CreateForm = {
   name: '',
   provider: 'deepseek',
   model: 'deepseek-chat',
-  skills: '',
+  skills: [],
+  useAllSkills: false,
   description: '',
   system_prompt: '',
   max_iterations: 15,
@@ -43,6 +45,14 @@ export default function AgentManager() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [installedSkills, setInstalledSkills] = useState<{ id: string; name: string }[]>([]);
+
+  // 加载已安装技能列表（用于多选）
+  useEffect(() => {
+    skillsApi.list('', true).then((res) => {
+      if (res.ok) setInstalledSkills(res.skills.map((s) => ({ id: s.id, name: s.name })));
+    }).catch(() => { /* ignore */ });
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -73,11 +83,13 @@ export default function AgentManager() {
       const res = await agentsApi.getConfig(name);
       if (res.ok && res.config) {
         const c = res.config as Record<string, unknown>;
+        const sk = Array.isArray(c.skills) ? (c.skills as string[]) : [];
         setForm({
           name,
           provider: (c.provider as string) || currentProvider,
           model: (c.model as string) || currentModel,
-          skills: Array.isArray(c.skills) ? (c.skills as string[]).join(', ') : '',
+          skills: sk,
+          useAllSkills: false,
           description: (c.description as string) || '',
           system_prompt: (c.system_prompt as string) || '',
           max_iterations: (c.max_iterations as number) || 15,
@@ -105,9 +117,13 @@ export default function AgentManager() {
 
     setSaving(true);
     try {
+      // 技能：若选择「使用全部技能」，则发送所有已安装技能 ID
+      const finalSkills = form.useAllSkills
+        ? installedSkills.map((s) => s.id)
+        : form.skills;
       if (editTarget) {
         await agentsApi.update(editTarget, {
-          skills: form.skills.split(/[,，、]+/).map((s) => s.trim()).filter(Boolean),
+          skills: finalSkills,
           description: form.description,
           system_prompt: form.system_prompt,
           max_iterations: form.max_iterations,
@@ -121,7 +137,7 @@ export default function AgentManager() {
           name: form.name.trim(),
           provider: form.provider,
           model: form.model,
-          skills: form.skills.split(/[,，、]+/).map((s) => s.trim()).filter(Boolean),
+          skills: finalSkills,
           description: form.description,
           system_prompt: form.system_prompt,
           max_iterations: form.max_iterations,
@@ -235,14 +251,41 @@ export default function AgentManager() {
                 />
               </div>
 
-              <div className="form-group">
-                <label>技能标签（逗号分隔）</label>
-                <input
-                  className="form-input"
-                  value={form.skills}
-                  onChange={(e) => setForm({ ...form, skills: e.target.value })}
-                  placeholder="Python, 代码审查, 数据分析"
-                />
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label>技能配置</label>
+                <div className="skill-config">
+                  <label className="use-all-toggle">
+                    <input
+                      type="checkbox"
+                      checked={form.useAllSkills}
+                      onChange={(e) => setForm({ ...form, useAllSkills: e.target.checked })}
+                    />
+                    使用全部已安装技能（{installedSkills.length}）
+                  </label>
+                  {!form.useAllSkills && (
+                    <div className="skill-check-list">
+                      {installedSkills.length === 0 && (
+                        <span className="form-help">暂无已安装技能，可前往「技能市场」安装</span>
+                      )}
+                      {installedSkills.map((s) => (
+                        <label key={s.id} className="skill-check">
+                          <input
+                            type="checkbox"
+                            checked={form.skills.includes(s.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setForm({ ...form, skills: [...form.skills, s.id] });
+                              } else {
+                                setForm({ ...form, skills: form.skills.filter((x) => x !== s.id) });
+                              }
+                            }}
+                          />
+                          {s.name}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -388,6 +431,12 @@ export default function AgentManager() {
           background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px;
           max-height: 120px; overflow-y: auto; color: var(--text); white-space: pre-wrap; word-break: break-word; }
         .prompt-preview:empty::after { content: '（使用默认提示词）'; color: var(--muted); font-style: italic; }
+
+        .skill-config { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:12px; }
+        .use-all-toggle { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer; margin-bottom:8px; }
+        .skill-check-list { display:flex; flex-wrap:wrap; gap:8px; max-height:160px; overflow:auto; }
+        .skill-check { display:flex; align-items:center; gap:6px; font-size:12px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:5px 10px; cursor:pointer; color:var(--text); }
+        .skill-check input { accent-color:var(--primary); }
       `}</style>
     </div>
   );

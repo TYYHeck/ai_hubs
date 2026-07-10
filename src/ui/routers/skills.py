@@ -17,6 +17,15 @@ class CreateSkillRequest(BaseModel):
     tags: list[str] = []
 
 
+class UpdateSkillRequest(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=64)
+    description: str | None = None
+    category: str | None = None
+    prompt_template: str | None = None
+    tags: list[str] | None = None
+    version: str | None = None
+
+
 class ImportSkillRequest(BaseModel):
     data: dict = Field(..., description="从 GitHub 导入的技能数据")
 
@@ -128,6 +137,36 @@ async def import_from_github(req: ImportSkillRequest):
     if skill:
         return {"ok": True, "skill": skill.to_dict()}
     return {"ok": False, "error": "导入失败：数据格式不正确"}
+
+
+@router.put("/{skill_id}")
+@router.patch("/{skill_id}")
+async def update_skill(skill_id: str, req: UpdateSkillRequest):
+    """更新技能（仅用户/GitHub 来源可更新）"""
+    from src.skills.skill_manager import get_skill_manager
+
+    mgr = get_skill_manager()
+    updates = {}
+    if req.name is not None:
+        updates["name"] = req.name
+    if req.description is not None:
+        updates["description"] = req.description
+    if req.category is not None:
+        updates["category"] = req.category
+    if req.prompt_template is not None:
+        updates["prompt_template"] = req.prompt_template
+    if req.tags is not None:
+        updates["tags"] = req.tags
+    if req.version is not None:
+        updates["version"] = req.version
+
+    if not updates:
+        return {"ok": False, "error": "没有提供要更新的字段"}
+
+    skill = mgr.update(skill_id, updates)
+    if skill is None:
+        return {"ok": False, "error": "技能不存在或不可修改（内置技能不可更新）"}
+    return {"ok": True, "skill": skill.to_dict()}
 
 
 @router.get("/categories/list")

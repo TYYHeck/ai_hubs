@@ -42,6 +42,7 @@ class LLMConfig:
     temperature: float = 0.7
     max_tokens: int = 4096
     timeout: int = 120
+    think_depth: int = 0  # 思考深度 1-5，>1 时增强推理强度（0 表示未指定，回退为 1）
 
     # 环境变量名映射
     ENV_KEY_MAP: dict[str, str] = field(default_factory=lambda: {
@@ -237,6 +238,14 @@ class OpenAIClient(BaseLLM):
 
     # ======== 消息格式转换 ========
 
+    def _effective_max_tokens(self) -> int:
+        """思考深度越高，允许更长的输出/推理（上限保护）"""
+        depth = max(1, self.config.think_depth or 1)
+        if depth <= 1:
+            return self.config.max_tokens
+        factor = 1 + 0.4 * (depth - 1)
+        return min(8000, int(self.config.max_tokens * factor))
+
     def _build_messages(self, messages: list[Message]) -> list[dict]:
         """将内部 Message 列表转为 OpenAI API 格式"""
         api_msgs: list[dict[str, Any]] = []
@@ -264,6 +273,21 @@ class OpenAIClient(BaseLLM):
                 d["tool_call_id"] = msg.tool_call_id
 
             api_msgs.append(d)
+
+        # ── 思考深度注入：将深度指令融入首条 system 消息 ──
+        depth = max(1, self.config.think_depth or 1)
+        if depth > 1:
+            instr = (
+                f"\n[思考深度要求: {depth}/5] 这是一个需要深度思考的任务。"
+                "请充分调动推理能力：先拆解问题、多角度分析、评估多种方案，"
+                "再给出严谨且完整的回答。不要急于下结论，确保推理链清晰可信。"
+            )
+            for m in api_msgs:
+                if m.get("role") == "system":
+                    m["content"] = (str(m["content"]) + instr)
+                    break
+            else:
+                api_msgs.insert(0, {"role": "system", "content": instr.strip()})
         return api_msgs
 
     # ======== 同步调用 ========
@@ -279,7 +303,7 @@ class OpenAIClient(BaseLLM):
             "model": self.config.model,
             "messages": api_msgs,
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": self._effective_max_tokens(),
         }
         if tools:
             kwargs["tools"] = tools
@@ -300,7 +324,7 @@ class OpenAIClient(BaseLLM):
             "model": self.config.model,
             "messages": api_msgs,
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": self._effective_max_tokens(),
             "stream": True,
         }
         if tools:
@@ -325,7 +349,7 @@ class OpenAIClient(BaseLLM):
             "model": self.config.model,
             "messages": api_msgs,
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": self._effective_max_tokens(),
         }
         if tools:
             kwargs["tools"] = tools

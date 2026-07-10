@@ -329,6 +329,8 @@ class Orchestrator:
 
     def __init__(self, task_manager: TaskManager):
         self.tm = task_manager
+        self._think_depth: int = 1
+        self._think_visibility: str = "visible"
 
     # ======== 入口 ========
 
@@ -341,6 +343,8 @@ class Orchestrator:
         on_progress: Callable[[str, dict], None] | None = None,
         use_llm_allocation: bool = False,
         llm=None,
+        think_depth: int = 1,
+        think_visibility: str = "visible",
     ) -> OrchestrationResult:
         """
         执行任务
@@ -365,6 +369,8 @@ class Orchestrator:
         # 自动模式检测
         mode_reason = ""
         llm_workflow = None
+        self._think_depth = max(1, int(think_depth or 1))
+        self._think_visibility = think_visibility or "visible"
         if mode == ExecutionMode.AUTO:
             if use_llm_allocation and llm is not None:
                 # LLM 驱动的工作流分配
@@ -517,11 +523,15 @@ class Orchestrator:
 
     # ======== 辅助：注入 event_logger 到 Agent ────
 
-    @staticmethod
-    def _run_agent_with_logging(agent_proxy: AgentProxy, task: Task, prompt: str,
+    def _run_agent_with_logging(self, agent_proxy: AgentProxy, task: Task, prompt: str,
                                  on_progress: Callable | None = None) -> str:
         """运行 Agent 并自动捕获事件到 task.event_log，发送 agent_think 标记"""
         original_on_event = getattr(agent_proxy.agent, 'on_event', None)
+        agent_obj = agent_proxy.agent
+
+        # 将思考参数下传给 Agent
+        agent_obj.think_depth = self._think_depth
+        agent_obj.think_visibility = self._think_visibility
 
         def event_logger(event, data):
             evt_name = event.value if hasattr(event, 'value') else str(event)
@@ -540,23 +550,26 @@ class Orchestrator:
                 except Exception as e:
                     logger.warning(f"编排事件回调失败: {e}")
 
+        # 根据思考可见性决定是否推送"思考中"标记
+        show_think = self._think_visibility != "hidden"
+
         try:
             # 发送 agent_think 开始事件
-            if on_progress:
+            if on_progress and show_think:
                 on_progress("agent_think_start", {"agent": agent_proxy.name})
-            
-            agent_proxy.agent.on_event = event_logger
-            output = agent_proxy.agent.run(prompt)
-            agent_proxy.agent.on_event = original_on_event
-            
+
+            agent_obj.on_event = event_logger
+            output = agent_obj.run(prompt)
+            agent_obj.on_event = original_on_event
+
             # 发送 agent_think 结束事件
-            if on_progress:
+            if on_progress and show_think:
                 on_progress("agent_think_end", {"agent": agent_proxy.name})
-            
+
             return output or ""
         except Exception:
             logger.warning(f"Agent.run 执行异常，恢复 on_event: {agent_proxy.name}", exc_info=True)
-            agent_proxy.agent.on_event = original_on_event
+            agent_obj.on_event = original_on_event
             raise
 
     @staticmethod
@@ -1277,6 +1290,8 @@ def patch_task_manager(tm: TaskManager) -> TaskManager:
         mode: str = "auto",
         agent_names: list[str] | None = None,
         on_progress: Callable | None = None,
+        think_depth: int = 1,
+        think_visibility: str = "visible",
     ) -> OrchestrationResult:
         """
         编排执行任务
@@ -1287,6 +1302,8 @@ def patch_task_manager(tm: TaskManager) -> TaskManager:
             mode: "single" | "parallel" | "pipeline" | "collaborative" | "debate" | "peer_review" | "round_table" | "hierarchical" | "auto"
             agent_names: 指定 Agent 列表
             on_progress: 进度回调
+            think_depth: 思考深度 1-5
+            think_visibility: 思考可见性 visible/summary/hidden
 
         Returns:
             OrchestrationResult
@@ -1298,6 +1315,8 @@ def patch_task_manager(tm: TaskManager) -> TaskManager:
             mode=exec_mode,
             agent_names=agent_names,
             on_progress=on_progress,
+            think_depth=think_depth,
+            think_visibility=think_visibility,
         )
 
     def detect_best_mode(self, description: str) -> dict:

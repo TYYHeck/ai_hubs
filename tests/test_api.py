@@ -22,7 +22,7 @@ def client():
     """创建测试客户端（模拟 Agent + 数据库）"""
     # Mock Agent
     mock_agent = MagicMock()
-    mock_agent.name = "SmartAgent"
+    mock_agent.name = "AI Hubs"
     mock_agent.llm = MagicMock()
     mock_agent.llm.config = MagicMock()
     mock_agent.llm.config.model = "deepseek-chat"
@@ -81,7 +81,7 @@ class TestPublicEndpoints:
     def test_index_page(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
-        assert "SmartAgent" in resp.text or "html" in resp.text.lower()
+        assert "AI Hubs" in resp.text or "html" in resp.text.lower()
 
     def test_metrics_endpoint(self, client):
         resp = client.get("/metrics")

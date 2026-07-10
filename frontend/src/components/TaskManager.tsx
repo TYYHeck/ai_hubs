@@ -20,9 +20,16 @@ export default function TaskManager() {
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskMode, setNewTaskMode] = useState('auto');
+  const [newTaskThinkDepth, setNewTaskThinkDepth] = useState(1);
+  const [newTaskThinkVis, setNewTaskThinkVis] = useState('visible');
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const eventsEndRef = useRef<HTMLDivElement>(null);
+
+  const agentTag = (evt: Record<string, unknown>): string => {
+    const name = (evt.agent_name as string) || (evt.agent as string) || 'System';
+    return `[${name}]`;
+  };
 
   useEffect(() => { eventsEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [executionLog]);
 
@@ -51,19 +58,23 @@ export default function TaskManager() {
       (evt) => {
         const stage = evt.stage as string;
         if (stage === 'start') {
-          setExecutionLog((p) => [...p, `🚀 启动编排 · 模式: ${evt.mode || 'auto'} · ${evt.mode_reason || ''}`]);
+          setExecutionLog((p) => [...p, `🚀 ${agentTag(evt)} 启动编排 · 模式: ${evt.mode || 'auto'} · ${evt.mode_reason || ''}`]);
         } else if (stage === 'mode_detected') {
-          setExecutionLog((p) => [...p, `🔍 模式检测: ${evt.mode} — ${evt.reason || ''}`]);
+          setExecutionLog((p) => [...p, `🔍 ${agentTag(evt)} 模式检测: ${evt.mode} — ${evt.reason || ''}`]);
         } else if (stage === 'workflow_alloc') {
-          setExecutionLog((p) => [...p, `📋 LLM 工作流分配: ${evt.mode} · Agent: ${(evt.agents as string[])?.join(', ') || '自动'}`]);
+          setExecutionLog((p) => [...p, `📋 ${agentTag(evt)} LLM 工作流分配: ${evt.mode} · Agent: ${(evt.agents as string[])?.join(', ') || '自动'}`]);
         } else if (stage === 'parallel_start') {
-          setExecutionLog((p) => [...p, `⚡ 并行执行开始 · ${evt.agent_count} 个 Agent`]);
+          setExecutionLog((p) => [...p, `⚡ ${agentTag(evt)} 并行执行开始 · ${evt.agent_count} 个 Agent`]);
         } else if (stage === 'agent_start') {
-          setExecutionLog((p) => [...p, `🤖 ${evt.agent} 开始工作 (${evt.index}/${evt.total})`]);
+          setExecutionLog((p) => [...p, `🤖 ${agentTag(evt)} 开始工作 (${evt.index}/${evt.total})`]);
         } else if (stage === 'agent_done') {
-          setExecutionLog((p) => [...p, `✅ ${evt.agent} 完成 (${evt.index}/${evt.total})`]);
+          setExecutionLog((p) => [...p, `✅ ${agentTag(evt)} 完成 (${evt.index}/${evt.total})`]);
+        } else if (stage === 'agent_think_start') {
+          setExecutionLog((p) => [...p, `💭 ${agentTag(evt)} 正在思考...`]);
+        } else if (stage === 'agent_think_end') {
+          setExecutionLog((p) => [...p, `💡 ${agentTag(evt)} 思考完成`]);
         } else if (stage === 'agent_error') {
-          setExecutionLog((p) => [...p, `❌ ${evt.agent} 出错: ${evt.error}`]);
+          setExecutionLog((p) => [...p, `❌ ${agentTag(evt)} 出错: ${evt.error}`]);
         } else if (stage === 'pipeline_start') {
           setExecutionLog((p) => [...p, `🔗 流水线启动 · ${evt.stages} 个阶段`]);
         } else if (stage === 'pipeline_stage') {
@@ -92,7 +103,9 @@ export default function TaskManager() {
       (err) => {
         setExecutionLog((p) => [...p, `❌ 请求失败: ${err.message}`]);
         setIsExecuting(false);
-      }
+      },
+      newTaskThinkDepth,
+      newTaskThinkVis,
     );
 
     setNewTaskDesc('');
@@ -231,6 +244,26 @@ export default function TaskManager() {
                 <option value="collaborative">协作讨论</option>
               </select>
               <div className="form-help">{orchestrationModes.find((m) => m.id === newTaskMode)?.desc}</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+              <div className="form-group">
+                <label>思考深度（1-5）</label>
+                <select className="form-select" value={newTaskThinkDepth} onChange={(e) => setNewTaskThinkDepth(Number(e.target.value))}>
+                  {[1, 2, 3, 4, 5].map((d) => (
+                    <option key={d} value={d}>{d} {d >= 4 ? '（深度推理）' : ''}</option>
+                  ))}
+                </select>
+                <div className="form-help">越高，推理越充分、输出越完整</div>
+              </div>
+              <div className="form-group">
+                <label>思考可见性</label>
+                <select className="form-select" value={newTaskThinkVis} onChange={(e) => setNewTaskThinkVis(e.target.value)}>
+                  <option value="visible">完整可见</option>
+                  <option value="summary">仅摘要</option>
+                  <option value="hidden">隐藏思考过程</option>
+                </select>
+                <div className="form-help">控制执行中思考过程是否展示</div>
+              </div>
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={() => setShowNewTask(false)}>取消</button>

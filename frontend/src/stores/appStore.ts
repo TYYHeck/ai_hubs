@@ -14,7 +14,19 @@ function loadSettings(): UserSettings {
     const saved = localStorage.getItem('ai_hubs_settings');
     if (saved) return JSON.parse(saved);
   } catch { /* ignore */ }
-  return { theme: 'dark', fontSize: 'medium', cliAutoComplete: true, cliHistorySize: 100 };
+  return {
+    theme: 'dark',
+    fontSize: 'medium',
+    cliAutoComplete: true,
+    cliHistorySize: 100,
+    cliColorEnabled: true,
+    webCompactMode: false,
+    webSidebarCollapsed: false,
+    webAnimationsEnabled: true,
+    clientAutoStart: false,
+    clientMinimizeToTray: true,
+    clientNotificationEnabled: true,
+  };
 }
 
 function saveSettings(s: UserSettings) {
@@ -23,7 +35,7 @@ function saveSettings(s: UserSettings) {
 
 interface AppState {
   // ── UI 状态 ──
-  activeTab: 'dashboard' | 'chat' | 'tasks' | 'agents' | 'knowledge' | 'workflow' | 'settings' | 'skills' | 'memory' | 'ide';
+  activeTab: 'dashboard' | 'chat' | 'tasks' | 'agents' | 'knowledge' | 'workflow' | 'settings' | 'skills' | 'memory' | 'ide' | 'datasets' | 'admin';
   setActiveTab: (tab: AppState['activeTab']) => void;
 
   // ── 用户界面设置 ──
@@ -68,6 +80,10 @@ interface AppState {
   // ── Agent ──
   agents: AgentInfo[];
   setAgents: (agents: AgentInfo[]) => void;
+
+  // ── 数据集 ──
+  datasets: import('../types').DatasetInfo[];
+  setDatasets: (datasets: import('../types').DatasetInfo[]) => void;
 
   // ── 知识库 ──
   kbSources: KnowledgeSource[];
@@ -158,6 +174,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Agent ──
   agents: [],
   setAgents: (agents) => set({ agents }),
+
+  // ── 数据集 ──
+  datasets: [],
+  setDatasets: (datasets) => set({ datasets }),
 
   // ── 知识库 ──
   kbSources: [],

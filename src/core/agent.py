@@ -220,6 +220,10 @@ class Agent:
     enable_rag: bool = True
     enable_reflection: bool = False
 
+    # --- 思考控制 ---
+    think_depth: int = 1            # 思考深度 1-5（影响推理强度与输出长度）
+    think_visibility: str = "visible"  # 思考可见性: visible / summary / hidden
+
     # --- 状态 ---
     state: AgentState = AgentState.IDLE
     current_plan: list[str] = field(default_factory=list)
@@ -401,6 +405,14 @@ class Agent:
                 template_parts.append("需要背景知识时，优先使用知识库检索。")
             if self.enable_reflection:
                 template_parts.append("给出最终答案前，自我检查一遍是否准确完整。")
+
+            # 思考深度注入（影响推理强度）
+            depth = max(1, self.think_depth or 1)
+            if depth > 1:
+                template_parts.append(
+                    f"[思考深度: {depth}/5] 这是一个需要深度思考的任务。请先拆解问题、"
+                    "多角度分析、评估多种方案，再给出严谨完整的回答，避免急于下结论。"
+                )
 
             template_parts.append("用中文回答用户。")
 
@@ -651,6 +663,10 @@ class Agent:
         self.state = AgentState.THINKING
         self.iteration_count = 0
         self.current_plan = []
+
+        # 将思考深度下传给 LLM（影响推理强度与输出长度）
+        if self.llm is not None:
+            self.llm.config.think_depth = max(1, self.think_depth or 1)
 
         self._log(f"[Task] 收到任务: {task}")
         self._emit(AgentEvent.THINK_START, {"task": task})

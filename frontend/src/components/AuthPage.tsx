@@ -119,8 +119,11 @@ export default function AuthPage() {
     if (regUser.length > 32) { showError('用户名最长 32 个字符'); return; }
     if (!/^[\w\u4e00-\u9fff]+$/.test(regUser.trim())) { showError('用户名只能包含字母、数字、下划线、中文'); return; }
     if (regPass.length < 8) { showError('密码至少 8 个字符'); return; }
-    if (!/[a-zA-Z]/.test(regPass)) { showError('密码必须包含字母'); return; }
+    if (regPass.length > 64) { showError('密码最长 64 个字符'); return; }
+    if (!/[a-z]/.test(regPass)) { showError('密码必须包含小写字母'); return; }
+    if (!/[A-Z]/.test(regPass)) { showError('密码必须包含大写字母'); return; }
     if (!/\d/.test(regPass)) { showError('密码必须包含数字'); return; }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(regPass)) { showError('密码必须包含至少一个特殊字符'); return; }
     if (regPass !== regConfirm) { showError('两次输入的密码不一致'); return; }
     if (!regEmail.trim()) { showError('请输入邮箱'); return; }
     if (!/^\d{6}$/.test(regCode.trim())) { showError('验证码为 6 位数字'); return; }
@@ -159,9 +162,9 @@ export default function AuthPage() {
       <div className="auth-container">
         {/* Logo */}
         <div className="auth-logo">
-          <div className="auth-logo-icon">AI</div>
+          <div className="auth-logo-icon">AH</div>
           <h1>AI Hubs</h1>
-          <p>新一代智能 Agent 平台</p>
+          <p>AI集群 · 新一代智能 Agent 平台</p>
         </div>
 
         {/* 提示消息 */}
@@ -280,7 +283,7 @@ export default function AuthPage() {
               <label>密码</label>
               <input
                 type="password"
-                placeholder="8-64 字符，必须包含字母和数字"
+                placeholder="8-64 字符，须含大小写字母+数字+特殊字符"
                 value={regPass}
                 onChange={(e) => setRegPass(e.target.value)}
                 maxLength={64}

@@ -1,4 +1,4 @@
-# SmartAgent 企业版 Docker 镜像
+# AI Hubs 企业版 Docker 镜像
 FROM python:3.11-slim
 
 WORKDIR /app

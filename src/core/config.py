@@ -29,6 +29,8 @@ class LLMConfigData:
     temperature: float = 0.7
     max_tokens: int = 4096
     timeout: int = 60
+    # 快速/详细配置模式: quick=一键自动检测, detailed=手动填写
+    setup_mode: str = "quick"  # quick | detailed
 
 
 @dataclass
@@ -55,10 +57,21 @@ class LongTermMemoryConfig:
 
 
 @dataclass
+class MemoryStrengthConfig:
+    """记忆强度配置 —— 控制 AI 记忆的持久性和影响力"""
+    strength: float = 0.7           # 记忆强度 0.0-1.0，越高记忆越持久
+    importance_threshold: float = 0.5  # 重要性阈值，低于此值的记忆会被弱化
+    decay_rate: float = 0.01        # 衰减率 (每次对话衰减比例)
+    consolidation_enabled: bool = True  # 启用记忆巩固（重要记忆强化）
+    recall_boost: float = 1.0       # 检索增强系数，>1.0 放大相关记忆的权重
+
+
+@dataclass
 class MemoryConfig:
     """记忆系统总配置"""
     short_term: ShortTermMemoryConfig = field(default_factory=ShortTermMemoryConfig)
     long_term: LongTermMemoryConfig = field(default_factory=LongTermMemoryConfig)
+    strength: MemoryStrengthConfig = field(default_factory=MemoryStrengthConfig)
 
 
 @dataclass
@@ -71,6 +84,10 @@ class RAGConfig:
     chunk_overlap: int = 50
     persist_dir: str = "./data/vectordb"
     top_k: int = 5
+    # RAG 内存压缩
+    compression_enabled: bool = True       # 启用检索结果压缩
+    compression_method: str = "summary"    # summary | extractive | hybrid
+    compression_max_tokens: int = 2048     # 压缩后最大 token 数
 
 
 @dataclass
@@ -293,6 +310,7 @@ def _parse_config(raw: dict) -> AppConfig:
     if mem_raw:
         st_raw = mem_raw.get("short_term", {})
         lt_raw = mem_raw.get("long_term", {})
+        ms_raw = mem_raw.get("strength", {})
         cfg.memory = MemoryConfig(
             short_term=ShortTermMemoryConfig(
                 max_turns=st_raw.get("max_turns", cfg.memory.short_term.max_turns),
@@ -302,6 +320,13 @@ def _parse_config(raw: dict) -> AppConfig:
                 enabled=lt_raw.get("enabled", cfg.memory.long_term.enabled),
                 db_path=lt_raw.get("db_path", cfg.memory.long_term.db_path),
                 collection_name=lt_raw.get("collection_name", cfg.memory.long_term.collection_name),
+            ),
+            strength=MemoryStrengthConfig(
+                strength=ms_raw.get("strength", cfg.memory.strength.strength),
+                importance_threshold=ms_raw.get("importance_threshold", cfg.memory.strength.importance_threshold),
+                decay_rate=ms_raw.get("decay_rate", cfg.memory.strength.decay_rate),
+                consolidation_enabled=ms_raw.get("consolidation_enabled", cfg.memory.strength.consolidation_enabled),
+                recall_boost=ms_raw.get("recall_boost", cfg.memory.strength.recall_boost),
             ),
         )
 
@@ -316,6 +341,9 @@ def _parse_config(raw: dict) -> AppConfig:
             chunk_overlap=rag_raw.get("chunk_overlap", cfg.rag.chunk_overlap),
             persist_dir=rag_raw.get("persist_dir", cfg.rag.persist_dir),
             top_k=rag_raw.get("top_k", cfg.rag.top_k),
+            compression_enabled=rag_raw.get("compression_enabled", cfg.rag.compression_enabled),
+            compression_method=rag_raw.get("compression_method", cfg.rag.compression_method),
+            compression_max_tokens=rag_raw.get("compression_max_tokens", cfg.rag.compression_max_tokens),
         )
 
     # Tools

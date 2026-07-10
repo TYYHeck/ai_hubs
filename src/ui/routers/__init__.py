@@ -32,6 +32,8 @@ from .skills import router as skills_router
 from .memory import router as memory_router
 from .datasets import router as datasets_router
 from .system import system_router, config_router, model_router
+from .admin import router as admin_router
+from .ide import router as ide_router
 
 all_routers = [
     auth_router,
@@ -43,6 +45,8 @@ all_routers = [
     skills_router,
     memory_router,
     datasets_router,
+    admin_router,
+    ide_router,
     system_router,
     config_router,
     model_router,

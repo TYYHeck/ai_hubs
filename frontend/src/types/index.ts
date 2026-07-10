@@ -39,8 +39,18 @@ export interface TaskInfo {
 export interface UserSettings {
   theme: 'dark' | 'light';
   fontSize: 'small' | 'medium' | 'large';
+  // CLI 端设置
   cliAutoComplete: boolean;
   cliHistorySize: number;
+  cliColorEnabled: boolean;
+  // Web 端设置
+  webCompactMode: boolean;
+  webSidebarCollapsed: boolean;
+  webAnimationsEnabled: boolean;
+  // 客户端设置
+  clientAutoStart: boolean;
+  clientMinimizeToTray: boolean;
+  clientNotificationEnabled: boolean;
 }
 
 export interface EventLogEntry {
@@ -163,4 +173,41 @@ export interface SkillInfo {
   installed: boolean;
   version: string;
   author: string;
+  default_config?: Record<string, unknown>;
+}
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  role: 'user' | 'admin';
+  is_active: boolean;
+  created_at: string | null;
+  last_login_at: string | null;
+  task_count: number;
+}
+
+export interface AdminStats {
+  users: number;
+  agents: number;
+  tasks: number;
+  datasets: number;
+  skills: number;
+  memory: number;
+}
+
+export interface DatasetInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  record_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatasetRecord {
+  id: string;
+  [key: string]: unknown;
 }

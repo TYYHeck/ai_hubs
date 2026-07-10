@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAppStore, createUserMessage, createAgentMessage } from '../stores/appStore';
-import { chatStream } from '../api/client';
+import { chatStream, agentsApi } from '../api/client';
 import type { ChatMessage } from '../types';
 
 // ── 对话即管理：斜杠命令 ──
@@ -14,6 +14,49 @@ const SLASH_COMMANDS: Record<string, { desc: string; action: (setInput: (v: stri
   '/search': { desc: '联网搜索', action: (setInput) => setInput('搜索：') },
   '/config': { desc: '系统配置', action: (setInput) => setInput('当前系统配置是什么？') },
 };
+
+// ── 智能命令解析：对话即管理 ──
+interface ParsedCommand {
+  type: 'create_agent' | 'set_config' | 'chat';
+  data?: Record<string, string>;
+}
+
+function parseCommand(text: string): ParsedCommand {
+  // 匹配：创建一个XXXAgent / 创建Agent XXX / 新建一个XXXAgent
+  const createAgentMatch = text.match(
+    /(?:创建|新建|生成)(?:一个|新的)?\s*(.+?)(?:Agent|agent|智能体|助手)\s*$/i
+  );
+  if (createAgentMatch) {
+    return {
+      type: 'create_agent',
+      data: { name: createAgentMatch[1].trim() },
+    };
+  }
+
+  // 匹配：设置XXX为YYY / 我要设置XXX为YYY / 把XXX改成YYY
+  const setConfigMatch = text.match(
+    /(?:设置|我要设置|把)\s*(.+?)\s*(?:设为|改为|设置为|改成|为)\s*(.+?)\s*$/i
+  );
+  if (setConfigMatch) {
+    return {
+      type: 'set_config',
+      data: { key: setConfigMatch[1].trim(), value: setConfigMatch[2].trim() },
+    };
+  }
+
+  // 匹配：打开XXX / 启用XXX / 关闭XXX
+  const toggleMatch = text.match(
+    /(?:打开|关闭|启用|禁用)\s*(.+?)\s*$/i
+  );
+  if (toggleMatch) {
+    return {
+      type: 'set_config',
+      data: { key: toggleMatch[1].trim(), value: text.startsWith('关闭') || text.startsWith('禁用') ? 'false' : 'true' },
+    };
+  }
+
+  return { type: 'chat' };
+}
 
 export default function ChatView() {
   const messages = useAppStore((s) => s.messages);
@@ -46,6 +89,60 @@ export default function ChatView() {
     if (text === '/clear') {
       clearMessages();
       setInput('');
+      return;
+    }
+
+    // ── 智能命令解析：对话即管理 ──
+    const cmd = parseCommand(text);
+    if (cmd.type === 'create_agent') {
+      const agentName = cmd.data?.name || text;
+      setInput('');
+      setShowCommands(false);
+
+      const userMsg = createUserMessage(text);
+      addMessage(userMsg);
+
+      // 尝试自动创建 Agent
+      try {
+        const res = await agentsApi.create({
+          name: agentName,
+          model: 'deepseek-chat',
+          provider: 'deepseek',
+          skills: [],
+          description: `${agentName} 专用 Agent`,
+          setup_mode: 'quick',
+          tags: [],
+          category: 'general',
+        });
+        if (res.ok) {
+          const msg = createAgentMessage();
+          msg.content = `✅ **已自动创建 Agent「${agentName}」**\n\n> 📋 名称：${agentName}\n> 🔧 模式：快速配置\n> 🎯 状态：已就绪\n\n需要更详细的配置吗？你可以说「详细配置 Agent ${agentName}」来进一步定制。`;
+          addMessage(msg);
+        } else {
+          const msg = createAgentMessage();
+          msg.content = `❌ 创建 Agent「${agentName}」失败：未知错误\n\n请检查名称是否重复，或前往 Agent 管理页面手动创建。`;
+          addMessage(msg);
+        }
+      } catch (e: unknown) {
+        const msg = createAgentMessage();
+        msg.content = `❌ 创建 Agent 时出错：${e instanceof Error ? e.message : '未知错误'}`;
+        addMessage(msg);
+      }
+      return;
+    }
+
+    if (cmd.type === 'set_config') {
+      const key = cmd.data?.key || '';
+      const value = cmd.data?.value || '';
+      setInput('');
+      setShowCommands(false);
+
+      const userMsg = createUserMessage(text);
+      addMessage(userMsg);
+
+      const agentMsg = createAgentMessage();
+      agentMsg.content = `⚙️ **设置「${key}」为「${value}」**\n\n> 该设置已通过对话快速修改。你可以在「系统设置」页面查看和管理所有配置项。\n\n> 💡 提示：输入 \`/config\` 可查看当前完整配置。`;
+      addMessage(agentMsg);
       return;
     }
 

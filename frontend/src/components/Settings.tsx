@@ -58,7 +58,18 @@ export default function Settings() {
   const [tools, setTools] = useState<{ name: string; description: string; parameters: string[]; dangerous: boolean }[]>([]);
 
   // 活跃 Tab
-  const [activeSection, setActiveSection] = useState<'llm' | 'model' | 'modes' | 'tools' | 'system' | 'appearance'>('llm');
+  const [activeSection, setActiveSection] = useState<'llm' | 'model' | 'modes' | 'tools' | 'system' | 'appearance' | 'ide'>('llm');
+
+  // IDE 设置
+  const [ideSettings, setIdeSettings] = useState({
+    theme: 'vs-dark',
+    fontSize: 14,
+    tabSize: 4,
+    autoComplete: true,
+    wordWrap: true,
+    minimap: false,
+    lineNumbers: true,
+  });
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setStatusMsg({ type, text });
@@ -164,6 +175,7 @@ export default function Settings() {
     { id: 'model', label: '模型切换', icon: '🔄' },
     { id: 'modes', label: '功能模式', icon: '🎛️' },
     { id: 'tools', label: '工具管理', icon: '🔧' },
+    { id: 'ide', label: 'IDE 设置', icon: '💻' },
     { id: 'system', label: '系统信息', icon: '🖥️' },
     { id: 'appearance', label: '外观设置', icon: '🎨' },
   ];
@@ -385,6 +397,129 @@ export default function Settings() {
         </div>
       )}
 
+      {/* ── IDE 设置 ── */}
+      {activeSection === 'ide' && (
+        <div className="card">
+          <div className="card-header">内置 IDE 设置</div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>
+            配置内置代码编辑器的外观和行为，支持扩展插件接入
+          </p>
+
+          <div className="form-group">
+            <label>编辑器主题</label>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {([
+                { id: 'vs-dark', name: '暗色', icon: '🌙' },
+                { id: 'vs-light', name: '亮色', icon: '☀️' },
+                { id: 'monokai', name: 'Monokai', icon: '🎨' },
+                { id: 'github-dark', name: 'GitHub Dark', icon: '🐙' },
+              ]).map((t) => (
+                <button
+                  key={t.id}
+                  className={`theme-chip ${ideSettings.theme === t.id ? 'selected' : ''}`}
+                  onClick={() => setIdeSettings({ ...ideSettings, theme: t.id })}
+                >
+                  <span className="theme-icon">{t.icon}</span>
+                  <span>{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: 20 }}>
+            <label>字体大小: {ideSettings.fontSize}px</label>
+            <input
+              type="range"
+              min={10}
+              max={24}
+              value={ideSettings.fontSize}
+              onChange={(e) => setIdeSettings({ ...ideSettings, fontSize: Number(e.target.value) })}
+              style={{ width: '100%', marginTop: 8 }}
+            />
+            <div className="form-help">调整编辑器代码字体大小</div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: 20 }}>
+            <label>Tab 大小: {ideSettings.tabSize}</label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              {[2, 4, 8].map((s) => (
+                <button
+                  key={s}
+                  className={`theme-chip ${ideSettings.tabSize === s ? 'selected' : ''}`}
+                  onClick={() => setIdeSettings({ ...ideSettings, tabSize: s })}
+                >
+                  {s} 空格
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: 20 }}>
+            <label>编辑器功能</label>
+            <div className="mode-list">
+              <ModeCard
+                icon="✨"
+                title="自动补全"
+                desc="启用代码智能提示和自动补全"
+                enabled={ideSettings.autoComplete}
+                onToggle={() => setIdeSettings({ ...ideSettings, autoComplete: !ideSettings.autoComplete })}
+              />
+              <ModeCard
+                icon="↩️"
+                title="自动换行"
+                desc="长代码行自动折行显示"
+                enabled={ideSettings.wordWrap}
+                onToggle={() => setIdeSettings({ ...ideSettings, wordWrap: !ideSettings.wordWrap })}
+              />
+              <ModeCard
+                icon="🗺️"
+                title="代码缩略图"
+                desc="编辑器右侧显示代码缩略图导航"
+                enabled={ideSettings.minimap}
+                onToggle={() => setIdeSettings({ ...ideSettings, minimap: !ideSettings.minimap })}
+              />
+              <ModeCard
+                icon="🔢"
+                title="行号显示"
+                desc="编辑器左侧显示行号"
+                enabled={ideSettings.lineNumbers}
+                onToggle={() => setIdeSettings({ ...ideSettings, lineNumbers: !ideSettings.lineNumbers })}
+              />
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: 20 }}>
+            <label>编译器 / 编程工具接入</label>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+              支持接入外部编译器工具链，扩展 IDE 功能
+            </p>
+            <div className="mode-list">
+              <ModeCard
+                icon="🐍"
+                title="Python 解释器"
+                desc="接入 Python 运行时进行代码执行和调试"
+                enabled={true}
+                onToggle={() => {}}
+              />
+              <ModeCard
+                icon="📦"
+                title="Node.js 运行时"
+                desc="接入 Node.js 进行 JavaScript/TypeScript 开发"
+                enabled={true}
+                onToggle={() => {}}
+              />
+              <ModeCard
+                icon="🔌"
+                title="扩展插件"
+                desc="支持 VS Code 兼容插件扩展"
+                enabled={false}
+                onToggle={() => {}}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── 系统信息 ── */}
       {activeSection === 'system' && (
         <SystemInfoPanel systemInfo={systemInfo} />
@@ -434,21 +569,92 @@ export default function Settings() {
 
           <div className="form-group" style={{ marginTop: 20 }}>
             <label>各端独立设置</label>
-            <div className="mode-list">
-              <ModeCard
-                icon="💻"
-                title="CLI 命令补全"
-                desc="在命令行界面中启用 Tab 自动补全"
-                enabled={userSettings.cliAutoComplete}
-                onToggle={() => setUserSettings({ cliAutoComplete: !userSettings.cliAutoComplete })}
-              />
-              <ModeCard
-                icon="📜"
-                title="CLI 历史记录"
-                desc={`保留 ${userSettings.cliHistorySize} 条历史命令`}
-                enabled={userSettings.cliHistorySize > 0}
-                onToggle={() => setUserSettings({ cliHistorySize: userSettings.cliHistorySize > 0 ? 0 : 100 })}
-              />
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+              CLI、Web、客户端各有独立的设置项，互不影响
+            </p>
+
+            {/* CLI 端 */}
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>💻 CLI 命令行端</label>
+              <div className="mode-list" style={{ marginTop: 8 }}>
+                <ModeCard
+                  icon="⌨️"
+                  title="Tab 命令补全"
+                  desc="在命令行界面中启用 Tab 自动补全和智能提示"
+                  enabled={userSettings.cliAutoComplete}
+                  onToggle={() => setUserSettings({ cliAutoComplete: !userSettings.cliAutoComplete })}
+                />
+                <ModeCard
+                  icon="📜"
+                  title="历史记录"
+                  desc={`保留 ${userSettings.cliHistorySize} 条历史命令（支持上下箭头回溯）`}
+                  enabled={userSettings.cliHistorySize > 0}
+                  onToggle={() => setUserSettings({ cliHistorySize: userSettings.cliHistorySize > 0 ? 0 : 100 })}
+                />
+                <ModeCard
+                  icon="🎨"
+                  title="彩色输出"
+                  desc="CLI 启用彩色语法高亮和状态标识"
+                  enabled={userSettings.cliColorEnabled}
+                  onToggle={() => setUserSettings({ cliColorEnabled: !userSettings.cliColorEnabled })}
+                />
+              </div>
+            </div>
+
+            {/* Web 端 */}
+            <div className="form-group" style={{ marginTop: 20 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>🌐 Web 网页端</label>
+              <div className="mode-list" style={{ marginTop: 8 }}>
+                <ModeCard
+                  icon="📐"
+                  title="紧凑模式"
+                  desc="缩小间距以在屏幕上显示更多内容"
+                  enabled={userSettings.webCompactMode}
+                  onToggle={() => setUserSettings({ webCompactMode: !userSettings.webCompactMode })}
+                />
+                <ModeCard
+                  icon="📂"
+                  title="侧边栏折叠"
+                  desc="默认折叠侧边栏以获得更大的工作区"
+                  enabled={userSettings.webSidebarCollapsed}
+                  onToggle={() => setUserSettings({ webSidebarCollapsed: !userSettings.webSidebarCollapsed })}
+                />
+                <ModeCard
+                  icon="✨"
+                  title="动画效果"
+                  desc="启用页面切换和交互动画"
+                  enabled={userSettings.webAnimationsEnabled}
+                  onToggle={() => setUserSettings({ webAnimationsEnabled: !userSettings.webAnimationsEnabled })}
+                />
+              </div>
+            </div>
+
+            {/* 客户端 */}
+            <div className="form-group" style={{ marginTop: 20 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>🖥️ 桌面客户端</label>
+              <div className="mode-list" style={{ marginTop: 8 }}>
+                <ModeCard
+                  icon="🚀"
+                  title="开机自启"
+                  desc="系统启动时自动启动 AI Hubs 客户端"
+                  enabled={userSettings.clientAutoStart}
+                  onToggle={() => setUserSettings({ clientAutoStart: !userSettings.clientAutoStart })}
+                />
+                <ModeCard
+                  icon="📥"
+                  title="最小化到托盘"
+                  desc="关闭窗口时最小化到系统托盘而不是退出"
+                  enabled={userSettings.clientMinimizeToTray}
+                  onToggle={() => setUserSettings({ clientMinimizeToTray: !userSettings.clientMinimizeToTray })}
+                />
+                <ModeCard
+                  icon="🔔"
+                  title="桌面通知"
+                  desc="任务完成或错误时发送系统桌面通知"
+                  enabled={userSettings.clientNotificationEnabled}
+                  onToggle={() => setUserSettings({ clientNotificationEnabled: !userSettings.clientNotificationEnabled })}
+                />
+              </div>
             </div>
           </div>
         </div>

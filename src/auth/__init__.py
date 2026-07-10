@@ -13,7 +13,7 @@ from jose import JWTError, jwt
 logger = logging.getLogger("ai_hubs.auth")
 
 # JWT 配置
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "smart-agent-secret-change-in-production-2024")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "ai-hubs-secret-change-in-production-2024")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))  # 默认 8 小时
 

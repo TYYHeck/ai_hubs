@@ -1,4 +1,4 @@
-# AI Hubs v3.0 — 新一代智能 Agent 平台
+# AI Hubs AI集群 v3.0 — 新一代智能 Agent 平台
 
 > 基于 LangGraph ReAct 架构的智能 Agent 平台。支持 **8 种多Agent编排模式**、**17 个内置工具**、**Git式记忆版本控制**、**技能市场**、**内置IDE**、**多端部署（Web/CLI/Electron桌面端）**。
 
@@ -423,7 +423,7 @@ cd frontend && npx tsc --noEmit
 
 ### v3.0.0 (当前)
 
-- 🆕 **品牌重塑**: SmartAgent → AI Hubs
+- 🆕 **品牌重塑**: AI Hubs v3.0 正式发布
 - 🆕 **邮箱验证码注册**: QQ SMTP + 验证码校验 + 密码强度
 - 🆕 **技能市场**: 8内置技能 + GitHub探索 + 自定义创建
 - 🆕 **Git式记忆VCS**: commit/checkout/log/diff

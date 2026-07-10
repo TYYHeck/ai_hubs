@@ -1,22 +1,22 @@
 # ============================================
-# SmartAgent systemd 服务文件
+# AI Hubs systemd 服务文件
 # ============================================
 #
 # 部署步骤:
-#   1. sudo cp deploy/smart_agent.service /etc/systemd/system/
+#   1. sudo cp deploy/ai_hubs.service /etc/systemd/system/
 #   2. sudo systemctl daemon-reload
-#   3. sudo systemctl enable smart_agent
-#   4. sudo systemctl start smart_agent
-#   5. sudo systemctl status smart_agent
+#   3. sudo systemctl enable ai_hubs
+#   4. sudo systemctl start ai_hubs
+#   5. sudo systemctl status ai_hubs
 #
 # 常用命令:
-#   sudo systemctl restart smart_agent    # 重启
-#   sudo systemctl stop smart_agent       # 停止
-#   sudo journalctl -u smart_agent -f     # 查看日志
+#   sudo systemctl restart ai_hubs    # 重启
+#   sudo systemctl stop ai_hubs       # 停止
+#   sudo journalctl -u ai_hubs -f     # 查看日志
 
 [Unit]
-Description=SmartAgent - AI Agent Service (Enterprise v2.0)
-Documentation=https://github.com/TYYHeck/smart_agent
+Description=AI Hubs - AI Agent Service (Enterprise v3.0)
+Documentation=https://github.com/TYYHeck/ai_hubs
 After=network.target
 Wants=network.target
 
@@ -24,15 +24,15 @@ Wants=network.target
 Type=simple
 User=root
 Group=root
-WorkingDirectory=/root/smart_agent
+WorkingDirectory=/root/ai_hubs
 
 # 环境变量
-EnvironmentFile=/root/smart_agent/.env
-Environment="PATH=/root/smart_agent/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/root/ai_hubs/.env
+Environment="PATH=/root/ai_hubs/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONWARNINGS=ignore::DeprecationWarning"
 
 # 启动命令
-ExecStart=/root/smart_agent/venv/bin/python main.py --web --host 0.0.0.0 --port 8080
+ExecStart=/root/ai_hubs/venv/bin/python main.py --web --host 0.0.0.0 --port 8080
 
 # 重启策略
 Restart=always
@@ -48,7 +48,7 @@ TimeoutStopSec=30
 # 日志 (journald)
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=smart_agent
+SyslogIdentifier=ai_hubs
 
 # 资源限制
 LimitNOFILE=65536

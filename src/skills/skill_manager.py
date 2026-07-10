@@ -37,6 +37,7 @@ class Skill:
     installed: bool = True
     version: str = "1.0.0"
     author: str = ""
+    default_config: dict = field(default_factory=dict)  # 技能默认配置（如参数、环境变量等）
 
     def to_dict(self) -> dict:
         return {
@@ -50,6 +51,7 @@ class Skill:
             "installed": self.installed,
             "version": self.version,
             "author": self.author,
+            "default_config": self.default_config,
         }
 
     @classmethod
@@ -65,6 +67,7 @@ class Skill:
             installed=d.get("installed", True),
             version=d.get("version", "1.0.0"),
             author=d.get("author", ""),
+            default_config=d.get("default_config", {}),
         )
 
 
@@ -252,6 +255,20 @@ class SkillManager:
         self._skills[skill.id] = skill
         self._save_user_skills()
         return skill
+
+    def update(self, skill_id: str, updates: dict) -> Optional[Skill]:
+        """更新技能（内置技能不可修改）"""
+        s = self._skills.get(skill_id)
+        if not s:
+            return None
+        if s.source == "builtin":
+            return None
+        # 允许更新的字段
+        for field in ["name", "description", "category", "prompt_template", "tags", "version", "default_config"]:
+            if field in updates:
+                setattr(s, field, updates[field])
+        self._save_user_skills()
+        return s
 
     def import_from_dict(self, data: dict) -> Optional[Skill]:
         """从字典导入技能（GitHub 下载等）"""

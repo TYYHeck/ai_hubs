@@ -114,6 +114,9 @@ class AgentProxy:
     # ── 能力描述（用于智能调度）──
     skills: list[str] = field(default_factory=list)      # 技能标签: ["coding", "writing", "research"]
     description: str = ""                                  # 一句话描述
+    tags: list[str] = field(default_factory=list)         # Agent 标签
+    category: str = "general"                             # 数据库分类
+    setup_mode: str = "detailed"                          # quick | detailed
 
     def to_dict(self) -> dict:
         has_prompt = bool(getattr(self.agent, 'system_prompt', None))
@@ -123,6 +126,9 @@ class AgentProxy:
             "current_task_id": self.current_task_id,
             "skills": self.skills,
             "description": self.description,
+            "tags": self.tags,
+            "category": self.category,
+            "setup_mode": self.setup_mode,
             "has_custom_prompt": has_prompt and not self.agent.system_prompt.startswith(f"你是 {self.name}"),
             "max_iterations": getattr(self.agent, 'max_iterations', 15),
             "enable_planning": getattr(self.agent, 'enable_planning', False),

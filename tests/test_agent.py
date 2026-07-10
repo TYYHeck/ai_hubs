@@ -31,7 +31,7 @@ class TestCreateAgent:
             api_key="sk-test123",
             system_prompt="你是一个测试助手",
         )
-        assert agent.name == "SmartAgent"
+        assert agent.name == "AI Hubs"
         assert agent.system_prompt == "你是一个测试助手"
         assert agent.llm is not None
         assert agent.llm.config.provider == "deepseek"
@@ -39,7 +39,7 @@ class TestCreateAgent:
 
     def test_create_agent_defaults(self):
         agent = create_agent()
-        assert agent.name == "SmartAgent"
+        assert agent.name == "AI Hubs"
         assert agent.max_iterations == 15
         assert agent.enable_planning is False
         assert agent.enable_rag is True
@@ -279,7 +279,7 @@ class TestSystemPrompt:
         from src.tools.builtin_tools import register_all
         register_all(agent.tools)
         prompt = agent._build_full_system_prompt()
-        assert "SmartAgent" in prompt
+        assert "AI Hubs" in prompt
         assert "中文" in prompt
 
 

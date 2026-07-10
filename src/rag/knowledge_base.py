@@ -16,6 +16,9 @@ from typing import Any
 from dataclasses import dataclass, field
 import os
 import re
+import logging
+
+logger = logging.getLogger("ai_hubs.rag")
 
 
 # ============================================================
@@ -231,6 +234,113 @@ class KnowledgeBase:
         source_id = os.path.basename(filepath)
         self.add_document(source_id, content, metadata or {})
 
+    # ======== 检索结果压缩 ========
+
+    def compress_results(
+        self,
+        results: list[dict],
+        method: str = "extractive",
+        max_tokens: int = 2048,
+    ) -> str:
+        """压缩检索结果以减少上下文内存占用
+
+        Args:
+            results: search() 返回的结果列表
+            method: 压缩方法
+                - "extractive": 提取最相关句子（默认，快速无损）
+                - "summary": 使用 LLM 生成摘要（需 API 调用，高压缩率）
+                - "hybrid": 先提取再摘要（平衡）
+            max_tokens: 压缩后最大 token 数（估算：1 token ≈ 0.75 中文/4 英文）
+        """
+        if not results:
+            return ""
+
+        # 合并所有结果
+        combined = "\n\n---\n\n".join(
+            f"[来源: {r.get('source', '未知')} | 相关度: {1 - r.get('score', 0):.2f}]\n{r.get('content', '')}"
+            for r in results
+        )
+
+        # 估算当前 token 数
+        estimated_tokens = len(combined) // 2  # 粗略估算
+
+        if estimated_tokens <= max_tokens:
+            return combined  # 无需压缩
+
+        if method == "extractive":
+            return self._extractive_compress(results, max_tokens)
+        elif method == "summary":
+            return self._summary_compress(combined, max_tokens)
+        elif method == "hybrid":
+            extracted = self._extractive_compress(results, max_tokens * 2)
+            return self._summary_compress(extracted, max_tokens)
+        else:
+            return self._extractive_compress(results, max_tokens)
+
+    def _extractive_compress(self, results: list[dict], max_tokens: int) -> str:
+        """提取式压缩：从每个结果中提取最相关的关键句"""
+        import re
+
+        max_chars = max_tokens * 2  # 粗略估算
+        compressed_parts: list[str] = []
+        remaining = max_chars
+
+        # 按相关度排序（score 越小越相关）
+        sorted_results = sorted(results, key=lambda r: r.get("score", 1))
+
+        for r in sorted_results:
+            if remaining <= 0:
+                break
+
+            source = r.get("source", "")
+            content = r.get("content", "")
+            score = r.get("score", 0)
+
+            # 提取关键句：包含关键词的句子 + 首尾句
+            sentences = re.split(r'(?<=[。！？.!?\n])', content)
+            if len(sentences) <= 3:
+                # 内容很短，直接保留
+                part = f"[{source}] {content.strip()}"
+            else:
+                # 取前 2 句 + 最后 1 句
+                key_sentences = sentences[:2] + [sentences[-1]]
+                part = f"[{source}] {' '.join(s.strip() for s in key_sentences if s.strip())}"
+
+            if len(part) > remaining:
+                part = part[:remaining] + "..."
+
+            compressed_parts.append(part)
+            remaining -= len(part)
+
+        return "\n\n".join(compressed_parts)
+
+    def _summary_compress(self, text: str, max_tokens: int) -> str:
+        """摘要式压缩：使用 LLM 生成摘要（需要 API 调用）"""
+        try:
+            from openai import OpenAI
+            api_key = os.getenv("OPENAI_API_KEY", "") or os.getenv("DEEPSEEK_API_KEY", "")
+            if not api_key:
+                logger.warning("摘要压缩需要 API Key，回退到提取式压缩")
+                return text[:max_tokens * 2]
+
+            client = OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{
+                    "role": "system",
+                    "content": "你是一个文本压缩助手。请将以下检索结果压缩为简洁的摘要，保留所有关键信息和来源。"
+                }, {
+                    "role": "user",
+                    "content": f"请压缩以下内容，保留关键信息（来源、核心事实、关键数据）：\n\n{text[:8000]}"
+                }],
+                max_tokens=min(max_tokens, 2048),
+                temperature=0.3,
+            )
+            return response.choices[0].message.content or text[:max_tokens * 2]
+        except Exception as e:
+            logger.warning(f"摘要压缩失败: {e}，回退到提取式压缩")
+            return text[:max_tokens * 2]
+
     # ======== 检索 ========
     def search(self, query: str, top_k: int | None = None) -> list[dict]:
         """语义检索相关文档块"""
@@ -259,11 +369,25 @@ class KnowledgeBase:
                 })
         return chunks
 
-    def search_formatted(self, query: str, top_k: int | None = None) -> str:
-        """检索并格式化为可注入 LLM 的上下文"""
+    def search_formatted(
+        self, query: str, top_k: int | None = None,
+        compress: bool = True, compression_method: str = "extractive",
+    ) -> str:
+        """检索并格式化为可注入 LLM 的上下文
+
+        Args:
+            query: 搜索查询
+            top_k: 返回结果数
+            compress: 是否启用压缩（减少内存占用）
+            compression_method: 压缩方法 (extractive/summary/hybrid)
+        """
         results = self.search(query, top_k)
         if not results:
             return ""
+
+        if compress:
+            # 使用压缩后返回
+            return self.compress_results(results, method=compression_method)
 
         parts = []
         for i, r in enumerate(results, 1):

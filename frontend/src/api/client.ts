@@ -81,13 +81,18 @@ export function orchestrateStream(
   onEvent: (event: Record<string, unknown>) => void,
   onDone: () => void,
   onError: (err: Error) => void,
+  thinkDepth: number = 1,
+  thinkVisibility: string = 'visible',
 ): AbortController {
   const controller = new AbortController();
 
   fetch('/api/tasks/orchestrate/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ description, title, mode, agent_names: agentNames }),
+    body: JSON.stringify({
+      description, title, mode, agent_names: agentNames,
+      think_depth: thinkDepth, think_visibility: thinkVisibility,
+    }),
     signal: controller.signal,
   })
     .then(async (res) => {
@@ -324,4 +329,71 @@ export const memoryApi = {
     }),
   compress: () =>
     request<{ ok: boolean; summary: string }>('/api/memory/compress', { method: 'POST' }),
+};
+
+// ── 后台管理 ──
+
+export const adminApi = {
+  stats: () =>
+    request<{ ok: boolean; stats: import('../types').AdminStats }>('/api/admin/stats'),
+  listUsers: () =>
+    request<{ ok: boolean; users: import('../types').AdminUser[] }>('/api/admin/users'),
+  createUser: (username: string, password: string, email: string, role = 'user') =>
+    request<{ ok: boolean; user: import('../types').AdminUser }>('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, email, role }),
+    }),
+  updateUser: (username: string, data: Record<string, unknown>) =>
+    request<{ ok: boolean; user: import('../types').AdminUser }>(`/api/admin/users/${encodeURIComponent(username)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteUser: (username: string) =>
+    request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+    }),
+};
+
+// ── 数据集管理 ──
+
+export const datasetsApi = {
+  list: (category = '') =>
+    request<{ ok: boolean; datasets: import('../types').DatasetInfo[]; categories: { id: string; name: string; count: number }[] }>(
+      `/api/datasets/list?category=${encodeURIComponent(category)}`
+    ),
+  get: (id: string) =>
+    request<{ ok: boolean; dataset: import('../types').DatasetInfo & { records: import('../types').DatasetRecord[] } }>(
+      `/api/datasets/${encodeURIComponent(id)}`
+    ),
+  create: (data: Record<string, unknown>) =>
+    request<{ ok: boolean; dataset: import('../types').DatasetInfo }>('/api/datasets/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: boolean }>(`/api/datasets/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    request<{ ok: boolean }>(`/api/datasets/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  export: (id: string, format = 'json') =>
+    request<{ ok: boolean; content: string }>(`/api/datasets/${encodeURIComponent(id)}/export?format=${format}`),
+};
+
+// ── IDE：代码执行 + 插件市场 ──
+
+export const ideApi = {
+  runCode: (language: string, code: string) =>
+    request<{ ok: boolean; language: string; output: string; exit_code: number; error?: string }>('/api/ide/run', {
+      method: 'POST',
+      body: JSON.stringify({ language, code }),
+    }),
+  listPlugins: () =>
+    request<{ ok: boolean; plugins: { id: string; name: string; description: string; installed: boolean; icon: string }[] }>('/api/ide/plugins'),
+  togglePlugin: (pluginId: string, installed: boolean) =>
+    request<{ ok: boolean; plugins: { id: string; name: string; description: string; installed: boolean; icon: string }[] }>('/api/ide/plugins/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ plugin_id: pluginId, installed }),
+    }),
 };

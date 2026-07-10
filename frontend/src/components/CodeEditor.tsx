@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
+import { ideApi } from '../api/client';
 
 interface CodeEditorProps {
   onClose?: () => void;
@@ -132,6 +133,18 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
   const [runOutput, setRunOutput] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
+  // 从后端加载已安装插件状态
+  useEffect(() => {
+    ideApi.listPlugins().then((res) => {
+      if (res.ok && res.plugins.length > 0) {
+        setPlugins(res.plugins.map((p) => ({
+          id: p.id, name: p.name, description: p.description,
+          installed: p.installed, icon: p.icon,
+        })));
+      }
+    }).catch(() => { /* 后端不可用时回退到内置列表 */ });
+  }, []);
+
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const fontSize = userSettings.fontSize === 'small' ? 12 : userSettings.fontSize === 'large' ? 16 : 14;
 
@@ -209,13 +222,20 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
         setRunOutput(`错误: ${e instanceof Error ? e.message : String(e)}`);
       }
     } else if (lang === 'python') {
-      setRunOutput(
-        '🐍 Python 代码需要在服务器端运行。\n' +
-        '提示：将代码保存后通过终端或 Agent 执行。\n' +
-        '或使用 Ctrl+S 下载后在本地 Python 环境运行。\n\n' +
-        '--- 即将支持远程执行 ---\n' +
-        '代码行数: ' + code.split('\n').length + ' · 字符数: ' + code.length
-      );
+      // 调用后端在服务器端执行 Python
+      try {
+        setRunOutput('⏳ 正在服务器端执行 Python...');
+        const res = await ideApi.runCode('python', code);
+        if (res.ok) {
+          setRunOutput(
+            `🐍 Python 执行结果 (exit=${res.exit_code}):\n\n` + (res.output || '（无输出）')
+          );
+        } else {
+          setRunOutput(`❌ 执行失败: ${res.error || '未知错误'}`);
+        }
+      } catch (e: unknown) {
+        setRunOutput(`❌ 连接后端失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
     } else if (lang === 'html') {
       const win = window.open('', '_blank', 'width=800,height=600');
       if (win) {
@@ -231,10 +251,28 @@ export default function CodeEditor({ onClose }: CodeEditorProps) {
     setRunning(false);
   };
 
-  const togglePlugin = (id: string) => {
+  const togglePlugin = async (id: string) => {
+    const target = plugins.find((p) => p.id === id);
+    if (!target) return;
+    const nextInstalled = !target.installed;
+    // 乐观更新
     setPlugins((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, installed: !p.installed } : p))
+      prev.map((p) => (p.id === id ? { ...p, installed: nextInstalled } : p))
     );
+    try {
+      const res = await ideApi.togglePlugin(id, nextInstalled);
+      if (res.ok) {
+        setPlugins(res.plugins.map((p) => ({
+          id: p.id, name: p.name, description: p.description,
+          installed: p.installed, icon: p.icon,
+        })));
+      }
+    } catch {
+      // 失败回滚
+      setPlugins((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, installed: !nextInstalled } : p))
+      );
+    }
   };
 
   return (

@@ -4,12 +4,12 @@ services:
   # MySQL 数据库
   mysql:
     image: mysql:8.0
-    container_name: smart_agent_mysql
+    container_name: ai_hubs_mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_pass_123}
-      MYSQL_DATABASE: smart_agent
-      MYSQL_USER: smart_agent
-      MYSQL_PASSWORD: ${DB_PASSWORD:-smart_agent_pass}
+      MYSQL_DATABASE: ai_hubs
+      MYSQL_USER: ai_hubs
+      MYSQL_PASSWORD: ${DB_PASSWORD:-ai_hubs_pass}
     ports:
       - "3306:3306"
     volumes:
@@ -27,20 +27,20 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # SmartAgent 应用
-  smart_agent:
+  # AI Hubs 应用
+  ai_hubs:
     build: .
-    container_name: smart_agent_app
+    container_name: ai_hubs_app
     ports:
       - "8080:8080"
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - DB_HOST=mysql
       - DB_PORT=3306
-      - DB_USER=smart_agent
-      - DB_PASSWORD=${DB_PASSWORD:-smart_agent_pass}
-      - DB_NAME=smart_agent
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-smart-agent-enterprise-secret}
+      - DB_USER=ai_hubs
+      - DB_PASSWORD=${DB_PASSWORD:-ai_hubs_pass}
+      - DB_NAME=ai_hubs
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-ai-hubs-enterprise-secret}
       - JWT_EXPIRE_MINUTES=480
     volumes:
       - ./config.yaml:/app/config.yaml:ro
