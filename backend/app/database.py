@@ -144,13 +144,30 @@ async def init_database() -> AsyncEngine:
 
 
 async def _create_tables():
-    """创建所有表（如果不存在）"""
+    """创建所有表（如果不存在），并对旧表做增量迁移"""
     from .models.base import Base
+    from sqlalchemy import inspect, text
     # 导入所有模型以确保它们被注册到 Base.metadata
     from .models import user, agent, task, skill, dataset, memory, conversation, system  # noqa: F401
 
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # ── 增量迁移：为已在 M0-M3 创建的旧表补充 M4 新增列 ──
+        def _migrate(sync_conn):
+            insp = inspect(sync_conn)
+            try:
+                cols = {c["name"] for c in insp.get_columns("memory_commits")}
+            except Exception:
+                cols = set()
+            if "commit_type" not in cols:
+                logger.info("迁移: memory_commits 补充 commit_type 列")
+                sync_conn.execute(
+                    text("ALTER TABLE memory_commits ADD COLUMN commit_type VARCHAR(16) NOT NULL DEFAULT 'turn'")
+                )
+
+        await conn.run_sync(_migrate)
+
     logger.info(f"数据库表已就绪 ({_db_type})")
 
 

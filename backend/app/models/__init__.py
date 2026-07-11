@@ -7,7 +7,7 @@ from .agent import Agent
 from .task import Task, TaskEvent
 from .skill import Skill
 from .dataset import Dataset, DatasetRecord
-from .memory import MemoryCommit, MemorySnapshot
+from .memory import MemoryBranch, MemoryCommit, MemoryEntry, MemorySnapshot
 from .conversation import Conversation, Message
 from .system import SystemLog, KnowledgeSource
 
@@ -18,7 +18,7 @@ __all__ = [
     "Task", "TaskEvent",
     "Skill",
     "Dataset", "DatasetRecord",
-    "MemoryCommit", "MemorySnapshot",
+    "MemoryBranch", "MemoryCommit", "MemoryEntry", "MemorySnapshot",
     "Conversation", "Message",
     "SystemLog", "KnowledgeSource",
 ]

@@ -1,0 +1,13 @@
+feat(v4): M4 记忆系统 + RAG — git式版本控制/关键词记忆图谱/高无损压缩/离线BM25检索
+
+后端:
+- models/memory.py 新增 MemoryBranch(HEAD跟踪) 与 MemoryEntry(扁平记忆+关键词索引+重要性+压缩标记)
+- core/tokenize.py 统一中文二元分词器(解决贪婪整段匹配导致检索不召回)
+- core/memory.py MemoryManager: git式提交/回退(reset式)/自动压缩(LLM摘要归档)/关键词检索/上下文构建(长期摘要+近期窗口+相关性)
+- core/rag.py RAGService: 基于数据集的离线 BM25 检索, 零配置可用
+- api/v1/memory.py: commits/rollback/recall/context/stats/compress/rag.retrieve; 接入 orchestrator 任务执行(记忆上下文+RAG注入+逐轮提交)
+- database.py 新增启动增量迁移(为旧 memory_commits 补 commit_type 列)
+
+前端: MemoryPage 记忆管理页(统计/提交历史/回退/压缩/上下文预览/RAG检索), 路由与侧边栏已接入。
+
+验证: 端到端测试(提交/检索/上下文/回退/RAG)通过; HTTP 冒烟(登录+4记忆端点200)通过; 前端构建通过。

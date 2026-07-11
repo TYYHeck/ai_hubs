@@ -24,6 +24,8 @@ from ..database import create_session
 from ..models.agent import Agent as AgentModel
 from ..models.task import Task as TaskModel, TaskEvent as TaskEventModel
 from .llm import llm_manager
+from .memory import memory_manager
+from .rag import rag_service
 from ..config import settings
 
 logger = logging.getLogger("ai_hubs.orchestrator")
@@ -83,17 +85,39 @@ async def run_single(
     event_queue: asyncio.Queue,
     user_id: int,
 ) -> str:
-    """单 Agent 模式"""
+    """单 Agent 模式（含记忆上下文 + RAG 注入 + 记忆提交）"""
     pause_evt = get_pause_event(task_id)
     await pause_evt.wait()
 
-    messages = [
-        {"role": "system", "content": agent.system_prompt or "你是一个 AI 助手。"},
-        {"role": "user", "content": user_input},
-    ]
+    # ── 构建记忆上下文（长期摘要 + 近期窗口 + 相关性检索）──
+    memory_ctx = await memory_manager.build_context(
+        user_id, agent.name, query=user_input, memory_strength=agent.memory_strength
+    )
+    # ── RAG 检索（Agent 开启 enable_rag 时）──
+    rag_ctx = ""
+    if agent.enable_rag:
+        rag_ctx = await rag_service.build_context(user_id, user_input, category=agent.category)
+
+    system_parts = []
+    if agent.system_prompt:
+        system_parts.append(agent.system_prompt)
+    for m in memory_ctx:
+        if m.get("role") == "system":
+            system_parts.append(m["content"])
+    if rag_ctx:
+        system_parts.append(rag_ctx)
+    system_content = "\n\n".join(system_parts) or "你是一个 AI 助手。"
+
+    messages = [{"role": "system", "content": system_content}]
+    # 注入近期记忆（非 system 角色）作为上下文
+    for m in memory_ctx:
+        if m.get("role") != "system":
+            messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": user_input})
 
     await _emit_event(None, task_id, "agent_start",
-                      {"agent": agent.name, "provider": agent.provider, "model": agent.model},
+                      {"agent": agent.name, "provider": agent.provider, "model": agent.model,
+                       "memory_entries": len(memory_ctx), "rag": bool(rag_ctx)},
                       event_queue=event_queue)
 
     full = []
@@ -109,6 +133,20 @@ async def run_single(
         await _emit_event(None, task_id, "agent_done",
                           {"agent": agent.name, "length": len(result)},
                           event_queue=event_queue)
+
+        # ── 提交本轮记忆（git 式）──
+        try:
+            await memory_manager.add_turn(
+                user_id, agent.name,
+                [
+                    {"role": "user", "content": user_input},
+                    {"role": "assistant", "content": result},
+                ],
+                message=f"task {task_id[:8]}",
+            )
+        except Exception as me:
+            logger.warning(f"记忆提交失败（不影响主流程）: {me}")
+
         return result
     except Exception as e:
         await _emit_event(None, task_id, "agent_error",
