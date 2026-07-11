@@ -275,6 +275,7 @@ export default function IdePage() {
   )
 
   return (
+    <>
     <div className="flex h-full">
       {/* 文件树 */}
       <div className="w-64 flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col">
@@ -437,5 +438,6 @@ export default function IdePage() {
     {previewNode && !isLocal && (
       <FilePreviewModal path={previewNode.path} title={previewNode.name} onClose={() => setPreviewNode(null)} />
     )}
+    </>
   )
 }
