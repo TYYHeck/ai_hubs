@@ -20,7 +20,7 @@ class AgentCreate(BaseModel):
     enable_reflection: bool = False
     max_iterations: int = Field(default=15, ge=1, le=100)
     memory_strength: float = Field(default=3.0, ge=0, le=5)
-    setup_mode: str = "detailed"
+    setup_mode: str = "quick"
     skills: list[str] = []
     tags: list[str] = []
     category: str = "general"
