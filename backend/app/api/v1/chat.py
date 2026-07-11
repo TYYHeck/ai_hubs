@@ -5,6 +5,8 @@
 SSE 事件格式:
   data: {"event": "start", "conversation_id": "..."}\n\n
   data: {"event": "delta", "content": "文本片段"}\n\n
+  data: {"event": "tool_start", "name": "run_code", "summary": "执行 python..."}\n\n
+  data: {"event": "tool_result", "name": "run_code", "result": "..."}\n\n
   data: {"event": "done", "message_id": ..., "conversation_id": "..."}\n\n
   data: {"event": "error", "message": "..."}\n\n
 """
@@ -15,7 +17,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +28,10 @@ from ...models.conversation import Conversation, Message
 from ...schemas.chat import ChatRequest, CreateConversationRequest, LLMConfigRequest
 from ..deps import get_current_user
 from ...core.llm import llm_manager, get_llm_config, save_llm_config, PROVIDERS
+from ...core.memory import _estimate_tokens
+from ...core.tools import (
+    TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT, should_enable_tools, execute_tool,
+)
 
 router = APIRouter(prefix="", tags=["对话"])
 
@@ -122,6 +128,7 @@ async def get_messages(
 @router.post("/chat/stream")
 async def chat_stream(
     req: ChatRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -129,6 +136,20 @@ async def chat_stream(
 
     async def event_stream():
         try:
+            # 解析是否使用用户自带 LLM 配置（自带 key 则不受平台 token 配额限制）
+            user_llm = current_user.llm_config or {}
+            using_own_key = bool(user_llm.get("api_key"))
+
+            # 0. token 配额校验（仅使用平台免费额度时限制；用户自带 key 或管理员不限）
+            if not using_own_key:
+                quota = current_user.get_token_quota()
+                if quota is not None and current_user.get_token_used() >= quota:
+                    yield _sse({
+                        "event": "error",
+                        "message": f"您的对话 token 配额已用尽（上限 {quota}），可在「设置」中填写自己的 API Key 后无限制使用，或联系管理员重置。",
+                    })
+                    return
+
             # 1. 获取或创建对话
             conv_id = req.conversation_id
             if conv_id:
@@ -153,16 +174,29 @@ async def chat_stream(
                 )
                 session.add(conv)
                 await session.flush()
-
+    
             # 2. 保存用户消息
             user_msg = Message(
                 conversation_id=conv_id,
                 role="user",
                 content=req.message,
+                tokens_used=_estimate_tokens(req.message),
             )
             session.add(user_msg)
             await session.flush()
-
+    
+            # 2.1 绑定附件到对话（若上传时尚未绑定）
+            if req.attachment_ids:
+                from ...models.attachment import Attachment as AttModel
+                result = await session.execute(
+                    select(AttModel).where(
+                        AttModel.id.in_(req.attachment_ids),
+                        AttModel.user_id == current_user.id,
+                    )
+                )
+                for att in result.scalars().all():
+                    att.conversation_id = conv_id
+    
             # 3. 构建消息列表
             # 加载历史消息（最近 20 条）
             result = await session.execute(
@@ -174,23 +208,104 @@ async def chat_stream(
             history = list(reversed(result.scalars().all()))
             # 排除刚插入的用户消息（避免重复）
             history = [m for m in history if m.id != user_msg.id]
-
+    
             messages = []
             if req.system_prompt:
                 messages.append({"role": "system", "content": req.system_prompt})
+    
+            # 技能注入：把用户选用的已安装技能说明与入口代码作为系统上下文
+            if req.skills:
+                from ...models.skill import Skill as SkillModel
+                sk_stmt = select(SkillModel).where(
+                    SkillModel.name.in_(req.skills),
+                    SkillModel.is_installed == True,  # noqa: E712
+                )
+                skills_rows = (await session.execute(sk_stmt)).scalars().all()
+                if skills_rows:
+                    skill_blocks = []
+                    for sk in skills_rows:
+                        cfg = sk.config or {}
+                        entry = cfg.get("entry") or "skill.py"
+                        code = cfg.get("code") or ""
+                        code_view = (code[:2000] + "…") if len(code) > 2000 else code
+                        skill_blocks.append(
+                            f"【技能：{sk.name}】\n描述：{sk.description or '无'}\n"
+                            f"入口文件：{entry}\n参考实现：\n```\n{code_view}\n```"
+                        )
+                    skill_ctx = (
+                        "\n\n# 可用技能\n以下是本次对话可用的技能定义，请在其适用场景下调用对应能力：\n\n"
+                        + "\n\n".join(skill_blocks)
+                    )
+                    messages.append({"role": "system", "content": skill_ctx})
+    
             for m in history:
                 messages.append({"role": m.role, "content": m.content})
             messages.append({"role": "user", "content": req.message})
-
+    
+            # 3.1 判断是否启用 Agent 工具调用（基于用户选用的技能）
+            tools_enabled = should_enable_tools(req.skills or [])
+            if tools_enabled:
+                # 注入工具系统提示（合并到第一条 system message 或追加）
+                if messages and messages[0]["role"] == "system":
+                    messages[0]["content"] = messages[0]["content"] + "\n\n" + TOOL_SYSTEM_PROMPT
+                else:
+                    messages.insert(0, {"role": "system", "content": TOOL_SYSTEM_PROMPT})
+    
             # 4. 发送开始事件
-            yield _sse({"event": "start", "conversation_id": conv_id})
-
+            yield _sse({
+                "event": "start",
+                "conversation_id": conv_id,
+                "tools_enabled": tools_enabled,
+            })
+    
             # 5. 流式调用 LLM
             full_response = []
-            async for chunk in llm_manager.stream_chat(messages):
-                full_response.append(chunk)
-                yield _sse({"event": "delta", "content": chunk})
-
+    
+            if tools_enabled:
+                # ── 工具调用分支：逐事件产出具象化输出 ──
+                llm_config = user_llm if using_own_key else None
+                async for event in llm_manager.stream_with_tools(
+                    messages=messages,
+                    tools=TOOL_DEFINITIONS,
+                    tool_executor=execute_tool,
+                    user_id=current_user.id,
+                    user_config=llm_config,
+                ):
+                    if await request.is_disconnected():
+                        break
+    
+                    etype = event.get("type", "")
+                    if etype == "delta":
+                        content = event.get("content", "")
+                        full_response.append(content)
+                        yield _sse({"event": "delta", "content": content})
+                    elif etype == "tool_start":
+                        yield _sse({
+                            "event": "tool_start",
+                            "name": event.get("name", ""),
+                            "args": event.get("args", {}),
+                            "summary": event.get("summary", ""),
+                        })
+                    elif etype == "tool_result":
+                        yield _sse({
+                            "event": "tool_result",
+                            "name": event.get("name", ""),
+                            "result": event.get("result", ""),
+                        })
+                        # 工具结果也追加到 full_response（作为对话上下文展示）
+                        tool_label = f"\n[工具: {event.get('name', '')}]\n{event.get('result', '')}\n"
+                        full_response.append(tool_label)
+                    elif etype == "done":
+                        break  # 正常结束
+            else:
+                # ── 无工具分支：纯文本流式（原逻辑）──
+                llm_config = user_llm if using_own_key else None
+                async for chunk in llm_manager.stream_chat(messages, user_config=llm_config):
+                    if await request.is_disconnected():
+                        break
+                    full_response.append(chunk)
+                    yield _sse({"event": "delta", "content": chunk})
+    
             # 6. 保存 AI 回复
             ai_msg = Message(
                 conversation_id=conv_id,
@@ -199,18 +314,23 @@ async def chat_stream(
                 agent_name=req.agent_name,
             )
             session.add(ai_msg)
-
+    
             # 更新对话时间
             conv.updated_at = datetime.now(timezone.utc)
-            await session.flush()
-
+    
+            # 累计 token 用量（仅使用平台免费额度时累计；用户自带 key 不计入平台配额）
+            if not using_own_key:
+                est_tokens = _estimate_tokens(req.message) + _estimate_tokens("".join(full_response))
+                current_user.add_token_usage(est_tokens)
+                await session.flush()
+    
             # 7. 发送完成事件
             yield _sse({
                 "event": "done",
                 "message_id": ai_msg.id,
                 "conversation_id": conv_id,
             })
-
+    
         except Exception as e:
             yield _sse({"event": "error", "message": str(e)})
 
@@ -233,10 +353,14 @@ async def chat_stream(
 async def get_llm_config_api(
     current_user: User = Depends(get_current_user),
 ):
-    """获取当前 LLM 配置（API Key 脱敏）"""
-    config = get_llm_config()
+    """获取当前用户的个人 LLM 配置（API Key 脱敏）。
+
+    注意：这是「每个用户自己」的配置。填写后使用用户自己的额度（不限 token）；
+    留空则使用平台全局免费额度（受 token 配额限制）。
+    """
+    user_cfg = current_user.llm_config or {}
     # 脱敏 API Key
-    api_key = config.get("api_key", "")
+    api_key = user_cfg.get("api_key", "")
     if len(api_key) > 8:
         masked = api_key[:4] + "*" * (len(api_key) - 8) + api_key[-4:]
     else:
@@ -244,16 +368,18 @@ async def get_llm_config_api(
 
     return {
         "ok": True,
+        "scope": "user",
         "config": {
-            "provider": config["provider"],
-            "model": config["model"],
+            "provider": user_cfg.get("provider", "deepseek"),
+            "model": user_cfg.get("model", ""),
             "api_key": masked,
             "api_key_configured": bool(api_key),
-            "base_url": config["base_url"],
-            "temperature": config["temperature"],
-            "max_tokens": config["max_tokens"],
+            "base_url": user_cfg.get("base_url", ""),
+            "temperature": user_cfg.get("temperature", 0.7),
+            "max_tokens": user_cfg.get("max_tokens", 4096),
         },
-        "is_configured": llm_manager.is_configured(),
+        # 平台是否可用（全局 key 是否已配置）
+        "platform_configured": llm_manager.is_configured(),
     }
 
 
@@ -261,24 +387,31 @@ async def get_llm_config_api(
 async def update_llm_config(
     req: LLMConfigRequest,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
-    """更新 LLM 配置"""
+    """更新当前用户的个人 LLM 配置"""
     if req.provider not in PROVIDERS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"不支持的提供商: {req.provider}")
 
     preset = PROVIDERS[req.provider]
     base_url = req.base_url or preset["base_url"]
 
-    save_llm_config({
+    # 若前端传回脱敏 key（含 *），保留原值
+    api_key = req.api_key
+    if api_key and "*" in api_key:
+        api_key = (current_user.llm_config or {}).get("api_key", "")
+
+    current_user.llm_config = {
         "provider": req.provider,
         "model": req.model,
-        "api_key": req.api_key,
+        "api_key": api_key,
         "base_url": base_url,
         "temperature": req.temperature,
         "max_tokens": req.max_tokens,
-    })
+    }
+    await session.commit()
 
-    return {"ok": True, "message": "LLM 配置已更新"}
+    return {"ok": True, "message": "个人 LLM 配置已更新"}
 
 
 @router.get("/llm/providers")
@@ -292,6 +425,51 @@ async def list_providers(
             key: {"name": v["name"], "base_url": v["base_url"], "models": v["models"]}
             for key, v in PROVIDERS.items()
         },
+    }
+
+
+# ============================================================
+# 上下文占用统计
+# ============================================================
+
+@router.get("/chat/context-usage")
+async def context_usage(
+    conversation_id: str | None = None,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """返回当前对话上下文占用情况（token 估算 / 模型 / 长上下文占比）。"""
+    cfg = get_llm_config()
+    model = cfg.get("model", "unknown")
+
+    # 上下文窗口（常见模型，缺省 128k）
+    CONTEXT_WINDOWS = {
+        "deepseek-chat": 64000, "deepseek-reasoner": 64000,
+        "gpt-4o": 128000, "gpt-4o-mini": 128000, "gpt-3.5-turbo": 16000,
+        "glm-4": 128000, "claude-3-5-sonnet": 200000, "qwen-max": 32768,
+    }
+    window = CONTEXT_WINDOWS.get(model, 128000)
+
+    used_tokens = 0
+    msg_count = 0
+    if conversation_id:
+        result = await session.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at)
+        )
+        msgs = result.scalars().all()
+        msg_count = len(msgs)
+        for m in msgs:
+            used_tokens += _estimate_tokens(m.content or "")
+
+    return {
+        "ok": True,
+        "model": model,
+        "context_window": window,
+        "used_tokens": used_tokens,
+        "message_count": msg_count,
+        "usage_ratio": round(min(1.0, used_tokens / window), 4),
     }
 
 
