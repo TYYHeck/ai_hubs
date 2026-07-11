@@ -49,3 +49,11 @@ class DatasetRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     dataset = relationship("Dataset", back_populates="records")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "dataset_id": self.dataset_id,
+            "data": self.data or {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
