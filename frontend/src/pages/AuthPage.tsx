@@ -253,7 +253,7 @@ export default function AuthPage() {
         </div>
 
         <p className="text-center text-xs text-text-dim mt-6">
-          默认管理员: admin / admin123
+          示例账户: demo / demo1234
         </p>
       </div>
     </div>

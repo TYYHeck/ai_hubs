@@ -199,7 +199,7 @@ ssh root@8.138.24.27 "cd /root/ai_hubs && git pull && systemctl reload nginx"
 - 沙箱路径越界防护（`realpath` + `_resolve` 校验）
 - AI 工具调用临时文件执行后自动清理
 
-> ⚠️ 默认管理员：`admin / admin123`，**上线前务必修改密码**  
+> ⚠️ 示例账户：`demo / demo1234`，**上线前务必修改密码**  
 > ⚠️ `backend/config.yaml` 中的 JWT secret 请替换为随机字符串
 
 ---
