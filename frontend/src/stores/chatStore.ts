@@ -35,7 +35,7 @@ interface ChatState {
   selectConversation: (id: string) => Promise<void>
   newConversation: () => void
   deleteConversation: (id: string) => Promise<void>
-  sendMessage: (text: string, agentName?: string | null) => void
+  sendMessage: (text: string, agentName?: string | null, model?: string | null) => void
   clearError: () => void
 
   // 技能
@@ -112,7 +112,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await loadConversations()
   },
 
-  sendMessage: (text, agentName) => {
+  sendMessage: (text, agentName, model) => {
     const { currentConvId, attachments, selectedSkills } = get()
     const attachmentIds = attachments.map((a) => a.id)
 
@@ -225,6 +225,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       attachmentIds,
       selectedSkills,
       agentName ?? null,
+      model ?? null,
     )
     activeController = controller
   },

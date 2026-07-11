@@ -9,6 +9,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="用户消息（可含 [image#1] 等占位符）")
     conversation_id: str | None = Field(None, description="对话 ID，为空则新建")
     agent_name: str | None = Field(None, description="Agent 名称")
+    model: str | None = Field(None, description="指定模型，为空则使用默认模型")
     system_prompt: str | None = Field(None, description="系统提示词")
     think_visibility: str = Field("visible", description="思考可见性: visible|hidden|folded")
     attachment_ids: list[int] = Field(default=[], description="关联附件 ID 列表")

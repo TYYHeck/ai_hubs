@@ -84,6 +84,7 @@ export function streamChat(
   attachmentIds: number[] = [],
   skills: string[] = [],
   agentName: string | null = null,
+  model: string | null = null,
 ): AbortController {
   const controller = new AbortController()
 
@@ -99,6 +100,7 @@ export function streamChat(
       attachment_ids: attachmentIds,
       skills,
       agent_name: agentName,
+      model: model || undefined,
     }),
     signal: controller.signal,
   })

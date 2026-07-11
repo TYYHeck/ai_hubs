@@ -12,6 +12,7 @@ import {
   Send, Plus, Trash2, Bot, User, Loader2, AlertCircle, Paperclip,
   Search, X, Keyboard, Cpu, ListTodo, Sparkles, FileText, Image as ImageIcon,
   ChevronDown, Check, Star, Code, Terminal, Play, CheckCircle, XCircle,
+  Settings,
 } from 'lucide-react'
 
 // ── 自动补全词条（@Agent / #技能 / /命令）──
@@ -54,6 +55,12 @@ export default function ChatPage() {
   const [skillSearch, setSkillSearch] = useState('')
   const [skillOpen, setSkillOpen] = useState(false)
 
+  // 模型选择
+  const [providers, setProviders] = useState<Record<string, { name: string; base_url: string; models: string[] }>>({})
+  const [llmConfig, setLlmConfig] = useState<{ provider: string; model: string; api_key: string; base_url: string }>({ provider: 'deepseek', model: '', api_key: '', base_url: '' })
+  const [activeModel, setActiveModel] = useState('')
+  const [modelOpen, setModelOpen] = useState(false)
+
   // 防多重点击
   const [sending, setSending] = useState(false)
 
@@ -69,11 +76,13 @@ export default function ChatPage() {
   useEffect(() => {
     loadConversations()
     llmApi.getConfig().then((res) => setLlmConfigured(res.is_configured)).catch(() => {})
-    // 加载 Agent 与已安装技能
+    // 加载 Agent、已安装技能、LLM 配置
     Promise.all([
       agentApi.list().catch(() => []),
       skillApi.list({ installed: true }).catch(() => []),
-    ]).then(([a, s]) => {
+      llmApi.getProviders().catch(() => ({ providers: {} })),
+      llmApi.getConfig().catch(() => ({ config: { provider: 'deepseek', model: '', api_key: '', base_url: '' } })),
+    ]).then(([a, s, pRes, cRes]) => {
       const ags: Agent[] = Array.isArray(a) ? a : []
       const sks: Skill[] = Array.isArray(s) ? s : []
       setAgents(ags)
@@ -82,6 +91,11 @@ export default function ChatPage() {
       // 默认选中全局默认 Agent
       const def = ags.find(x => x.is_default)
       if (def) setActiveAgentId(def.id)
+      // LLM 配置
+      setProviders(pRes.providers || {})
+      const cfg = cRes.config || { provider: 'deepseek', model: '', api_key: '', base_url: '' }
+      setLlmConfig(cfg)
+      setActiveModel(cfg.model || '')
     })
   }, [loadConversations])
 
@@ -102,7 +116,7 @@ export default function ChatPage() {
     } else {
       if (sending) return
       setSending(true)
-      sendMessage(text, agentName)
+      sendMessage(text, agentName, activeModel || null)
       setSending(false)
     }
 
@@ -111,7 +125,7 @@ export default function ChatPage() {
     setHistoryIdx(-1)
     setCompletion(null)
     refreshContext()
-  }, [input, streaming, sending, sendMessage, enqueueMessage, refreshContext, agents, activeAgentId])
+  }, [input, streaming, sending, sendMessage, enqueueMessage, refreshContext, agents, activeAgentId, activeModel])
 
   // 暂停：中断当前 AI 思考（保留对话与已生成内容），而非开启新对话
   const handlePause = () => {
@@ -307,6 +321,39 @@ export default function ChatPage() {
             <Bot size={14} /> 管理 Agent
           </button>
 
+          {/* 选择模型 */}
+          <div className="relative">
+            <button onClick={() => setModelOpen(o => !o)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors">
+              <Cpu size={14} />
+              {activeModel || llmConfig.model || '选择模型'}
+              <ChevronDown size={12} />
+            </button>
+            {modelOpen && (
+              <div className="absolute z-30 mt-1 w-64 bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden">
+                <div className="px-3 py-2 border-b border-border">
+                  <span className="text-[11px] text-neutral-500">
+                    提供商：{providers[llmConfig.provider]?.name || llmConfig.provider}
+                  </span>
+                </div>
+                <div className="max-h-56 overflow-auto">
+                  {(providers[llmConfig.provider]?.models || []).length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-neutral-500">
+                      无可用模型，请先在<button onClick={() => { setModelOpen(false); navigate('/settings') }} className="text-accent hover:underline">设置</button>中配置
+                    </div>
+                  ) : (providers[llmConfig.provider]?.models || []).map(m => (
+                    <div key={m} onClick={() => { setActiveModel(m); setModelOpen(false) }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-bg-tertiary cursor-pointer">
+                      <Cpu size={12} className="text-blue-400" />
+                      <span className="flex-1 truncate">{m}</span>
+                      {activeModel === m && <Check size={13} className="text-accent" />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 选择技能（从已安装技能搜索添加） */}
           <div className="relative">
             <button onClick={() => setSkillOpen(o => !o)}
@@ -345,6 +392,10 @@ export default function ChatPage() {
             <Keyboard size={14} /> 快捷键
           </button>
           <div className="flex-1" />
+          <button onClick={() => navigate('/settings')}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors" title="LLM 设置">
+            <Settings size={14} /> 设置
+          </button>
           <button onClick={() => setShowSearch(s => !s)}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:text-accent transition-colors" title="搜索 (Ctrl+F)">
             <Search size={14} /> 搜索
@@ -525,7 +576,7 @@ export default function ChatPage() {
             {/* 状态栏 */}
             <div className="flex items-center gap-4 mt-2 text-[11px] text-neutral-500">
               <span className="flex items-center gap-1.5"><Cpu size={12} />
-                {context ? `模型 ${context.model}` : '模型 —'}</span>
+                模型 {context?.model || activeModel || llmConfig.model || '—'}</span>
               <span className="flex items-center gap-1.5 flex-1 max-w-[260px]">
                 长上下文
                 <span className="flex-1 h-1.5 rounded-full bg-bg-tertiary overflow-hidden">

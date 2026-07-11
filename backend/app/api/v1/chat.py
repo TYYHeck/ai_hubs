@@ -165,12 +165,14 @@ async def chat_stream(
                     return
             else:
                 conv_id = uuid.uuid4().hex[:32]
+                # 使用请求指定的 model，否则用全局默认
+                active_model = req.model or get_llm_config().get("model", "")
                 conv = Conversation(
                     id=conv_id,
                     user_id=current_user.id,
                     title=req.message[:50] if req.message else "新对话",
                     agent_name=req.agent_name,
-                    model=get_llm_config().get("model", ""),
+                    model=active_model,
                 )
                 session.add(conv)
                 await session.flush()
@@ -279,6 +281,7 @@ async def chat_stream(
                     tools=TOOL_DEFINITIONS,
                     tool_executor=execute_tool,
                     user_id=current_user.id,
+                    model=req.model or None,
                     user_config=llm_config,
                 ):
                     if await request.is_disconnected():
@@ -310,7 +313,7 @@ async def chat_stream(
             else:
                 # ── 无工具分支：纯文本流式（原逻辑）──
                 llm_config = user_llm if using_own_key else None
-                async for chunk in llm_manager.stream_chat(messages, user_config=llm_config):
+                async for chunk in llm_manager.stream_chat(messages, model=req.model or None, user_config=llm_config):
                     if await request.is_disconnected():
                         break
                     full_response.append(chunk)
@@ -512,9 +515,15 @@ _SKILL_COMMANDS: dict[str, list[str]] = {
 def _build_default_system_prompt(skills: list[str]) -> str:
     """构建包含技能清单、命令列表和使用指令的默认 System Prompt。"""
     lines = [
-        "你是一个通用人工智能助手，部署在 AI Hubs 平台上。",
+        "你是 AI集群（AI Hubs）的智能助手。",
         "你具备代码编写、文档生成（Word/Excel/PDF/PPT）、图片读取、",
         "终端操作、网页搜索等多种能力。",
+        "",
+        "## 身份规则",
+        "",
+        "1. **绝对不要透露底层模型名称**（如 DeepSeek、OpenAI、GPT、GLM 等），",
+        "   永远自称"AI集群助手"或"AI Hubs 助手"。",
+        "2. 如果用户问"你是什么模型"，回答"我是 AI集群平台的智能助手，由平台统一调度"。",
         "",
         "## 核心原则",
         "",
