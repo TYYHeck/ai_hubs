@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Brain, GitBranch, RotateCcw, Archive, Search, History, Database } from 'lucide-react'
-import { api } from '../api/client'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Brain, GitBranch, RotateCcw, Archive, Search, History, Database, Globe, ChevronDown, Bot } from 'lucide-react'
+import { api, type Agent } from '../api/client'
 
 interface CommitItem {
   commit_hash: string
@@ -25,7 +25,11 @@ interface RagHit {
 }
 
 export default function MemoryPage() {
-  const [agent, setAgent] = useState('default')
+  const [agent, setAgent] = useState('__global__')
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [agentSearch, setAgentSearch] = useState('')
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false)
+  const agentDropdownRef = useRef<HTMLDivElement>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [commits, setCommits] = useState<CommitItem[]>([])
   const [context, setContext] = useState<{ role: string; content: string }[]>([])
@@ -35,6 +39,31 @@ export default function MemoryPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
+
+  // 加载 Agent 列表
+  useEffect(() => {
+    api.get<Agent[]>('/agents').then(list => setAgents(list ?? [])).catch(() => {})
+  }, [])
+
+  // 点击外部关闭下拉
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setShowAgentDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // 当前选中的 Agent 信息
+  const selectedAgent = agent === '__global__' ? null : agents.find(a => a.name === agent)
+  const selectedLabel = agent === '__global__' ? '全局记忆' : (agent || '—')
+
+  // 搜索过滤 Agent 列表
+  const filteredAgents = agentSearch.trim()
+    ? agents.filter(a => a.name.toLowerCase().includes(agentSearch.toLowerCase()))
+    : agents
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -118,15 +147,64 @@ export default function MemoryPage() {
         git 式版本控制 · 关键词记忆图谱 · 高无损压缩 · RAG 检索。防幻觉的多层记忆保障。
       </p>
 
-      {/* Agent 选择 */}
+      {/* Agent 选择器 —— 搜索下拉 */}
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-sm text-neutral-400">Agent</span>
-        <input
-          value={agent}
-          onChange={(e) => setAgent(e.target.value)}
-          className="bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200 w-48"
-          placeholder="agent 名称"
-        />
+        <span className="text-sm text-neutral-400">记忆库</span>
+        <div ref={agentDropdownRef} className="relative">
+          <button
+            onClick={() => { setShowAgentDropdown(!showAgentDropdown); setAgentSearch('') }}
+            className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200 min-w-[180px] hover:border-accent/50 transition-colors"
+          >
+            {agent === '__global__' ? <Globe size={14} className="text-accent" /> : <Bot size={14} className="text-neutral-400" />}
+            <span className="flex-1 text-left">{selectedLabel}</span>
+            {selectedAgent && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedAgent.config_mode === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                {selectedAgent.config_mode === 'global' ? '全局配置' : '单独配置'}
+              </span>
+            )}
+            <ChevronDown size={14} className="text-neutral-500" />
+          </button>
+          {showAgentDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-64 bg-bg-tertiary border border-border rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+              {/* 搜索框 */}
+              <div className="p-2 border-b border-border">
+                <input
+                  autoFocus
+                  value={agentSearch}
+                  onChange={(e) => setAgentSearch(e.target.value)}
+                  className="w-full bg-bg-secondary border border-border rounded px-2 py-1 text-sm text-neutral-200 placeholder:text-neutral-600"
+                  placeholder="搜索 Agent…"
+                />
+              </div>
+              {/* 全局记忆选项 */}
+              <button
+                onClick={() => { setAgent('__global__'); setShowAgentDropdown(false); setAgentSearch('') }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${agent === '__global__' ? 'bg-accent/10 text-accent' : 'text-neutral-300'}`}
+              >
+                <Globe size={14} className="text-accent" />
+                <span>全局记忆</span>
+                <span className="ml-auto text-[10px] text-neutral-500">所有 Agent 共享</span>
+              </button>
+              {/* Agent 列表 */}
+              {filteredAgents.map(a => (
+                <button
+                  key={a.id ?? a.name}
+                  onClick={() => { setAgent(a.name); setShowAgentDropdown(false); setAgentSearch('') }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${agent === a.name ? 'bg-accent/10 text-accent' : 'text-neutral-300'}`}
+                >
+                  <Bot size={14} className="text-neutral-400" />
+                  <span>{a.name}</span>
+                  <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${a.config_mode === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                    {a.config_mode === 'global' ? '全局配置' : '单独配置'}
+                  </span>
+                </button>
+              ))}
+              {agentSearch && filteredAgents.length === 0 && (
+                <div className="px-3 py-2 text-xs text-neutral-600">无匹配的 Agent</div>
+              )}
+            </div>
+          )}
+        </div>
         <button onClick={handleCompress} className="flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm text-neutral-300 hover:text-neutral-100">
           <Archive size={14} /> 压缩记忆
         </button>

@@ -100,8 +100,10 @@ async def run_single(
     await pause_evt.wait()
 
     # ── 构建记忆上下文（长期摘要 + 近期窗口 + 相关性检索）──
+    # 根据 Agent 的 config_mode 决定使用全局记忆还是单独记忆
+    mem_agent_key = "__global__" if agent.config_mode == "global" else agent.name
     memory_ctx = await memory_manager.build_context(
-        user_id, agent.name, query=user_input, memory_strength=agent.memory_strength
+        user_id, mem_agent_key, query=user_input, memory_strength=agent.memory_strength
     )
     # ── RAG 检索（Agent 开启 enable_rag 时）──
     rag_ctx = ""
@@ -147,7 +149,7 @@ async def run_single(
         # ── 提交本轮记忆（git 式）──
         try:
             await memory_manager.add_turn(
-                user_id, agent.name,
+                user_id, mem_agent_key,
                 [
                     {"role": "user", "content": user_input},
                     {"role": "assistant", "content": result},
