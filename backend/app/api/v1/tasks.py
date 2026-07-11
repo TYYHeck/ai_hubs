@@ -125,9 +125,11 @@ async def get_task_detail(
         ar = await session.execute(agent_stmt)
         agents_info = [{"id": a.id, "name": a.name, "model": a.model} for a in ar.scalars().all()]
 
-    detail = task.to_dict()
+    detail = task.to_dict(full=True)
     detail["events"] = [e.to_dict() for e in events]
     detail["agents"] = agents_info
+    # 附加任务产出的文件列表
+    detail["output_files"] = task.metadata_.get("output_files", [])
     return detail
 
 

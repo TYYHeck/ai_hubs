@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -127,6 +128,25 @@ async def get_tree(current_user: User = Depends(get_current_user)):
             "quota": _USER_QUOTA_BYTES,
         },
     }
+
+
+@router.get("/files/download")
+async def download_file(
+    path: str = "",
+    current_user: User = Depends(get_current_user),
+):
+    """下载工作区文件（二进制流，支持 pptx/docx/xlsx/pdf 等）。"""
+    root = _workspace_root(current_user.id)
+    target = _resolve_safe(root, path)
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    if target.is_dir():
+        raise HTTPException(status_code=400, detail="目标是目录，无法下载")
+    return FileResponse(
+        path=str(target),
+        filename=target.name,
+        media_type="application/octet-stream",
+    )
 
 
 @router.get("/file")

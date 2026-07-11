@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight, Sparkles, Brain } from 'lucide-react'
+import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight, Sparkles, Brain, FileText, Download } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { api } from '../api/client'
 
 interface TaskData {
@@ -7,6 +9,7 @@ interface TaskData {
   mode: string; priority: number; assigned_agent: string | null
   think_depth: number; think_visibility: string
   result: string | null; error: string | null
+  output_files?: { path: string; name: string; size: number; is_new: boolean; ext: string }[]
   created_at: string | null; started_at: string | null; finished_at: string | null
 }
 
@@ -262,7 +265,18 @@ export default function TasksPage() {
                       <p className="text-gray-600 text-[11px] mt-1">指派: {t.assigned_agent}</p>
                     )}
                     {t.result && (
-                      <p className="text-gray-400 text-xs mt-1 line-clamp-2 bg-black/20 rounded p-2">{t.result.slice(0, 200)}</p>
+                      <div className="text-xs mt-1 line-clamp-3 bg-black/20 rounded p-2 prose prose-invert prose-xs max-w-none overflow-hidden"
+                        style={{ maxHeight: '4.5em' }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {t.result}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                    {t.output_files && t.output_files.length > 0 && (
+                      <div className="flex items-center gap-1 mt-1 text-[11px] text-green-400">
+                        <FileText size={11} />
+                        {t.output_files.length} 个产出文件
+                      </div>
                     )}
                     {t.error && (
                       <p className="text-red-400 text-xs mt-1 bg-red-500/10 rounded p-2">{t.error}</p>
@@ -299,7 +313,7 @@ export default function TasksPage() {
                 {/* 展开详情 */}
                 {expandedId === t.id && (
                   <div className="px-4 pb-4 border-t border-white/5 pt-3">
-                    <div className="grid grid-cols-4 gap-3 text-xs text-gray-500">
+                    <div className="grid grid-cols-4 gap-3 text-xs text-gray-500 mb-4">
                       <div><span className="text-gray-600">模式</span><br />{t.mode}</div>
                       <div><span className="text-gray-600">优先级</span><br />{t.priority}</div>
                       <div><span className="text-gray-600">思考深度</span><br />{t.think_depth}</div>
@@ -309,6 +323,40 @@ export default function TasksPage() {
                       <div><span className="text-gray-600">完成</span><br />{t.finished_at?.slice(0, 16) || '-'}</div>
                       <div><span className="text-gray-600">ID</span><br />{t.id}</div>
                     </div>
+                    {/* 产出文件 */}
+                    {t.output_files && t.output_files.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-xs text-gray-500 font-medium mb-2 flex items-center gap-1">
+                          <FileText size={12} /> 产出文件 ({t.output_files.length})
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {t.output_files.map((f, i) => (
+                            <a key={i}
+                              href={`/api/v1/ide/files/download?path=${encodeURIComponent(f.path)}`}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-green-300 text-xs hover:bg-green-500/20 transition-colors"
+                            >
+                              <Download size={12} />
+                              <span>{f.name}</span>
+                              <span className="text-green-600">{f.is_new ? '新' : ''}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* 完整结果 - Markdown 渲染 */}
+                    {t.result && (
+                      <div className="mb-3">
+                        <div className="text-xs text-gray-500 font-medium mb-2">执行结果</div>
+                        <div className="prose prose-invert prose-sm max-w-none bg-black/20 rounded-lg p-4 overflow-auto max-h-96">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {t.result}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                    {t.error && (
+                      <div className="text-xs text-red-400 bg-red-500/10 rounded p-3">{t.error}</div>
+                    )}
                   </div>
                 )}
               </div>

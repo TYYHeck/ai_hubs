@@ -2,7 +2,9 @@
 // 实时显示任务流程 + 当前正在工作的 Agent
 
 import { useEffect, useRef, useState } from 'react'
-import { ListTodo, X, Play, Pause, RotateCw, Trash2, Bot, Loader2, ChevronRight, Activity } from 'lucide-react'
+import { ListTodo, X, Play, Pause, RotateCw, Trash2, Bot, Loader2, ChevronRight, Activity, FileText, Download } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { api } from '../../api/client'
 import { getToken } from '../../api/client'
 
@@ -40,6 +42,7 @@ interface TaskItem {
   assigned_agent: string | null
   result: string | null
   error: string | null
+  output_files?: { path: string; name: string; size: number; is_new: boolean; ext: string }[]
   created_at: string | null
   started_at: string | null
   finished_at: string | null
@@ -173,7 +176,16 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 </div>
               )}
               {t.result && (
-                <p className="text-xs text-neutral-400 line-clamp-3 bg-black/20 rounded p-2 mt-1">{t.result.slice(0, 300)}</p>
+                <div className="text-xs text-neutral-400 line-clamp-3 bg-black/20 rounded p-2 mt-1 prose prose-invert prose-xs max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {t.result}
+                  </ReactMarkdown>
+                </div>
+              )}
+              {t.output_files && t.output_files.length > 0 && (
+                <div className="flex items-center gap-1 mt-1 text-[10px] text-green-400">
+                  <FileText size={10} /> {t.output_files.length} 个产出文件
+                </div>
               )}
               <div className="flex items-center gap-1 mt-2">
                 {t.status === 'pending' && (

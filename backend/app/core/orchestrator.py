@@ -19,6 +19,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from ..database import create_session
 from ..models.agent import Agent as AgentModel
@@ -33,6 +34,15 @@ logger = logging.getLogger("ai_hubs.orchestrator")
 # 运行中的任务（内存跟踪，支持暂停/恢复）
 _active_tasks: dict[str, asyncio.Event] = {}  # task_id -> pause_event
 
+# 任务产出文件扩展名（会展示给用户下载）
+_OUTPUT_EXTENSIONS = {
+    ".pptx", ".docx", ".xlsx", ".pdf", ".png", ".jpg", ".jpeg", ".gif",
+    ".svg", ".html", ".csv", ".json", ".txt", ".md", ".py", ".js", ".zip",
+}
+
+# 扫描前快照（用于检测新增文件）
+_pre_scan_snapshots: dict[int, set] = {}  # user_id -> 执行前文件集合
+
 
 def get_pause_event(task_id: str) -> asyncio.Event:
     """获取任务的暂停事件（不存在则创建）"""
@@ -40,6 +50,54 @@ def get_pause_event(task_id: str) -> asyncio.Event:
         _active_tasks[task_id] = asyncio.Event()
         _active_tasks[task_id].set()  # 初始不暂停
     return _active_tasks[task_id]
+
+
+async def _snapshot_workspace(user_id: int) -> set:
+    """获取用户工作区当前所有文件路径的快照"""
+    from .sandbox import list_files as sandbox_list
+    result = sandbox_list(".", user_id)
+    paths = set()
+    if result.get("ok"):
+        for entry in result.get("entries", []):
+            if entry.get("type") == "file":
+                paths.add(entry.get("path", ""))
+    return paths
+
+
+async def _collect_output_files(user_id: int) -> list[dict]:
+    """任务执行后的产出文件列表（新增 + 已知类型文件）"""
+    from .sandbox import list_files as sandbox_list
+
+    result = sandbox_list(".", user_id)
+    if not result.get("ok"):
+        return []
+
+    prev = _pre_scan_snapshots.pop(user_id, set())
+    current = set()
+    outputs = []
+
+    for entry in result.get("entries", []):
+        if entry.get("type") != "file":
+            continue
+        path = entry.get("path", "")
+        name = entry.get("name", "")
+        size = entry.get("size", 0)
+        current.add(path)
+
+        ext = Path(name).suffix.lower() if name else ""
+        is_new = path not in prev
+        is_artifact = ext in _OUTPUT_EXTENSIONS
+
+        if is_new or is_artifact:
+            outputs.append({
+                "path": path,
+                "name": name,
+                "size": size,
+                "is_new": is_new,
+                "ext": ext,
+            })
+
+    return outputs
 
 
 async def _emit_event(session, task_id: str, event: str, data: dict = None, *, event_queue: asyncio.Queue = None):
@@ -94,13 +152,17 @@ async def run_single(
     user_input: str,
     event_queue: asyncio.Queue,
     user_id: int,
+    enable_tools: bool = True,
 ) -> str:
-    """单 Agent 模式（含记忆上下文 + RAG 注入 + 记忆提交）"""
+    """单 Agent 模式（含记忆上下文 + RAG 注入 + 工具调用 + 记忆提交）。
+
+    enable_tools=True 时 Agent 可通过 Function Calling 执行代码、
+    读写文件，从而生成 PPT/文档等实际产出。
+    """
     pause_evt = get_pause_event(task_id)
     await pause_evt.wait()
 
     # ── 构建记忆上下文（长期摘要 + 近期窗口 + 相关性检索）──
-    # 根据 Agent 的 config_mode 决定使用全局记忆还是单独记忆
     mem_agent_key = "__global__" if agent.config_mode == "global" else agent.name
     memory_ctx = await memory_manager.build_context(
         user_id, mem_agent_key, query=user_input, memory_strength=agent.memory_strength
@@ -121,7 +183,6 @@ async def run_single(
     system_content = "\n\n".join(system_parts) or "你是一个 AI 助手。"
 
     messages = [{"role": "system", "content": system_content}]
-    # 注入近期记忆（非 system 角色）作为上下文
     for m in memory_ctx:
         if m.get("role") != "system":
             messages.append({"role": m["role"], "content": m["content"]})
@@ -129,24 +190,25 @@ async def run_single(
 
     await _emit_event(None, task_id, "agent_start",
                       {"agent": agent.name, "provider": agent.provider, "model": agent.model,
-                       "memory_entries": len(memory_ctx), "rag": bool(rag_ctx)},
+                       "memory_entries": len(memory_ctx), "rag": bool(rag_ctx),
+                       "tools_enabled": enable_tools},
                       event_queue=event_queue)
 
-    full = []
     try:
-        async for chunk in llm_manager.stream_chat(
-            messages,
-            model=agent.model,
-        ):
-            await pause_evt.wait()  # 暂停检查
-            full.append(chunk)
+        if enable_tools:
+            result = await _run_with_tools(
+                task_id, agent, messages, user_id, pause_evt, event_queue
+            )
+        else:
+            result = await _run_text_only(
+                task_id, agent, messages, pause_evt, event_queue
+            )
 
-        result = "".join(full)
         await _emit_event(None, task_id, "agent_done",
                           {"agent": agent.name, "length": len(result)},
                           event_queue=event_queue)
 
-        # ── 提交本轮记忆（git 式）──
+        # ── 提交本轮记忆 ──
         try:
             await memory_manager.add_turn(
                 user_id, mem_agent_key,
@@ -165,6 +227,67 @@ async def run_single(
                           {"agent": agent.name, "error": str(e)},
                           event_queue=event_queue)
         raise
+
+
+async def _run_text_only(
+    task_id: str,
+    agent: AgentModel,
+    messages: list[dict],
+    pause_evt: asyncio.Event,
+    event_queue: asyncio.Queue,
+) -> str:
+    """纯文本模式（无工具调用）"""
+    full = []
+    async for chunk in llm_manager.stream_chat(messages, model=agent.model):
+        await pause_evt.wait()
+        full.append(chunk)
+    return "".join(full)
+
+
+async def _run_with_tools(
+    task_id: str,
+    agent: AgentModel,
+    messages: list[dict],
+    user_id: int,
+    pause_evt: asyncio.Event,
+    event_queue: asyncio.Queue,
+) -> str:
+    """工具调用模式：LLM 可调用 run_code / write_file 等工具完成实际工作"""
+    from .tools import TOOL_DEFINITIONS, execute_tool
+
+    text_parts: list[str] = []
+
+    async for evt in llm_manager.stream_with_tools(
+        messages=messages,
+        tools=TOOL_DEFINITIONS,
+        tool_executor=execute_tool,
+        user_id=user_id,
+        model=agent.model,
+        max_tool_rounds=10,
+    ):
+        await pause_evt.wait()
+
+        if evt["type"] == "delta":
+            text_parts.append(evt["content"])
+
+        elif evt["type"] == "tool_start":
+            await _emit_event(None, task_id, "tool_start",
+                              {"agent": agent.name, "tool": evt["name"],
+                               "summary": evt.get("summary", ""), "args": evt.get("args", {})},
+                              event_queue=event_queue)
+
+        elif evt["type"] == "tool_result":
+            # 工具结果可能很长，摘要截断
+            result_preview = (evt.get("result") or "")[:500]
+            await _emit_event(None, task_id, "tool_result",
+                              {"agent": agent.name, "tool": evt["name"],
+                               "result_preview": result_preview},
+                              event_queue=event_queue)
+
+        elif evt["type"] == "done":
+            break
+
+    return "".join(text_parts)
 
 
 async def run_sequential(
@@ -617,6 +740,12 @@ async def execute_task(
                            "input": (task.description or "")[:200]},
                           event_queue=event_queue)
 
+        # ── 执行前快照（用于检测新增文件）──
+        try:
+            _pre_scan_snapshots[user_id] = await _snapshot_workspace(user_id)
+        except Exception:
+            pass
+
         try:
             runner = MODE_RUNNERS[mode]
             extra_kw = {}
@@ -649,10 +778,19 @@ async def execute_task(
             task.result = result
             task.status = "completed"
             task.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            # ── 扫描工作区产出文件 ──
+            output_files = await _collect_output_files(user_id)
+            if output_files:
+                meta = dict(task.metadata_ or {})
+                meta["output_files"] = output_files
+                task.metadata_ = meta
+
             await session.commit()
 
             await _emit_event(session, task_id, "task_completed",
-                              {"result_length": len(result)},
+                              {"result_length": len(result),
+                               "output_files": output_files},
                               event_queue=event_queue)
 
             # 清理暂停事件

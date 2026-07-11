@@ -46,11 +46,21 @@ class Task(Base):
     events = relationship("TaskEvent", back_populates="task", cascade="all, delete-orphan",
                           order_by="TaskEvent.created_at")
 
-    def to_dict(self) -> dict:
+    def to_dict(self, full: bool = False) -> dict:
+        """序列化为前端可用字典。
+
+        full=False（列表视图）：description/result 提供摘要（前 300 / 前 800 字符）
+        full=True（详情视图）：返回完整内容，不做截断
+        """
+        desc = self.description or ""
+        res = self.result or ""
+        if not full:
+            desc = desc[:300]
+            res = res[:800]
         return {
             "id": self.id,
             "title": self.title,
-            "description": (self.description or "")[:200],
+            "description": desc,
             "status": self.status,
             "priority": self.priority,
             "tags": self.tags or [],
@@ -58,7 +68,7 @@ class Task(Base):
             "mode": self.mode,
             "think_depth": self.think_depth,
             "think_visibility": self.think_visibility,
-            "result": (self.result or "")[:500],
+            "result": res,
             "error": self.error,
             "metadata": self.metadata_ or {},
             "created_at": self.created_at.isoformat() if self.created_at else None,
