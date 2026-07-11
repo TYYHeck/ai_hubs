@@ -38,8 +38,8 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-xl font-semibold text-neutral-100 mb-1">仪表盘</h1>
-      <p className="text-sm text-neutral-500 mb-6">
+      <h1 className="text-xl font-semibold text-text-primary mb-1">仪表盘</h1>
+      <p className="text-sm text-text-muted mb-6">
         欢迎回来，{user?.username}
       </p>
 
@@ -50,10 +50,10 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-2">
               <s.icon size={18} className={s.color} />
             </div>
-            <div className="text-2xl font-bold text-neutral-100">
+            <div className="text-2xl font-bold text-text-primary">
               {s.value}
             </div>
-            <div className="text-xs text-neutral-500 mt-1">{s.label}</div>
+            <div className="text-xs text-text-muted mt-1">{s.label}</div>
           </div>
         ))}
       </div>
@@ -62,42 +62,42 @@ export default function DashboardPage() {
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-4">
           <Activity size={16} className="text-accent" />
-          <h2 className="text-sm font-medium text-neutral-200">系统状态</h2>
+          <h2 className="text-sm font-medium text-text-primary">系统状态</h2>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <div className="text-xs text-neutral-500 mb-1">版本</div>
-            <div className="text-neutral-200">{health?.version || '...'}</div>
+            <div className="text-xs text-text-muted mb-1">版本</div>
+            <div className="text-text-primary">{health?.version || '...'}</div>
           </div>
           <div>
-            <div className="text-xs text-neutral-500 mb-1">状态</div>
+            <div className="text-xs text-text-muted mb-1">状态</div>
             <div className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${
-                health?.status === 'ok' ? 'bg-green-500' : 'bg-neutral-600'
+                health?.status === 'ok' ? 'bg-green-500' : 'bg-text-dim'
               }`} />
-              <span className="text-neutral-200">{health?.status || '...'}</span>
+              <span className="text-text-primary">{health?.status || '...'}</span>
             </div>
           </div>
           <div>
-            <div className="text-xs text-neutral-500 mb-1">数据库</div>
+            <div className="text-xs text-text-muted mb-1">数据库</div>
             <div className="flex items-center gap-1.5">
-              <Database size={14} className="text-neutral-500" />
-              <span className="text-neutral-200">{health?.database || '...'}</span>
+              <Database size={14} className="text-text-muted" />
+              <span className="text-text-primary">{health?.database || '...'}</span>
             </div>
           </div>
           <div>
-            <div className="text-xs text-neutral-500 mb-1">角色</div>
-            <div className="text-neutral-200">{user?.role || '...'}</div>
+            <div className="text-xs text-text-muted mb-1">角色</div>
+            <div className="text-text-primary">{user?.role || '...'}</div>
           </div>
         </div>
       </div>
 
       {/* 提示 */}
       <div className="card p-5 mt-4 border-dashed">
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-text-secondary">
           v4.0 持续迭代中。更多功能即将推出。
         </p>
-        <p className="text-xs text-neutral-600 mt-1">
+        <p className="text-xs text-text-dim mt-1">
           对话核心 · Agent管理 · 任务编排 · 记忆系统 · 技能市场 · IDE · 多端
         </p>
       </div>
