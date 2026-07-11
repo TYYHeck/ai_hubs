@@ -324,15 +324,15 @@ export default function TasksPage() {
                 {/* 展开详情 */}
                 {expandedId === t.id && (
                   <div className="px-4 pb-4 border-t border-border pt-3">
-                    <div className="grid grid-cols-4 gap-3 text-xs text-text-muted mb-4">
-                      <div><span className="text-text-dim">模式</span><br />{t.mode}</div>
-                      <div><span className="text-text-dim">优先级</span><br />{t.priority}</div>
-                      <div><span className="text-text-dim">思考深度</span><br />{t.think_depth}</div>
-                      <div><span className="text-text-dim">思考可见</span><br />{t.think_visibility}</div>
-                      <div><span className="text-text-dim">创建</span><br />{t.created_at?.slice(0, 16) || '-'}</div>
-                      <div><span className="text-text-dim">开始</span><br />{t.started_at?.slice(0, 16) || '-'}</div>
-                      <div><span className="text-text-dim">完成</span><br />{t.finished_at?.slice(0, 16) || '-'}</div>
-                      <div><span className="text-text-dim">ID</span><br /><span className="font-mono">{t.id.slice(0, 8)}</span></div>
+                    <div className="grid grid-cols-4 gap-3 text-xs text-text-secondary mb-4">
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">模式</span><br /><span className="text-text-primary">{t.mode}</span></div>
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">优先级</span><br /><span className="text-text-primary">{t.priority}</span></div>
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">思考深度</span><br /><span className={t.think_depth > 1 ? 'text-accent font-medium' : 'text-text-primary'}>{t.think_depth}</span></div>
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">思考可见</span><br /><span className="text-text-primary">{t.think_visibility}</span></div>
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">创建</span><br /><span className="text-text-primary">{t.created_at?.slice(0, 16) || '-'}</span></div>
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">开始</span><br /><span className="text-text-primary">{t.started_at?.slice(0, 16) || '-'}</span></div>
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">完成</span><br /><span className="text-text-primary">{t.finished_at?.slice(0, 16) || '-'}</span></div>
+                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">ID</span><br /><span className="font-mono text-text-primary">{t.id.slice(0, 8)}</span></div>
                     </div>
                     {/* 产出文件 */}
                     {t.output_files && t.output_files.length > 0 && (

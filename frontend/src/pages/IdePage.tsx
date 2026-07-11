@@ -130,6 +130,7 @@ export default function IdePage() {
   const [running, setRunning] = useState(false)
   const [uploading, setUploading] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const [previewNode, setPreviewNode] = useState<FsNode | null>(null)
 
   const isLocal = mode === 'local'
 
@@ -341,7 +342,7 @@ export default function IdePage() {
         <div className="flex-1 overflow-y-auto py-1">
           {loading ? <div className="text-xs text-text-dim p-3">加载中…</div> :
             isLocal && !rootPath ? <div className="text-xs text-text-dim p-3">点击上方「打开文件夹」选择本地工作目录</div> :
-            tree ? <TreeNode node={tree} depth={0} onOpen={openFile} activePath={currentPath} onDelete={removeNode} /> :
+            tree ? <TreeNode node={tree} depth={0} onOpen={openFile} activePath={currentPath} onDelete={removeNode} onPreview={setPreviewNode} /> :
             <div className="text-xs text-text-dim p-3">
               {error ? `加载失败：${error}` : '空工作区'}
               {!isLocal && !loading && (
@@ -433,5 +434,8 @@ export default function IdePage() {
         )}
       </div>
     </div>
+    {previewNode && !isLocal && (
+      <FilePreviewModal path={previewNode.path} title={previewNode.name} onClose={() => setPreviewNode(null)} />
+    )}
   )
 }

@@ -3,9 +3,10 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, ListTodo, Package,
-  Brain, BookOpen, Database, Code2, Workflow, Shield, Settings,
+  Brain, BookOpen, Database, Code2, Workflow, Shield, Settings, LayoutTemplate,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: '仪表盘' },
@@ -28,6 +29,7 @@ const adminItems = [
 export function Sidebar() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const splitLayout = useThemeStore((s) => s.splitLayout)
 
   return (
     <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col flex-shrink-0">
@@ -60,6 +62,23 @@ export function Sidebar() {
             {item.label}
           </NavLink>
         ))}
+
+        {/* 合并视图入口（仅开启 splitLayout 时显示） */}
+        {splitLayout && (
+          <NavLink
+            to="/workspace"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                isActive
+                  ? 'text-accent bg-accent/10 border-r-2 border-accent'
+                  : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+              }`
+            }
+          >
+            <LayoutTemplate size={18} />
+            合并视图
+          </NavLink>
+        )}
 
         {/* 管理员菜单 */}
         {user?.role === 'admin' && (
