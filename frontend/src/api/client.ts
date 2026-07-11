@@ -323,6 +323,8 @@ export interface AdminUser {
   role: string
   is_active: boolean
   preferences: Record<string, unknown>
+  token_quota: number | null
+  token_used: number
   created_at: string | null
   last_login_at: string | null
 }
@@ -338,10 +340,36 @@ export interface AdminUserUpdate {
   email?: string
   role?: 'admin' | 'user'
   is_active?: boolean
+  token_quota?: number
+}
+
+// ── 后台 Agent 管理 ──
+
+export interface AdminAgent extends Agent {
+  owner_username: string
+  owner_id: number
+}
+
+export interface AdminAgentList {
+  items: AdminAgent[]
+  total: number
+  page: number
+  page_size: number
+}
+
+// ── 后台 Skill 管理 ──
+
+export interface AdminSkillList {
+  items: Skill[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export const adminApi = {
   dashboard: () => api.get<AdminDashboard>('/admin/dashboard'),
+
+  // 用户管理
   listUsers: (params?: { page?: number; page_size?: number; search?: string }) => {
     const qs = new URLSearchParams()
     if (params?.page) qs.set('page', String(params.page))
@@ -353,6 +381,41 @@ export const adminApi = {
   getUser: (id: number) => api.get<AdminUser>(`/admin/users/${id}`),
   updateUser: (id: number, data: AdminUserUpdate) => api.put<AdminUser>(`/admin/users/${id}`, data),
   deleteUser: (id: number) => api.delete(`/admin/users/${id}`),
+  setUserQuota: (id: number, token_quota: number) =>
+    api.put<AdminUser>(`/admin/users/${id}/quota`, { token_quota }),
+  resetUserUsage: (id: number) =>
+    api.post<AdminUser>(`/admin/users/${id}/reset-usage`),
+
+  // Agent 管理
+  listAgents: (params?: { page?: number; page_size?: number; search?: string; user_id?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.page_size) qs.set('page_size', String(params.page_size))
+    if (params?.search) qs.set('search', params.search)
+    if (params?.user_id) qs.set('user_id', String(params.user_id))
+    const q = qs.toString()
+    return api.get<AdminAgentList>(`/admin/agents${q ? `?${q}` : ''}`)
+  },
+  updateAgent: (id: number, data: Partial<Agent>) => api.put<AdminAgent>(`/admin/agents/${id}`, data),
+  deleteAgent: (id: number) => api.delete(`/admin/agents/${id}`),
+  copyAgent: (id: number, target_user_id: number, new_name?: string) =>
+    api.post<{ ok: boolean; agent: Agent; message: string }>(`/admin/agents/${id}/copy`, { target_user_id, new_name }),
+
+  // 技能管理
+  listSkills: (params?: { page?: number; page_size?: number; search?: string; source?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.page_size) qs.set('page_size', String(params.page_size))
+    if (params?.search) qs.set('search', params.search)
+    if (params?.source) qs.set('source', params.source)
+    const q = qs.toString()
+    return api.get<AdminSkillList>(`/admin/skills${q ? `?${q}` : ''}`)
+  },
+  createSkill: (data: Partial<Skill> & { name: string }) => api.post<Skill>('/admin/skills', data),
+  updateSkill: (id: number, data: Partial<Skill>) => api.put<Skill>(`/admin/skills/${id}`, data),
+  deleteSkill: (id: number) => api.delete(`/admin/skills/${id}`),
+  syncSkill: (id: number, action = 'refresh') => api.post<Skill>(`/admin/skills/${id}/sync`, { action }),
+  batchSyncSkills: () => api.post<{ ok: boolean; synced: number; total: number }>('/admin/skills/batch-sync'),
 }
 
 // ── IDE API ──

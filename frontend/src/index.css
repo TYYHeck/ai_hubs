@@ -92,6 +92,12 @@
            placeholder:text-neutral-600 focus:outline-none focus:border-accent transition-colors;
   }
 
+  /* 后台管理搜索框 */
+  .admin-search-input {
+    @apply bg-bg-tertiary border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-neutral-200 w-56
+           focus:outline-none focus:border-accent placeholder:text-neutral-600;
+  }
+
   /* 卡片 */
   .card {
     @apply bg-bg-secondary border border-border rounded-lg;

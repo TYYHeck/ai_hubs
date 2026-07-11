@@ -14,10 +14,17 @@ Agent 工具层 — OpenAI Function Calling 兼容的工具定义与执行调度
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import uuid
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from .sandbox import run_code, run_terminal, read_file, write_file, list_files
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("ai_hubs.tools")
 
@@ -145,6 +152,45 @@ TOOL_DEFINITIONS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_task",
+            "description": (
+                "为用户创建一个后台异步任务。当对话内容涉及需要较长时间执行、"
+                "需要多步骤处理、或用户明确要求创建任务时调用此工具。"
+                "任务创建后会出现在用户的侧边栏任务列表中，用户可手动执行。"
+                "必须提供任务标题和描述；可选指定 Agent 名称、优先级(0-10)、标签。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "任务标题，简洁明了地描述任务目标",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "任务详细描述，包含完整的执行指令和上下文",
+                    },
+                    "agent_name": {
+                        "type": "string",
+                        "description": "建议执行此任务的 Agent 名称（可选）",
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "description": "任务优先级 0-10，默认 5",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "任务标签列表（可选）",
+                    },
+                },
+                "required": ["title", "description"],
+            },
+        },
+    },
 ]
 
 # 工具名 → 函数，方便调度
@@ -154,6 +200,7 @@ _TOOL_MAP: dict[str, callable] = {
     "read_file": read_file,
     "write_file": write_file,
     "list_files": list_files,
+    "create_task": "_create_task",  # 特殊标记，由 execute_tool 分发
 }
 
 
@@ -203,18 +250,24 @@ async def execute_tool(
     tool_name: str,
     tool_args: dict,
     user_id: int,
+    session: "AsyncSession | None" = None,
 ) -> str:
     """执行工具调用，返回 JSON 字符串结果（供 LLM 消费）。
 
-    tool_name: 工具名称（run_code / run_terminal / ...）
+    tool_name: 工具名称（run_code / run_terminal / create_task / ...）
     tool_args: 工具参数（由 LLM 生成的 JSON 对象）
     user_id: 当前用户 ID，用于隔离沙箱工作区
+    session: 数据库会话（create_task 等需要写库的工具需要）
     """
     if tool_name not in _TOOL_MAP:
         return json.dumps({"error": f"未知工具: {tool_name}"}, ensure_ascii=False)
 
-    fn = _TOOL_MAP[tool_name]
     try:
+        # ── create_task 特殊处理（需要数据库会话）──
+        if tool_name == "create_task":
+            return await _execute_create_task(tool_args, user_id, session)
+
+        fn = _TOOL_MAP[tool_name]
         if tool_name == "run_code":
             result = fn(
                 code=tool_args.get("code", ""),
@@ -253,6 +306,48 @@ async def execute_tool(
     except Exception as e:
         logger.exception(f"Tool [{tool_name}] failed for user {user_id}: {e}")
         return json.dumps({"error": f"工具执行异常: {e}"}, ensure_ascii=False)
+
+
+async def _execute_create_task(
+    args: dict,
+    user_id: int,
+    session: "AsyncSession | None",
+) -> str:
+    """在数据库中创建任务（由 LLM 通过 create_task 工具调用触发）。"""
+    if session is None:
+        return json.dumps({"error": "创建任务需要数据库会话，当前上下文不可用"}, ensure_ascii=False)
+
+    from ...models.task import Task
+
+    title = (args.get("title") or "").strip()
+    description = (args.get("description") or "").strip()
+    if not title:
+        return json.dumps({"error": "任务标题不能为空"}, ensure_ascii=False)
+
+    task = Task(
+        id=uuid.uuid4().hex[:12],
+        user_id=user_id,
+        title=title,
+        description=description,
+        status="pending",
+        priority=max(0, min(10, int(args.get("priority", 5) or 5))),
+        mode="auto",
+        think_depth=1,
+        think_visibility="visible",
+        assigned_agent=args.get("agent_name", ""),
+        tags=args.get("tags") or [],
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    session.add(task)
+    await session.flush()
+
+    logger.info(f"create_task 工具创建任务: id={task.id} title={title!r} user={user_id}")
+    return json.dumps({
+        "ok": True,
+        "task_id": task.id,
+        "title": title,
+        "message": f"任务「{title}」已创建，可在侧边栏任务列表中查看和执行。",
+    }, ensure_ascii=False)
 
 
 def should_enable_tools(skills: list[str]) -> bool:

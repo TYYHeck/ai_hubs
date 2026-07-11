@@ -34,6 +34,7 @@ from ...core.memory import _estimate_tokens
 from ...core.tools import (
     TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT, should_enable_tools, execute_tool,
 )
+from functools import partial
 from ...config import DATA_DIR
 
 # 可直接读取注入到消息中的文本文件扩展名
@@ -428,7 +429,7 @@ async def chat_stream(
                 async for event in llm_manager.stream_with_tools(
                     messages=messages,
                     tools=TOOL_DEFINITIONS,
-                    tool_executor=execute_tool,
+                    tool_executor=partial(execute_tool, session=session),
                     user_id=current_user.id,
                     model=req.model or None,
                     user_config=llm_config,

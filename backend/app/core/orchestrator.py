@@ -153,6 +153,7 @@ async def run_single(
     event_queue: asyncio.Queue,
     user_id: int,
     enable_tools: bool = True,
+    session: "AsyncSession | None" = None,
 ) -> str:
     """单 Agent 模式（含记忆上下文 + RAG 注入 + 工具调用 + 记忆提交）。
 
@@ -197,7 +198,7 @@ async def run_single(
     try:
         if enable_tools:
             result = await _run_with_tools(
-                task_id, agent, messages, user_id, pause_evt, event_queue
+                task_id, agent, messages, user_id, pause_evt, event_queue, session=session
             )
         else:
             result = await _run_text_only(
@@ -251,8 +252,10 @@ async def _run_with_tools(
     user_id: int,
     pause_evt: asyncio.Event,
     event_queue: asyncio.Queue,
+    session: "AsyncSession | None" = None,
 ) -> str:
     """工具调用模式：LLM 可调用 run_code / write_file 等工具完成实际工作"""
+    from functools import partial
     from .tools import TOOL_DEFINITIONS, execute_tool
 
     text_parts: list[str] = []
@@ -260,7 +263,7 @@ async def _run_with_tools(
     async for evt in llm_manager.stream_with_tools(
         messages=messages,
         tools=TOOL_DEFINITIONS,
-        tool_executor=execute_tool,
+        tool_executor=partial(execute_tool, session=session),
         user_id=user_id,
         model=agent.model,
         max_tool_rounds=10,
@@ -764,6 +767,7 @@ async def execute_task(
                     user_input=task.description or "",
                     event_queue=event_queue,
                     user_id=user_id,
+                    session=session,
                 )
             else:
                 result = await runner(
