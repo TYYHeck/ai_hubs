@@ -32,7 +32,12 @@ from ..deps import get_current_user
 from ...core.llm import llm_manager, get_llm_config, save_llm_config, PROVIDERS
 from ...core.memory import _estimate_tokens
 from ...core.tools import (
-    TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT, should_enable_tools, execute_tool,
+    TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT,
+    should_enable_tools, should_enable_code_tools, execute_tool, get_tool_summary,
+)
+from ...core.internal_tools import (
+    INTERNAL_API_TOOL, USER_INPUT_TOOL,
+    execute_internal_api, build_interactive_event,
 )
 from functools import partial
 from ...config import DATA_DIR
@@ -404,36 +409,53 @@ async def chat_stream(
             )
             messages.append({"role": "user", "content": resolved_message})
     
-            # 3.1 判断是否启用 Agent 工具调用（基于用户选用的技能）
-            tools_enabled = should_enable_tools(req.skills or [])
-            if tools_enabled:
-                # 注入工具系统提示（合并到第一条 system message 或追加）
+            # 3.1 构建工具列表：内部工具始终可用，代码执行工具按技能启用
+            code_tools_enabled = should_enable_code_tools(req.skills or [])
+            
+            # 基础工具：始终包含内部 API 调用 + 用户交互工具
+            active_tools = [INTERNAL_API_TOOL, USER_INPUT_TOOL]
+            
+            # 代码执行工具：仅选用代码类技能时附加
+            if code_tools_enabled:
+                active_tools = TOOL_DEFINITIONS + active_tools
+                # 注入代码工具系统提示
                 if messages and messages[0]["role"] == "system":
                     messages[0]["content"] = messages[0]["content"] + "\n\n" + TOOL_SYSTEM_PROMPT
                 else:
                     messages.insert(0, {"role": "system", "content": TOOL_SYSTEM_PROMPT})
+            
+            # 注入内部工具系统提示
+            internal_prompt = _build_internal_tools_prompt()
+            if messages and messages[0]["role"] == "system":
+                messages[0]["content"] = messages[0]["content"] + "\n\n" + internal_prompt
+            else:
+                messages.insert(0, {"role": "system", "content": internal_prompt})
     
             # 4. 发送开始事件
             yield _sse({
                 "event": "start",
                 "conversation_id": conv_id,
-                "tools_enabled": tools_enabled,
+                "tools_enabled": True,
+                "code_tools_enabled": code_tools_enabled,
             })
     
             # 5. 流式调用 LLM
             full_response = []
     
-            if tools_enabled:
-                # ── 工具调用分支：逐事件产出具象化输出 ──
-                llm_config = user_llm if using_own_key else None
-                async for event in llm_manager.stream_with_tools(
-                    messages=messages,
-                    tools=TOOL_DEFINITIONS,
-                    tool_executor=partial(execute_tool, session=session),
-                    user_id=current_user.id,
-                    model=req.model or None,
-                    user_config=llm_config,
-                ):
+            # 提取 JWT token 用于内部 API 调用
+            auth_header = request.headers.get("Authorization", "")
+            user_token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    
+            # ── 工具调用分支：逐事件产出具象化输出 ──
+            llm_config = user_llm if using_own_key else None
+            async for event in llm_manager.stream_with_tools(
+                messages=messages,
+                tools=active_tools,
+                tool_executor=partial(_execute_any_tool, session=session, user_token=user_token),
+                user_id=current_user.id,
+                model=req.model or None,
+                user_config=llm_config,
+            ):
                     if await request.is_disconnected():
                         break
     
@@ -458,16 +480,21 @@ async def chat_stream(
                         # 工具结果也追加到 full_response（作为对话上下文展示）
                         tool_label = f"\n[工具: {event.get('name', '')}]\n{event.get('result', '')}\n"
                         full_response.append(tool_label)
+                    elif etype == "interactive":
+                        # 用户交互事件：转发给前端渲染
+                        yield _sse({
+                            "event": "interactive",
+                            "interaction_type": event.get("interaction_type", ""),
+                            "interaction_id": event.get("interaction_id", ""),
+                            "title": event.get("title", ""),
+                            "message": event.get("message", ""),
+                            "options": event.get("options", []),
+                            "fields": event.get("fields", []),
+                            "confirm_text": event.get("confirm_text", "确认"),
+                            "cancel_text": event.get("cancel_text", "取消"),
+                        })
                     elif etype == "done":
                         break  # 正常结束
-            else:
-                # ── 无工具分支：纯文本流式（原逻辑）──
-                llm_config = user_llm if using_own_key else None
-                async for chunk in llm_manager.stream_chat(messages, model=req.model or None, user_config=llm_config):
-                    if await request.is_disconnected():
-                        break
-                    full_response.append(chunk)
-                    yield _sse({"event": "delta", "content": chunk})
     
             # 6. 保存 AI 回复
             ai_msg = Message(
@@ -646,6 +673,102 @@ def _sse(data: dict) -> str:
 
 
 # ═══════════════════════════════════════════════════════════
+# 统一工具执行调度（内部 API + 代码执行 + 用户交互）
+# ═══════════════════════════════════════════════════════════
+
+async def _execute_any_tool(
+    tool_name: str,
+    tool_args: dict,
+    user_id: int,
+    session: "AsyncSession | None" = None,
+    user_token: str = "",
+) -> str:
+    """统一工具调度：分发到内部 API 执行器、代码执行器或用户交互构建器。"""
+    import json as _json
+
+    # ── 内部 API 调用 ──
+    if tool_name == "call_internal_api":
+        return await execute_internal_api(
+            method=tool_args.get("method", "GET"),
+            path=tool_args.get("path", ""),
+            user_token=user_token,
+            body=tool_args.get("body"),
+            query=tool_args.get("query"),
+            reason=tool_args.get("reason", ""),
+        )
+
+    # ── 用户交互请求 ──
+    if tool_name == "request_user_input":
+        event = build_interactive_event(
+            interaction_type=tool_args.get("interaction_type", "confirm"),
+            title=tool_args.get("title", ""),
+            message=tool_args.get("message", ""),
+            options=tool_args.get("options"),
+            fields=tool_args.get("fields"),
+            confirm_text=tool_args.get("confirm_text", "确认"),
+            cancel_text=tool_args.get("cancel_text", "取消"),
+        )
+        return _json.dumps({
+            "ok": True,
+            "interactive": event,
+            "message": f"已向用户发起交互请求: {tool_args.get('title', '')}",
+        }, ensure_ascii=False)
+
+    # ── 代码执行 / 任务创建（走原有 tools.py 调度）──
+    return await execute_tool(tool_name, tool_args, user_id, session)
+
+
+def _build_internal_tools_prompt() -> str:
+    """构建内部平台工具的系统提示词，告诉 LLM 可以使用 call_internal_api 完成平台操作。"""
+    return """# 🔴 平台内部操作能力
+
+你现在拥有直接操作 AI集群 平台的能力。你可以：
+
+## call_internal_api — 调用平台内部 API
+
+直接调用平台 REST API 完成以下操作：
+
+| 分类 | 操作示例 |
+|------|----------|
+| **Agent 管理** | 创建 Agent、列出 Agent、修改/删除 Agent、AI 分析推荐配置 |
+| **任务管理** | 创建任务、列出任务、执行/暂停/恢复任务 |
+| **技能管理** | 安装/卸载技能、搜索 GitHub 技能市场 |
+| **LLM 配置** | 查看/修改用户的 LLM 配置（API Key、模型等） |
+| **用户设置** | 修改用户偏好（主题、字体等，通过 preferences 字段） |
+| **数据集** | 创建/管理数据集和记录 |
+| **记忆** | 提交/召回/回滚记忆 |
+| **对话** | 创建/列出/删除对话 |
+
+## request_user_input — 向用户询问信息
+
+当需要用户确认或选择时，使用此工具发起交互：
+- confirm：确认框（如「确定要删除这个 Agent 吗？」）
+- select：单选（如「请选择配置模式：快速配置 / 详细配置」）
+- multi_select：多选（如「请选择要启用的技能」）
+- form：表单（如「请填写 Agent 的名称和描述」）
+
+## 🔴 使用原则（非常重要）
+
+1. **主动调用**：用户说「创建 PPT」「做个 Agent」「修改主题」时，**直接调用内部 API 完成操作**，不要只说「你可以去XX页面操作」
+2. **交互式确认**：操作前先向用户说明你要做什么，涉及重要操作（删除、修改）先用 request_user_input 确认
+3. **缺少信息时提问**：如果用户指令模糊（如只说「创建智能体」没给名字），用 request_user_input 询问缺失参数
+4. **操作后告知结果**：API 调用完成后，向用户报告操作结果（成功/失败/创建了什么）
+5. **PPT 生成**：用户说需要 PPT 时，先询问主题和内容要求，然后通过 call_internal_api 创建 PPT 相关任务，同时在沙箱中可以用 python-pptx 生成 .pptx 文件
+6. **主题/字体设置**：用户说修改主题/字体时，通过 call_internal_api PUT /api/v1/auth/me 的 preferences 字段存储设置
+7. **创建 Agent**：用户说要创建智能体时，先收集名称和描述，再用 call_internal_api POST /api/v1/agents 创建
+
+## API 路径速查
+
+- 创建 Agent：`POST /api/v1/agents` body: {name, description?, setup_mode?("quick"|"detailed"), skills?, ...}
+- 列出 Agent：`GET /api/v1/agents`
+- 创建任务：`POST /api/v1/tasks` body: {title, description?, mode?, ...}
+- 修改 LLM 配置：`POST /api/v1/llm/config` body: {provider, model, api_key?, ...}
+- 用户偏好：`PUT /api/v1/auth/me` body: {preferences: {theme?, font_size?, ...}}
+- 安装技能：`POST /api/v1/skills/{id}/install`
+- GitHub 技能搜索：`GET /api/v1/skills/market/github?q=关键词`"""
+
+
+# ═══════════════════════════════════════════════════════════
 # 默认 System Prompt 构建
 # ═══════════════════════════════════════════════════════════
 
@@ -659,6 +782,11 @@ _SKILL_COMMANDS: dict[str, list[str]] = {
     "run-js":     ["/js", "/node"],
     "run-bash":   ["/bash", "/终端"],
     "coding":     ["/code"],
+    "agent":      ["/agent", "/智能体", "/create-agent"],
+    "task":       ["/task", "/任务"],
+    "theme":      ["/theme", "/主题", "/font", "/字体"],
+    "skill":      ["/skill", "/技能"],
+    "setting":    ["/setting", "/设置"],
 }
 
 

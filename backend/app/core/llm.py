@@ -343,6 +343,16 @@ class LLMManager:
                     "content": result_str,
                 })
 
+                # request_user_input 的结果中可能包含交互事件，提取并转发
+                if tool_name == "request_user_input":
+                    try:
+                        parsed = json.loads(result_str)
+                        interactive = parsed.get("interactive")
+                        if interactive and isinstance(interactive, dict):
+                            yield {"type": "interactive", **interactive}
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
         # 超过最大轮次，结束
         yield {"type": "done"}
 

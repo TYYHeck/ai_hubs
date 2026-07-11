@@ -195,9 +195,11 @@ export default function ChatPage() {
     } else if (mCmd) {
       const frag = mCmd[3].toLowerCase()
       const pool = [
-        '/search', '/搜索', '/docx', '/word', '/xlsx', '/excel', '/表格',
-        '/pdf', '/ppt', '/幻灯片', '/run', '/python', '/js', '/node',
-        '/bash', '/终端', '/code',
+        '/ppt', '/幻灯片', '/docx', '/word', '/xlsx', '/excel', '/表格',
+        '/pdf', '/search', '/搜索', '/agent', '/智能体', '/create-agent',
+        '/task', '/任务', '/theme', '/主题', '/font', '/字体',
+        '/skill', '/技能', '/setting', '/设置',
+        '/run', '/python', '/js', '/node', '/bash', '/终端', '/code',
       ]
       const items = pool.filter(n => n.toLowerCase().includes(frag)).slice(0, 8)
       if (items.length) {
@@ -601,6 +603,159 @@ export default function ChatPage() {
   )
 }
 
+// ── 交互式组件（request_user_input 工具产出的前端渲染）──
+function InteractiveWidget({ interactive, onRespond }: {
+  interactive: NonNullable<import('../api/chat').ChatMessage['interactive']>
+  onRespond: (response: string) => void
+}) {
+  const [formValues, setFormValues] = useState<Record<string, string>>({})
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([])
+
+  const { interaction_type, title, message, options, fields, confirm_text, cancel_text } = interactive
+
+  if (interaction_type === 'confirm') {
+    return (
+      <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
+        <div className="font-medium text-neutral-100 mb-1">{title}</div>
+        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="flex gap-2">
+          <button onClick={() => onRespond('确认')}
+            className="px-4 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent/80 transition-colors">
+            {confirm_text}
+          </button>
+          <button onClick={() => onRespond('取消')}
+            className="px-4 py-1.5 rounded text-xs font-medium border border-border text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 transition-colors">
+            {cancel_text}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (interaction_type === 'select' && options) {
+    return (
+      <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
+        <div className="font-medium text-neutral-100 mb-1">{title}</div>
+        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {options.map((opt) => (
+            <button key={opt.value} onClick={() => onRespond(opt.value)}
+              className="text-left px-3 py-2 rounded text-xs border border-border text-neutral-300 hover:border-accent/50 hover:text-accent hover:bg-accent/5 transition-colors">
+              <span className="font-medium">{opt.label}</span>
+              {opt.description && <span className="text-neutral-500 ml-2">{opt.description}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (interaction_type === 'multi_select' && options) {
+    const toggleOption = (value: string) => {
+      setSelectedOptions(prev =>
+        prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+      )
+    }
+    return (
+      <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
+        <div className="font-medium text-neutral-100 mb-1">{title}</div>
+        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {options.map((opt) => (
+            <label key={opt.value}
+              className={`flex items-center gap-2 px-3 py-2 rounded text-xs border cursor-pointer transition-colors ${
+                selectedOptions.includes(opt.value)
+                  ? 'border-accent/50 text-accent bg-accent/5'
+                  : 'border-border text-neutral-400 hover:border-neutral-500'
+              }`}>
+              <input type="checkbox" checked={selectedOptions.includes(opt.value)}
+                onChange={() => toggleOption(opt.value)} className="sr-only" />
+              <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                selectedOptions.includes(opt.value) ? 'bg-accent border-accent' : 'border-neutral-600'
+              }`}>
+                {selectedOptions.includes(opt.value) && <Check size={10} className="text-white" />}
+              </div>
+              <span>{opt.label}</span>
+            </label>
+          ))}
+        </div>
+        <button onClick={() => onRespond(selectedOptions.join(', '))}
+          disabled={selectedOptions.length === 0}
+          className="px-4 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+          确认选择 ({selectedOptions.length})
+        </button>
+      </div>
+    )
+  }
+
+  if (interaction_type === 'form' && fields) {
+    const handleSubmit = () => {
+      const parts = fields.map(f => `${f.label}: ${formValues[f.name] || '(未填)'}`)
+      onRespond(parts.join('；'))
+    }
+    return (
+      <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
+        <div className="font-medium text-neutral-100 mb-1">{title}</div>
+        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="flex flex-col gap-2 mb-3">
+          {fields.map((field) => (
+            <div key={field.name}>
+              <label className="block text-xs text-neutral-400 mb-1">{field.label}{field.required ? ' *' : ''}</label>
+              {field.type === 'textarea' ? (
+                <textarea value={formValues[field.name] || ''}
+                  onChange={e => setFormValues(prev => ({ ...prev, [field.name]: e.target.value }))}
+                  placeholder={field.placeholder}
+                  rows={3}
+                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 outline-none focus:border-accent/50 resize-none" />
+              ) : field.type === 'select' && field.options ? (
+                <select value={formValues[field.name] || field.default || ''}
+                  onChange={e => setFormValues(prev => ({ ...prev, [field.name]: e.target.value }))}
+                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 outline-none focus:border-accent/50">
+                  <option value="">请选择…</option>
+                  {field.options.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input type={field.type === 'password' ? 'password' : 'text'}
+                  value={formValues[field.name] || field.default || ''}
+                  onChange={e => setFormValues(prev => ({ ...prev, [field.name]: e.target.value }))}
+                  placeholder={field.placeholder}
+                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 outline-none focus:border-accent/50" />
+              )}
+            </div>
+          ))}
+        </div>
+        <button onClick={handleSubmit}
+          className="px-4 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent/80 transition-colors">
+          提交
+        </button>
+      </div>
+    )
+  }
+
+  // 未知类型
+  return (
+    <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
+      <div className="font-medium text-neutral-100">{title}</div>
+      <div className="text-neutral-400 text-xs">{message}</div>
+    </div>
+  )
+}
+
+// ── 处理交互式组件响应 ──
+function handleInteractiveResponseFn(msgIndex: number, response: string) {
+  const store = useChatStore.getState()
+  const msgs = [...store.messages]
+  const msg = msgs[msgIndex]
+  if (msg && msg.interactive) {
+    msgs[msgIndex] = { ...msg, interactive_answered: true, content: `[已回复] ${msg.interactive.title}: ${response}` }
+    store.setState({ messages: msgs })
+    // 将用户响应作为后续消息发送回对话
+    store.sendMessage(`[对询问「${msg.interactive.title}」的回复] ${response}`, undefined, undefined)
+  }
+}
+
 // ── 消息气泡（支持 agent 前缀 + 搜索高亮 + 占位符渲染 + 工具消息 + 交互提问）──
 function MessageBubble({ msg, highlight, streaming, msgIndex }: {
   msg: import('../api/chat').ChatMessage; highlight?: string; streaming: boolean; msgIndex?: number
@@ -611,6 +766,23 @@ function MessageBubble({ msg, highlight, streaming, msgIndex }: {
 
   // 工具消息：独立的紧凑渲染
   if (isTool) {
+    // 交互式组件特殊渲染
+    if (msg.interactive && !msg.interactive_answered) {
+      return (
+        <div className="flex gap-2 items-start">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-accent/20 border border-accent/40 mt-0.5">
+            <Sparkles size={12} className="text-accent" />
+          </div>
+          <InteractiveWidget
+            interactive={msg.interactive}
+            onRespond={(response) => {
+              if (msgIndex != null) handleInteractiveResponse(msgIndex, response)
+            }}
+          />
+        </div>
+      )
+    }
+
     return (
       <div className="flex gap-2 items-start">
         <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-purple-500/20 border border-purple-500/40 mt-0.5">

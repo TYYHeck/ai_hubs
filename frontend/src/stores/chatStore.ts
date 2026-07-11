@@ -208,6 +208,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     if (r.stdout) resultDisplay = r.stdout.slice(0, 1000)
                     else if (r.ok !== undefined) resultDisplay = r.ok ? `✅ ${evt.name} 完成` : `❌ ${r.error || '失败'}`
                     else if (r.error) resultDisplay = `❌ ${r.error}`
+                    else if (r.message) resultDisplay = r.message
                     else resultDisplay = evt.result?.slice(0, 500) || ''
                   } catch {
                     resultDisplay = evt.result?.slice(0, 500) || ''
@@ -216,13 +217,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     ...msgs[i],
                     tool_pending: false,
                     tool_result: resultDisplay,
-                    content: `[${evt.name}] 已完成`,
+                    content: `[${evt.name}] ${resultDisplay}`,
                   }
                   return { messages: msgs }
                 }
               }
               return { messages: msgs }
             })
+            break
+          case 'interactive':
+            // 插入交互式组件消息
+            set((state) => ({
+              messages: [...state.messages, {
+                role: 'tool' as const,
+                content: `[询问] ${evt.title}`,
+                tool_name: 'request_user_input',
+                tool_summary: evt.title,
+                tool_pending: false,
+                interactive: {
+                  interaction_id: evt.interaction_id || '',
+                  interaction_type: evt.interaction_type || 'confirm',
+                  title: evt.title || '',
+                  message: evt.message || '',
+                  options: evt.options || [],
+                  fields: evt.fields || [],
+                  confirm_text: evt.confirm_text || '确认',
+                  cancel_text: evt.cancel_text || '取消',
+                },
+                interactive_answered: false,
+              }],
+            }))
             break
           case 'done':
             // 解析最后一条 assistant 消息中的 <ask> 标签

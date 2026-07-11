@@ -25,9 +25,21 @@ export interface ChatMessage {
   tool_summary?: string
   tool_result?: string
   tool_pending?: boolean  // 工具正在执行
-  // 交互式提问
+  // 交互式提问（<ask> 标签）
   ask_data?: AskQuestion[]     // 从 <ask> 标签中解析出的问题
   ask_answered?: boolean       // 用户是否已回答
+  // 交互式组件（request_user_input 工具）
+  interactive?: {
+    interaction_id: string
+    interaction_type: 'confirm' | 'select' | 'multi_select' | 'form'
+    title: string
+    message: string
+    options?: { label: string; value: string; description?: string }[]
+    fields?: { name: string; label: string; type: string; placeholder?: string; required?: boolean; options?: { label: string; value: string }[]; default?: string }[]
+    confirm_text?: string
+    cancel_text?: string
+  }
+  interactive_answered?: boolean
 }
 
 export interface Conversation {

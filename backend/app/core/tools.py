@@ -353,7 +353,16 @@ async def _execute_create_task(
 def should_enable_tools(skills: list[str]) -> bool:
     """判断是否应为当前对话启用 agent 工具调用。
 
-    当用户选用列表中任一 skill 匹配 EXECUTABLE_SKILLS 集时返回 True。
+    始终返回 True —— 内部工具（call_internal_api、request_user_input）
+    对所有对话都可用；代码执行工具仅在选用 EXECUTABLE_SKILLS 时附加。
+    """
+    return True
+
+
+def should_enable_code_tools(skills: list[str]) -> bool:
+    """判断是否应附加代码执行类工具（run_code/run_terminal/read_file/write_file/list_files）。
+
+    仅当用户选用列表中任一 skill 匹配 EXECUTABLE_SKILLS 集时返回 True。
     """
     if not skills:
         return False
@@ -381,4 +390,13 @@ def get_tool_summary(tool_name: str, tool_args: dict) -> str:
     elif tool_name == "list_files":
         p = tool_args.get("path", "") or "."
         return f"列出目录: {p}"
+    elif tool_name == "call_internal_api":
+        reason = tool_args.get("reason", "")
+        method = tool_args.get("method", "")
+        path = tool_args.get("path", "")
+        return f"内部调用: {method} {path} — {reason}"
+    elif tool_name == "request_user_input":
+        itype = tool_args.get("interaction_type", "")
+        title = tool_args.get("title", "")
+        return f"询问用户: [{itype}] {title}"
     return f"调用 {tool_name}"

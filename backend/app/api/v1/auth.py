@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
-"""认证路由 — 注册/登录/验证码"""
+"""认证路由 — 注册/登录/验证码 + 用户偏好更新"""
 
 from __future__ import annotations
 
+from typing import Any, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...database import get_session
@@ -18,6 +21,13 @@ from ..deps import get_current_user
 from ...models.user import User
 
 router = APIRouter(prefix="/auth", tags=["认证"])
+
+
+class UpdateMeRequest(BaseModel):
+    """更新当前用户信息的请求体"""
+    username: Optional[str] = None
+    email: Optional[str] = None
+    preferences: Optional[dict[str, Any]] = None
 
 
 @router.post("/send-code")
@@ -78,4 +88,32 @@ async def login(req: LoginRequest, session: AsyncSession = Depends(get_session))
 @router.get("/me")
 async def me(current_user: User = Depends(get_current_user)):
     """获取当前用户信息"""
+    return {"ok": True, "user": current_user.to_dict()}
+
+
+@router.put("/me")
+async def update_me(
+    req: UpdateMeRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """更新当前用户信息（用户名、邮箱、偏好设置等）"""
+    if req.username is not None and req.username != current_user.username:
+        if err := validate_username(req.username):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"用户名: {err}")
+        current_user.username = req.username
+
+    if req.email is not None and req.email != current_user.email:
+        if err := validate_email(req.email):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"邮箱: {err}")
+        current_user.email = req.email
+
+    if req.preferences is not None:
+        # 合并偏好（而非覆盖），保留已有的其他偏好
+        existing = dict(current_user.preferences or {})
+        existing.update(req.preferences)
+        current_user.preferences = existing
+
+    await session.commit()
+    await session.refresh(current_user)
     return {"ok": True, "user": current_user.to_dict()}
