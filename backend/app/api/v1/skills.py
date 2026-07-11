@@ -52,6 +52,83 @@ async def list_skills(
     return [SkillResponse.model_validate(s.to_dict()).model_dump() for s in skills]
 
 
+# ── GitHub 市场（须置于 /{skill_id} 动态路由之前，避免被其截获）──
+
+@router.get("/market/github", response_model=GithubMarketResponse)
+async def market_github(
+    q: str = "ai agent skill",
+    page: int = 1,
+    current_user: User = Depends(get_current_user),
+):
+    """检索 GitHub 仓库作为潜在技能。网络不可用时返回 error 提示。"""
+    result = await search_github(q, page=page)
+    return GithubMarketResponse(
+        query=q,
+        total=result["total"],
+        items=result["items"],
+        error=result["error"],
+    )
+
+
+@router.post("/market/install")
+async def market_install(
+    body: GithubInstallRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """从 GitHub 安装技能：拉取代码并落库（source=github）。"""
+    try:
+        payload = await install_github_skill(
+            full_name=body.full_name,
+            html_url=body.html_url,
+            description=body.description,
+            branch=body.branch,
+            path=body.path,
+            category=body.category,
+        )
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"安装失败: {e}")
+
+    # 幂等去重：同名 github 技能仅保留一条，重复安装即更新其内容
+    existing = (await session.execute(
+        select(Skill).where(Skill.source == "github", Skill.name == payload["name"])
+    )).scalars().all()
+
+    if existing:
+        # 优先复用已安装的那条；否则复用第一条
+        skill = next((s for s in existing if s.is_installed), existing[0])
+        for k, v in payload.items():
+            if k in ("source", "entry"):
+                continue
+            setattr(skill, k, v)
+        skill.config = {**(skill.config or {}), "entry": payload["entry"], "code": payload["code"]}
+        skill.is_installed = True
+        from datetime import datetime
+        skill.installed_at = datetime.utcnow()
+        # 删除同名的其它重复记录，避免列表出现多个相同卡片
+        for dup in existing:
+            if dup.id != skill.id:
+                await session.delete(dup)
+    else:
+        skill = Skill(
+            name=payload["name"],
+            description=payload["description"],
+            category=payload["category"],
+            source="github",
+            github_url=payload["github_url"],
+            version=payload["version"],
+            config={**(payload["config"] or {}), "entry": payload["entry"], "code": payload["code"]},
+            is_installed=True,
+        )
+        from datetime import datetime
+        skill.installed_at = datetime.utcnow()
+        session.add(skill)
+
+    await session.commit()
+    await session.refresh(skill)
+    return SkillResponse.model_validate(skill.to_dict()).model_dump()
+
+
 @router.get("/{skill_id}")
 async def get_skill(
     skill_id: int,
@@ -72,6 +149,16 @@ async def create_skill(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    # 防重复：custom 技能不允许与已有技能同名（不区分来源）
+    existing = (await session.execute(
+        select(Skill).where(Skill.name == data.name)
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"名为「{data.name}」的技能已存在（来源：{existing.source}），请勿重复创建。",
+        )
+
     skill = Skill(
         name=data.name,
         description=data.description,
@@ -169,73 +256,4 @@ async def uninstall_skill(
     return SkillResponse.model_validate(skill.to_dict()).model_dump()
 
 
-# ── GitHub 市场 ──
 
-@router.get("/market/github", response_model=GithubMarketResponse)
-async def market_github(
-    q: str = "ai agent skill",
-    page: int = 1,
-    current_user: User = Depends(get_current_user),
-):
-    """检索 GitHub 仓库作为潜在技能。网络不可用时返回 error 提示。"""
-    result = await search_github(q, page=page)
-    return GithubMarketResponse(
-        query=q,
-        total=result["total"],
-        items=result["items"],
-        error=result["error"],
-    )
-
-
-@router.post("/market/install")
-async def market_install(
-    body: GithubInstallRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """从 GitHub 安装技能：拉取代码并落库（source=github）。"""
-    try:
-        payload = await install_github_skill(
-            full_name=body.full_name,
-            html_url=body.html_url,
-            description=body.description,
-            branch=body.branch,
-            path=body.path,
-            category=body.category,
-        )
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"安装失败: {e}")
-
-    # 若已存在同名 github 技能则更新
-    existing = (await session.execute(
-        select(Skill).where(Skill.source == "github", Skill.name == payload["name"])
-    )).scalar_one_or_none()
-
-    if existing:
-        for k, v in payload.items():
-            if k in ("source", "entry"):
-                continue
-            setattr(existing, k, v)
-        existing.config = {**(existing.config or {}), "entry": payload["entry"], "code": payload["code"]}
-        existing.is_installed = True
-        from datetime import datetime
-        existing.installed_at = datetime.utcnow()
-        skill = existing
-    else:
-        skill = Skill(
-            name=payload["name"],
-            description=payload["description"],
-            category=payload["category"],
-            source="github",
-            github_url=payload["github_url"],
-            version=payload["version"],
-            config={**(payload["config"] or {}), "entry": payload["entry"], "code": payload["code"]},
-            is_installed=True,
-        )
-        from datetime import datetime
-        skill.installed_at = datetime.utcnow()
-        session.add(skill)
-
-    await session.commit()
-    await session.refresh(skill)
-    return SkillResponse.model_validate(skill.to_dict()).model_dump()

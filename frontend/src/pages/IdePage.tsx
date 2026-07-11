@@ -6,12 +6,34 @@ import { json } from '@codemirror/lang-json'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { markdown } from '@codemirror/lang-markdown'
+import { cpp } from '@codemirror/lang-cpp'
+import { java } from '@codemirror/lang-java'
+import { autocompletion, completionKeymap } from '@codemirror/autocomplete'
+import { keymap } from '@codemirror/view'
 import { oneDark } from '@codemirror/theme-one-dark'
 import {
-  Code2, FileCode, Folder, FolderOpen, File, Plus, Save, Trash2, Play, RefreshCw,
-  ChevronRight, ChevronDown, Terminal,
+  Code2, FileCode, Folder, FolderOpen, Plus, Save, Trash2, Play, RefreshCw,
+  ChevronRight, ChevronDown, Terminal, Monitor, Cloud, FolderOpen as FolderOpenIcon,
 } from 'lucide-react'
-import { ideApi, type FsNode, type RunResult } from '../api/client'
+import { ideApi, type FsNode, type RunResult, type WorkspaceUsage } from '../api/client'
+
+// ── 桌面端本地 IDE 桥接（Electron preload 注入）──
+interface DesktopIde {
+  pickFolder: () => Promise<string | null>
+  tree: (root: string) => Promise<FsNode | null>
+  readFile: (abs: string) => Promise<{ path: string; name: string; content: string; size: number }>
+  writeFile: (abs: string, content: string) => Promise<{ path: string; name: string; size: number }>
+  mkdir: (abs: string) => Promise<{ path: string; type: string }>
+  delete: (abs: string) => Promise<{ ok: boolean }>
+  join: (root: string, rel: string) => Promise<string>
+  run: (abs: string, args?: string[]) => Promise<RunResult>
+}
+const desktopIde: DesktopIde | undefined = (window as unknown as {
+  aiHubsDesktop?: { ide?: DesktopIde }
+}).aiHubsDesktop?.ide
+const hasLocalIde = !!desktopIde
+
+type IdeMode = 'local' | 'remote'
 
 function langOf(path: string) {
   const ext = (path.split('.').pop() || '').toLowerCase()
@@ -22,6 +44,9 @@ function langOf(path: string) {
     case 'html': case 'htm': return html()
     case 'css': return css()
     case 'md': return markdown()
+    case 'c': case 'h': return cpp()
+    case 'cpp': case 'cc': case 'cxx': case 'hpp': return cpp()
+    case 'java': return java()
     default: return []
   }
 }
@@ -73,7 +98,12 @@ function TreeNode({ node, depth, onOpen, activePath, onDelete }: TreeNodeProps) 
 }
 
 export default function IdePage() {
+  // 桌面端默认「本地」模式；纯网页只能用「远程」服务器工作区
+  const [mode, setMode] = useState<IdeMode>(hasLocalIde ? 'local' : 'remote')
+  const [rootPath, setRootPath] = useState('') // 本地模式的工作文件夹绝对路径
+
   const [tree, setTree] = useState<FsNode | null>(null)
+  const [usage, setUsage] = useState<WorkspaceUsage | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
@@ -85,63 +115,107 @@ export default function IdePage() {
   const [runResult, setRunResult] = useState<RunResult | null>(null)
   const [running, setRunning] = useState(false)
 
+  const isLocal = mode === 'local'
+
   const loadTree = useCallback(async () => {
+    setError('')
+    if (isLocal) {
+      if (!desktopIde || !rootPath) { setTree(null); return }
+      setLoading(true)
+      try { setTree(await desktopIde.tree(rootPath)) }
+      catch (e) { setError((e as Error)?.message || '读取本地文件夹失败') }
+      setLoading(false)
+      return
+    }
     setLoading(true)
-    try { setTree(await ideApi.tree()) }
-    catch (e: any) { setError(e?.message || '加载工作区失败') }
+    try {
+      const r = await ideApi.tree()
+      setTree(r.tree)
+      setUsage(r.usage)
+    }
+    catch (e) { setError((e as Error)?.message || '加载远程工作区失败') }
     setLoading(false)
-  }, [])
+  }, [isLocal, rootPath])
+
   useEffect(() => { loadTree() }, [loadTree])
+
+  // 切换模式时重置编辑区
+  useEffect(() => {
+    setCurrentPath(''); setContent(''); setDirty(false); setRunResult(null); setMsg('')
+  }, [mode])
+
+  const pickFolder = async () => {
+    if (!desktopIde) return
+    setError('')
+    try {
+      const dir = await desktopIde.pickFolder()
+      if (dir) {
+        setRootPath(dir)
+        setCurrentPath(''); setContent(''); setDirty(false); setRunResult(null)
+        setMsg(`已打开本地文件夹：${dir}`)
+      }
+    } catch (e) { setError((e as Error)?.message || '选择文件夹失败') }
+  }
 
   const openFile = useCallback(async (n: FsNode) => {
     if (n.type !== 'file') return
     try {
-      const r = await ideApi.readFile(n.path)
+      const r = isLocal && desktopIde ? await desktopIde.readFile(n.path) : await ideApi.readFile(n.path)
       setCurrentPath(n.path)
       setContent(r.content)
       setDirty(false)
-    } catch (e: any) { setError(e?.message || '读取失败') }
-  }, [])
+    } catch (e) { setError((e as Error)?.message || '读取失败') }
+  }, [isLocal])
 
   const save = async () => {
     if (!currentPath) return
     setError('')
     try {
-      await ideApi.writeFile(currentPath, content)
+      if (isLocal && desktopIde) await desktopIde.writeFile(currentPath, content)
+      else await ideApi.writeFile(currentPath, content)
       setDirty(false)
       setMsg(`已保存 ${currentPath}`)
-    } catch (e: any) { setError(e?.message || '保存失败') }
+    } catch (e) { setError((e as Error)?.message || '保存失败') }
   }
 
   const newFile = async () => {
-    const p = prompt('新文件路径（相对于工作区，如 scripts/hello.py）')
+    if (isLocal && !rootPath) { setError('请先打开本地文件夹'); return }
+    const p = prompt(isLocal
+      ? '新文件路径（相对当前文件夹，如 scripts/hello.py）'
+      : '新文件路径（相对于工作区，如 scripts/hello.py）')
     if (!p) return
     try {
-      await ideApi.writeFile(p, '')
-      setMsg(`已创建 ${p}`)
+      const target = isLocal && desktopIde ? await desktopIde.join(rootPath, p) : p
+      if (isLocal && desktopIde) await desktopIde.writeFile(target, '')
+      else await ideApi.writeFile(target, '')
+      setMsg(`已创建 ${target}`)
       await loadTree()
-      await openFile({ name: p.split('/').pop() || p, path: p, type: 'file' })
-    } catch (e: any) { setError(e?.message || '创建失败') }
+      await openFile({ name: p.split(/[\\/]/).pop() || p, path: target, type: 'file' })
+    } catch (e) { setError((e as Error)?.message || '创建失败') }
   }
 
   const newFolder = async () => {
+    if (isLocal && !rootPath) { setError('请先打开本地文件夹'); return }
     const p = prompt('新文件夹路径（如 scripts）')
     if (!p) return
     try {
-      await ideApi.mkdir(p)
-      setMsg(`已创建文件夹 ${p}`)
+      const target = isLocal && desktopIde ? await desktopIde.join(rootPath, p) : p
+      if (isLocal && desktopIde) await desktopIde.mkdir(target)
+      else await ideApi.mkdir(target)
+      setMsg(`已创建文件夹 ${target}`)
       loadTree()
-    } catch (e: any) { setError(e?.message || '创建失败') }
+    } catch (e) { setError((e as Error)?.message || '创建失败') }
   }
 
   const removeNode = async (n: FsNode) => {
     if (!confirm(`确认删除 ${n.type === 'dir' ? '文件夹' : '文件'}「${n.path}」？`)) return
     try {
-      await ideApi.deleteFile(n.path)
+      if (isLocal && desktopIde) await desktopIde.delete(n.path)
+      else await ideApi.deleteFile(n.path)
       setMsg(`已删除 ${n.path}`)
       if (currentPath === n.path) { setCurrentPath(''); setContent('') }
       loadTree()
-    } catch (e: any) { setError(e?.message || '删除失败') }
+    } catch (e) { setError((e as Error)?.message || '删除失败') }
   }
 
   const run = async () => {
@@ -149,18 +223,59 @@ export default function IdePage() {
     setRunning(true)
     setRunResult(null)
     try {
-      const r = await ideApi.run(currentPath)
+      // 运行前先保存，确保执行的是编辑器内最新内容
+      if (dirty) {
+        if (isLocal && desktopIde) await desktopIde.writeFile(currentPath, content)
+        else await ideApi.writeFile(currentPath, content)
+        setDirty(false)
+      }
+      const r = isLocal && desktopIde
+        ? await desktopIde.run(currentPath, [])
+        : await ideApi.run(currentPath)
       setRunResult(r)
-    } catch (e: any) { setError(e?.message || '运行失败') }
+    } catch (e) { setError((e as Error)?.message || '运行失败') }
     setRunning(false)
   }
 
-  const extensions = useMemo(() => langOf(currentPath), [currentPath])
+  const extensions = useMemo(
+    () => [langOf(currentPath), autocompletion(), keymap.of(completionKeymap)],
+    [currentPath],
+  )
 
   return (
     <div className="flex h-full">
       {/* 文件树 */}
       <div className="w-64 flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col">
+        {/* 模式切换 */}
+        <div className="px-3 py-2 border-b border-border">
+          <div className="flex items-center gap-1 bg-bg-tertiary rounded p-0.5">
+            <button
+              onClick={() => hasLocalIde && setMode('local')}
+              disabled={!hasLocalIde}
+              title={hasLocalIde ? '本地电脑文件夹' : '仅桌面客户端可用'}
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs ${mode === 'local' ? 'bg-accent text-white' : 'text-neutral-400'} ${!hasLocalIde ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+              <Monitor size={12} /> 本地
+            </button>
+            <button
+              onClick={() => setMode('remote')}
+              title="服务器远程工作区（远程训练代码）"
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs ${mode === 'remote' ? 'bg-accent text-white' : 'text-neutral-400'}`}
+            >
+              <Cloud size={12} /> 远程
+            </button>
+          </div>
+          {isLocal && (
+            <button onClick={pickFolder}
+              className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded bg-bg-tertiary text-xs text-neutral-300 hover:text-neutral-100">
+              <FolderOpenIcon size={12} /> {rootPath ? '切换文件夹' : '打开文件夹'}
+            </button>
+          )}
+          {isLocal && rootPath && (
+            <div className="mt-1 text-[10px] text-neutral-600 truncate" title={rootPath}>{rootPath}</div>
+          )}
+        </div>
+
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-xs text-neutral-400">资源管理器</span>
           <div className="flex items-center gap-1">
@@ -169,10 +284,45 @@ export default function IdePage() {
             <button onClick={loadTree} className="p-1 rounded text-neutral-400 hover:text-neutral-200" title="刷新"><RefreshCw size={14} /></button>
           </div>
         </div>
+        {!isLocal && usage && (
+          <div className="px-3 py-2 border-b border-border">
+            <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1">
+              <span>工作区空间</span>
+              <span>{(usage.used / (1024 * 1024)).toFixed(1)} / {(usage.quota / (1024 * 1024)).toFixed(0)} MB</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+              <div
+                className={`h-full rounded-full ${usage.used / usage.quota > 0.9 ? 'bg-red-500' : usage.used / usage.quota > 0.7 ? 'bg-amber-500' : 'bg-accent'}`}
+                style={{ width: `${Math.min(100, (usage.used / usage.quota) * 100).toFixed(1)}%` }}
+              />
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto py-1">
           {loading ? <div className="text-xs text-neutral-600 p-3">加载中…</div> :
+            isLocal && !rootPath ? <div className="text-xs text-neutral-600 p-3">点击上方「打开文件夹」选择本地工作目录</div> :
             tree ? <TreeNode node={tree} depth={0} onOpen={openFile} activePath={currentPath} onDelete={removeNode} /> :
-            <div className="text-xs text-neutral-600 p-3">空工作区</div>}
+            <div className="text-xs text-neutral-600 p-3">
+              {error ? `加载失败：${error}` : '空工作区'}
+              {!isLocal && !loading && (
+                <button
+                  onClick={async () => {
+                    setError('')
+                    try {
+                      await ideApi.writeFile('welcome.txt',
+                        '欢迎使用 AI Hubs 远程工作区！\n\n' +
+                        '你可以在这里编写并运行代码（支持 Python / JS / C / C++ / Java 等）。\n' +
+                        '点击左上角「+」新建文件，或运行本示例文件体验。')
+                      setMsg('已创建示例文件 welcome.txt')
+                      await loadTree()
+                    } catch (e) { setError((e as Error)?.message || '创建失败') }
+                  }}
+                  className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded bg-bg-tertiary text-xs text-neutral-300 hover:text-neutral-100"
+                >
+                  <Plus size={12} /> 创建示例文件
+                </button>
+              )}
+            </div>}
         </div>
       </div>
 
@@ -187,6 +337,9 @@ export default function IdePage() {
             <span className="text-sm text-neutral-200 truncate">
               {currentPath || '未打开文件'}
               {dirty && <span className="text-amber-400 ml-1">●</span>}
+            </span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${isLocal ? 'bg-blue-500/15 text-blue-400' : 'bg-purple-500/15 text-purple-400'}`}>
+              {isLocal ? '本地' : '远程'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -214,7 +367,9 @@ export default function IdePage() {
             />
           ) : (
             <div className="h-full flex items-center justify-center text-neutral-600 text-sm">
-              从左侧选择文件，或点击「+」新建文件开始编辑
+              {isLocal && !rootPath
+                ? '先在左侧「打开文件夹」，即可编辑本地电脑上的代码并在本地运行'
+                : '从左侧选择文件，或点击「+」新建文件开始编辑'}
             </div>
           )}
         </div>
@@ -223,7 +378,7 @@ export default function IdePage() {
         {runResult && (
           <div className="h-48 flex-shrink-0 border-t border-border bg-bg-secondary flex flex-col">
             <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border text-xs text-neutral-400">
-              <Terminal size={14} /> 输出
+              <Terminal size={14} /> 输出（{isLocal ? '本地电脑' : '远程服务器'}）
               <span className={`ml-2 px-2 py-0.5 rounded ${runResult.timed_out ? 'bg-red-500/15 text-red-400' : runResult.exit_code === 0 ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400'}`}>
                 exit {runResult.exit_code}{runResult.timed_out ? ' (timeout)' : ''}
               </span>

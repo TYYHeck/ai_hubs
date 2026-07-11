@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight, Sparkles, Brain } from 'lucide-react'
 import { api } from '../api/client'
 
 interface TaskData {
@@ -17,6 +17,7 @@ const modeIcons: Record<string, JSX.Element> = {
   'git-branch': <GitBranch size={14} />, 'message-square': <GitBranch size={14} />,
   'check-square': <GitBranch size={14} />, 'git-merge': <GitBranch size={14} />,
   'share-2': <GitBranch size={14} />, sliders: <GitBranch size={14} />,
+  sparkles: <Sparkles size={14} />,
 }
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-500/20 text-yellow-400', running: 'bg-blue-500/20 text-blue-400',
@@ -32,21 +33,23 @@ export default function TasksPage() {
   const [showForm, setShowForm] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [form, setForm] = useState({
-    title: '', description: '', mode: 'single', agent_ids: [] as number[],
+    title: '', description: '', mode: 'auto', agent_ids: [] as number[],
     think_depth: 1, think_visibility: 'visible' as string, priority: 0, tags: '',
+    assignment: 'direct' as string,
   })
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const fetchData = async () => {
     try {
       const [tRes, mRes, aRes] = await Promise.all([
-        api.get<{ data: TaskData[] }>('/tasks'),
-        api.get<{ data: ModeInfo[] }>('/tasks/modes'),
-        api.get<{ data: { id: number; name: string }[] }>('/agents'),
+        api.get<TaskData[]>('/tasks'),
+        api.get<ModeInfo[]>('/tasks/modes'),
+        api.get<{ id: number; name: string }[]>('/agents'),
       ])
-      setTasks(tRes.data)
-      setModes(mRes.data)
-      setAgents(aRes.data.map((a) => ({ id: a.id, name: a.name })))
+      setTasks(tRes ?? [])
+      setModes(mRes ?? [])
+      setAgents((aRes ?? []).map((a) => ({ id: a.id, name: a.name })))
     } catch { /* ignore */ }
     setLoading(false)
   }
@@ -59,13 +62,14 @@ export default function TasksPage() {
   }, [])
 
   const resetForm = () => {
-    setForm({ title: '', description: '', mode: 'single', agent_ids: [], think_depth: 1, think_visibility: 'visible', priority: 0, tags: '' })
+    setForm({ title: '', description: '', mode: 'auto', agent_ids: [], think_depth: 1, think_visibility: 'visible', priority: 0, tags: '', assignment: 'direct' })
     setShowForm(false)
     setError('')
   }
 
   const handleCreate = async () => {
     if (!form.title.trim()) { setError('标题不能为空'); return }
+    setSubmitting(true)
     try {
       await api.post('/tasks', {
         ...form,
@@ -76,6 +80,7 @@ export default function TasksPage() {
     } catch (e: any) {
       setError(e.response?.data?.detail || '创建失败')
     }
+    setSubmitting(false)
   }
 
   const handleExecute = async (taskId: string) => {
@@ -150,6 +155,34 @@ export default function TasksPage() {
                 {modes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
+            {form.mode === 'auto' && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">指派策略</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setForm({...form, assignment: 'direct'})}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs border transition-colors ${
+                      form.assignment === 'direct'
+                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                        : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
+                    }`}>
+                    <Zap size={13} /> 直接匹配
+                  </button>
+                  <button type="button" onClick={() => setForm({...form, assignment: 'ai'})}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs border transition-colors ${
+                      form.assignment === 'ai'
+                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                        : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
+                    }`}>
+                    <Brain size={13} /> AI 分析指派
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-1">
+                  {form.assignment === 'ai'
+                    ? 'AI 会先分析任务内容与各 Agent 画像，再做更精细的指派'
+                    : '根据任务内容的标签/关键词直接匹配最合适的 Agent'}
+                </p>
+              </div>
+            )}
             <div className="col-span-2">
               <label className="block text-xs text-gray-400 mb-1">描述 / 输入</label>
               <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={3}
@@ -191,9 +224,9 @@ export default function TasksPage() {
             </div>
           </div>
           <div className="flex gap-3 mt-5">
-            <button onClick={handleCreate}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-lg text-sm transition-colors">
-              <Plus size={14} /> 创建
+            <button onClick={handleCreate} disabled={submitting}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm transition-colors">
+              <Plus size={14} /> {submitting ? '创建中…' : '创建'}
             </button>
             <button onClick={resetForm} className="text-gray-400 hover:text-white px-4 py-2 text-sm transition-colors">取消</button>
           </div>

@@ -15,6 +15,18 @@ contextBridge.exposeInMainWorld('aiHubsDesktop', {
   openFileDialog: () => ipcRenderer.invoke('dialog:openFile'),
   saveFileDialog: (defaultName) => ipcRenderer.invoke('dialog:saveFile', defaultName),
 
+  // 本地 IDE：直接读写本机文件系统 + 本地运行脚本
+  ide: {
+    pickFolder: () => ipcRenderer.invoke('ide:pickFolder'),
+    tree: (root) => ipcRenderer.invoke('ide:tree', root),
+    readFile: (abs) => ipcRenderer.invoke('ide:readFile', abs),
+    writeFile: (abs, content) => ipcRenderer.invoke('ide:writeFile', abs, content),
+    mkdir: (abs) => ipcRenderer.invoke('ide:mkdir', abs),
+    delete: (abs) => ipcRenderer.invoke('ide:delete', abs),
+    join: (root, rel) => ipcRenderer.invoke('ide:join', root, rel),
+    run: (abs, args) => ipcRenderer.invoke('ide:run', abs, args),
+  },
+
   // 系统通知
   notify: (title, body) => {
     ipcRenderer.send('notify', { title, body });

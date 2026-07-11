@@ -34,6 +34,8 @@ export default function SkillsPage() {
   const [ghTotal, setGhTotal] = useState(0)
   const [ghError, setGhError] = useState('')
   const [ghLoading, setGhLoading] = useState(false)
+  // 正在安装的仓库 full_name 集合，防止连续点击重复安装产生多条相同技能
+  const [installingFns, setInstallingFns] = useState<Set<string>>(new Set())
 
   const loadSkills = useCallback(async () => {
     setLoading(true)
@@ -66,6 +68,11 @@ export default function SkillsPage() {
 
   const saveForm = async () => {
     setError('')
+    // 防重复：新建时本地比对同名技能
+    if (!editing && skills.some(s => s.name.toLowerCase() === form.name.trim().toLowerCase())) {
+      setError(`已存在名为「${form.name.trim()}」的技能，请勿重复创建`)
+      return
+    }
     try {
       if (editing) {
         await skillApi.update(editing.id, { ...form, code: form.code })
@@ -113,10 +120,16 @@ export default function SkillsPage() {
   useEffect(() => { if (tab === 'market') searchMarket() }, [tab]) // eslint-disable-line
 
   const installFromGithub = async (g: GithubSkill) => {
+    if (installingFns.has(g.full_name)) return  // 防连点：本次安装进行中直接忽略
+    setInstallingFns(prev => new Set(prev).add(g.full_name))
+    setError('')
     try {
       await skillApi.marketInstall({ full_name: g.full_name, html_url: g.html_url, description: g.description, branch: g.default_branch })
       setMsg(`已安装 ${g.name}`)
     } catch (e: any) { setError(e?.message || '安装失败') }
+    finally {
+      setInstallingFns(prev => { const n = new Set(prev); n.delete(g.full_name); return n })
+    }
   }
 
   return (
@@ -221,8 +234,9 @@ export default function SkillsPage() {
                       <div className="text-xs text-neutral-500 truncate">{g.description}</div>
                       <div className="text-[10px] text-neutral-600 mt-0.5">★ {g.stars} · {g.language || '—'}</div>
                     </div>
-                    <button onClick={() => installFromGithub(g)} className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-accent/40 text-accent hover:bg-accent/10">
-                      <Download size={12} /> 安装
+                    <button onClick={() => installFromGithub(g)} disabled={installingFns.has(g.full_name)}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${installingFns.has(g.full_name) ? 'border-border text-neutral-600 cursor-not-allowed' : 'border-accent/40 text-accent hover:bg-accent/10'}`}>
+                      {installingFns.has(g.full_name) ? '安装中…' : <><Download size={12} /> 安装</>}
                     </button>
                   </div>
                 ))}

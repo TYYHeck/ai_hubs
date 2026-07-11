@@ -9,6 +9,7 @@ from .skill import Skill
 from .dataset import Dataset, DatasetRecord
 from .memory import MemoryBranch, MemoryCommit, MemoryEntry, MemorySnapshot
 from .conversation import Conversation, Message
+from .attachment import Attachment
 from .system import SystemLog, KnowledgeSource
 
 __all__ = [

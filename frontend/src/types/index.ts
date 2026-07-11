@@ -7,6 +7,8 @@ export interface User {
   role: 'admin' | 'user'
   is_active: boolean
   preferences: Record<string, unknown>
+  token_quota: number | null
+  token_used: number
   created_at: string | null
   last_login_at: string | null
 }

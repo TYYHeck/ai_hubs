@@ -26,6 +26,8 @@ class Conversation(Base):
     user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan",
                             order_by="Message.created_at")
+    attachments = relationship("Attachment", back_populates="conversation", cascade="all, delete-orphan",
+                               order_by="Attachment.ref_index")
 
     def to_dict(self) -> dict:
         return {

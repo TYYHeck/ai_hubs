@@ -189,6 +189,7 @@ async def register_user(
         password_hash=hash_password(password),
         email=email,
         role="user",
+        preferences={"token_quota": User.DEFAULT_TOKEN_QUOTA},
     )
     session.add(user)
     await session.flush()

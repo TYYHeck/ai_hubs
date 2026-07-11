@@ -25,6 +25,12 @@ class Agent(Base):
     model: Mapped[str] = mapped_column(String(64), default="deepseek-chat")
     provider: Mapped[str] = mapped_column(String(32), default="deepseek")
 
+    # 配置来源：global（使用全局 LLM 配置）| self（使用本 Agent 自带 provider/model）
+    config_mode: Mapped[str] = mapped_column(String(16), default="global")
+
+    # 是否为全局默认 Agent（每个用户至多一个）
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # 能力开关
     enable_planning: Mapped[bool] = mapped_column(Boolean, default=False)
     enable_rag: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -41,7 +47,7 @@ class Agent(Base):
     category: Mapped[str] = mapped_column(String(64), default="general")  # 数据库分类
 
     # 运行状态
-    status: Mapped[str] = mapped_column(String(16), default="idle")  # idle | running | error
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | idle | running | error
     current_task_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -58,6 +64,8 @@ class Agent(Base):
             "system_prompt": self.system_prompt,
             "model": self.model,
             "provider": self.provider,
+            "config_mode": self.config_mode,
+            "is_default": self.is_default,
             "enable_planning": self.enable_planning,
             "enable_rag": self.enable_rag,
             "enable_reflection": self.enable_reflection,

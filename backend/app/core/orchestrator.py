@@ -43,7 +43,11 @@ def get_pause_event(task_id: str) -> asyncio.Event:
 
 
 async def _emit_event(session, task_id: str, event: str, data: dict = None, *, event_queue: asyncio.Queue = None):
-    """记录事件到 DB 并推送到 SSE 队列"""
+    """记录事件到 DB 并推送到 SSE 队列
+
+    session 为 None 时（例如在 run_single 内部），自动开一个独立会话写入，
+    避免上层未传递 session 导致 'NoneType' object has no attribute 'add'。
+    """
     tz = timezone.utc
     evt = TaskEventModel(
         task_id=task_id,
@@ -52,8 +56,14 @@ async def _emit_event(session, task_id: str, event: str, data: dict = None, *, e
     )
     # 手动设时间避免 sqlite 默认值问题
     evt.created_at = datetime.now(tz).replace(tzinfo=None)
-    session.add(evt)
-    await session.commit()
+
+    if session is not None:
+        session.add(evt)
+        await session.commit()
+    else:
+        async with create_session() as s:
+            s.add(evt)
+            await s.commit()
 
     if event_queue is not None:
         payload = {
@@ -422,6 +432,125 @@ async def run_custom(
 # 编排入口
 # ============================================================
 
+async def _select_agent_direct(
+    user_input: str,
+    agents: list[AgentModel],
+) -> AgentModel | None:
+    """直接指派：根据 Agent 的标签/名称/描述与任务内容的重合度打分，取最高分者"""
+    if not agents:
+        return None
+    if len(agents) == 1:
+        return agents[0]
+
+    text = (user_input or "").lower()
+    best: AgentModel | None = None
+    best_score = -1.0
+    for a in agents:
+        score = 0.0
+        # 名称/描述命中
+        hay = f"{a.name} {a.description or ''}".lower()
+        for token in text.split():
+            if len(token) >= 2 and token in hay:
+                score += 1.0
+        # 标签命中
+        for tag in (a.tags or []):
+            if tag and tag.lower() in text:
+                score += 2.0
+        # 分类命中
+        if a.category and a.category.lower() != "general" and a.category.lower() in text:
+            score += 1.5
+        # 轻微偏好记忆强度高的 Agent
+        score += (a.memory_strength or 0) * 0.02
+        if score > best_score:
+            best_score, best = score, a
+    # 没有任何命中时，回退到第一个（保证始终有指派）
+    return best or agents[0]
+
+
+async def _select_agent_by_ai(
+    user_input: str,
+    agents: list[AgentModel],
+    event_queue: asyncio.Queue,
+) -> AgentModel | None:
+    """AI 分析：让 LLM 阅读任务内容与各 Agent 画像，返回最合适 Agent 的编号（更精细）"""
+    if not agents:
+        return None
+    if len(agents) == 1:
+        return agents[0]
+
+    catalog = "\n".join(
+        f"{i}. [ID={a.id}] 名称：{a.name} | 描述：{a.description or '无'} "
+        f"| 标签：{', '.join(a.tags or []) or '无'} | 分类：{a.category}"
+        for i, a in enumerate(agents)
+    )
+    prompt = (
+        "你是一个任务分派调度器。下面是一批可用的 AI Agent 及其专长画像：\n\n"
+        f"{catalog}\n\n"
+        f"待处理任务内容：\n{user_input}\n\n"
+        "请综合分析任务的领域、复杂度与所需能力，从上面列表中选择最合适执行该任务的 Agent。\n"
+        "只回复一个数字编号（即列表最前面的序号），不要输出任何解释或额外字符。"
+    )
+    try:
+        resp = await llm_manager.chat(
+            [{"role": "system", "content": "你是严谨的任务分派器，只输出 Agent 编号。"},
+             {"role": "user", "content": prompt}],
+            model=agents[0].model,
+        )
+        # 解析编号
+        digits = "".join(ch for ch in resp if ch.isdigit())
+        idx = int(digits) if digits else 0
+        if 0 <= idx < len(agents):
+            return agents[idx]
+    except Exception as e:
+        logger.warning(f"AI 指派失败，回退到直接匹配: {e}")
+    # 失败时回退
+    return await _select_agent_direct(user_input, agents)
+
+
+async def run_auto(
+    task_id: str,
+    agents: list[AgentModel],
+    user_input: str,
+    event_queue: asyncio.Queue,
+    user_id: int,
+    assignment: str = "direct",   # direct | ai
+) -> str:
+    """自动工作流：根据任务内容自动指派 Agent 执行
+
+    - direct：基于标签/关键词/分类直接匹配最合适的 Agent
+    - ai：先由 AI 分析任务与 Agent 画像，再做精细指派
+    """
+    if not agents:
+        raise RuntimeError("没有可用的 Agent，无法自动指派")
+
+    await _emit_event(None, task_id, "auto_assign_start",
+                      {"assignment": assignment, "candidates": [a.name for a in agents]},
+                      event_queue=event_queue)
+
+    if assignment == "ai":
+        chosen = await _select_agent_by_ai(user_input, agents, event_queue)
+        strategy = "ai 分析指派"
+    else:
+        chosen = await _select_agent_direct(user_input, agents)
+        strategy = "直接匹配指派"
+
+    if chosen is None:
+        chosen = agents[0]
+
+    await _emit_event(None, task_id, "auto_assigned",
+                      {"agent": chosen.name, "strategy": strategy},
+                      event_queue=event_queue)
+
+    # 复用单 Agent 执行流程
+    return await run_single(
+        task_id=task_id,
+        agent=chosen,
+        user_input=user_input,
+        event_queue=event_queue,
+        user_id=user_id,
+    )
+
+
 MODE_RUNNERS = {
     "single": run_single,
     "sequential": run_sequential,
@@ -431,6 +560,7 @@ MODE_RUNNERS = {
     "hierarchical": run_hierarchical,
     "swarm": run_swarm,
     "custom": run_custom,
+    "auto": run_auto,
 }
 
 
@@ -440,6 +570,7 @@ async def execute_task(
     user_id: int,
     agent_ids: list[int] | None = None,
     pipeline_steps: list[str] | None = None,
+    assignment: str = "direct",   # direct | ai （仅 auto 模式使用）
 ) -> str:
     """执行任务的入口函数（从 API 层调用）"""
     get_pause_event(task_id)  # 初始化暂停事件
@@ -491,15 +622,27 @@ async def execute_task(
                 extra_kw["pipeline_steps"] = pipeline_steps or []
             if mode == "debate":
                 extra_kw["rounds"] = 2
+            if mode == "auto":
+                extra_kw["assignment"] = assignment
 
-            result = await runner(
-                task_id=task_id,
-                agents=agents,
-                user_input=task.description or "",
-                event_queue=event_queue,
-                user_id=user_id,
-                **extra_kw,
-            )
+            if mode == "single":
+                # run_single 仅接受单个 agent，而非 agents 列表
+                result = await run_single(
+                    task_id=task_id,
+                    agent=agents[0],
+                    user_input=task.description or "",
+                    event_queue=event_queue,
+                    user_id=user_id,
+                )
+            else:
+                result = await runner(
+                    task_id=task_id,
+                    agents=agents,
+                    user_input=task.description or "",
+                    event_queue=event_queue,
+                    user_id=user_id,
+                    **extra_kw,
+                )
 
             task.result = result
             task.status = "completed"

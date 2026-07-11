@@ -30,8 +30,11 @@ async function request<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
+  }
+  // body 为 FormData 时让浏览器自动设置 multipart boundary
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json'
   }
 
   const token = getToken()
@@ -39,13 +42,32 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers })
+  // 统一前缀：业务接口都挂在 /api/v1 下；特殊根级路径（/health）保持不变。
+  // 已带 /api/ 前缀的（如 /api/v1/auth/login）不再重复添加。
+  let urlPath = path
+  if (!urlPath.startsWith('/api/') && urlPath !== '/health') {
+    urlPath = `/api/v1${urlPath.startsWith('/') ? '' : '/'}${urlPath}`
+  }
+
+  const res = await fetch(`${BASE}${urlPath}`, { ...options, headers })
 
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try {
       const body = await res.json()
-      msg = body.detail || body.message || body.error || msg
+      const raw = body.detail ?? body.message ?? body.error
+      if (Array.isArray(raw)) {
+        // FastAPI 422 校验错误：detail 是错误对象数组
+        msg = raw
+          .map((e: { loc?: unknown[]; msg?: string }) =>
+            e && typeof e === "object" && "msg" in e
+              ? String((e as { msg?: string }).msg)
+              : String(e)
+          )
+          .join("；")
+      } else if (raw !== undefined && raw !== null) {
+        msg = typeof raw === "string" ? raw : JSON.stringify(raw)
+      }
     } catch {
       /* 非 JSON 响应 */
     }
@@ -57,7 +79,19 @@ async function request<T>(
     throw new ApiError(res.status, msg)
   }
 
-  return res.json()
+  // 204 No Content 或空响应体：不解析 JSON，避免 "Unexpected end of JSON input"
+  if (res.status === 204) {
+    return {} as T
+  }
+  const text = await res.text()
+  if (!text) {
+    return {} as T
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return {} as T
+  }
 }
 
 // ── 认证 API ──
@@ -138,6 +172,49 @@ export interface Skill {
   created_at: string | null
 }
 
+// ── Agent API ──
+
+export interface Agent {
+  id: number
+  name: string
+  description: string
+  system_prompt: string | null
+  model: string
+  provider: string
+  config_mode: 'global' | 'self'
+  is_default: boolean
+  enable_planning: boolean
+  enable_rag: boolean
+  enable_reflection: boolean
+  max_iterations: number
+  memory_strength: number
+  setup_mode: string
+  skills: string[]
+  tags: string[]
+  category: string
+  status: string
+  current_task_id: string | null
+  created_at: string | null
+}
+
+export interface AgentAnalyzeResult {
+  ok: boolean
+  suggested_skills: string[]
+  suggested_tags: string[]
+  category: string
+  system_prompt_draft: string
+}
+
+export const agentApi = {
+  list: () => api.get<Agent[]>('/agents'),
+  get: (id: number) => api.get<Agent>(`/agents/${id}`),
+  create: (data: Partial<Agent> & { name: string }) => api.post<Agent>('/agents', data),
+  update: (id: number, data: Partial<Agent>) => api.put<Agent>(`/agents/${id}`, data),
+  remove: (id: number) => api.delete(`/agents/${id}`),
+  analyze: (data: { name: string; description?: string; available_skills?: string[] }) =>
+    api.post<AgentAnalyzeResult>('/agents/analyze', data),
+}
+
 export interface GithubSkill {
   full_name: string
   name: string
@@ -156,22 +233,22 @@ export const skillApi = {
     if (params?.search) qs.set('search', params.search)
     if (params?.installed !== undefined) qs.set('installed', String(params.installed))
     const q = qs.toString()
-    return api.get<Skill[]>(`/skills${q ? `?${q}` : ''}`)
+    return api.get<Skill[]>(`/api/v1/skills${q ? `?${q}` : ''}`)
   },
-  get: (id: number) => api.get<Skill>(`/skills/${id}`),
+  get: (id: number) => api.get<Skill>(`/api/v1/skills/${id}`),
   create: (data: { name: string; description?: string; category?: string; entry?: string; code?: string; config?: Record<string, unknown> }) =>
-    api.post<Skill>('/skills', data),
+    api.post<Skill>('/api/v1/skills', data),
   update: (id: number, data: Partial<{ name: string; description: string; category: string; entry: string; code: string; config: Record<string, unknown> }>) =>
-    api.put<Skill>(`/skills/${id}`, data),
-  remove: (id: number) => api.delete(`/skills/${id}`),
-  install: (id: number) => api.post<Skill>(`/skills/${id}/install`),
-  uninstall: (id: number) => api.post<Skill>(`/skills/${id}/uninstall`),
+    api.put<Skill>(`/api/v1/skills/${id}`, data),
+  remove: (id: number) => api.delete(`/api/v1/skills/${id}`),
+  install: (id: number) => api.post<Skill>(`/api/v1/skills/${id}/install`),
+  uninstall: (id: number) => api.post<Skill>(`/api/v1/skills/${id}/uninstall`),
   marketGithub: (q: string, page = 1) =>
     api.get<{ query: string; total: number; items: GithubSkill[]; error: string | null }>(
-      `/skills/market/github?q=${encodeURIComponent(q)}&page=${page}`
+      `/api/v1/skills/market/github?q=${encodeURIComponent(q)}&page=${page}`
     ),
   marketInstall: (data: { full_name: string; html_url?: string; description?: string; branch?: string; path?: string; category?: string }) =>
-    api.post<Skill>('/skills/market/install', data),
+    api.post<Skill>('/api/v1/skills/market/install', data),
 }
 
 // ── 数据集 API ──
@@ -276,6 +353,11 @@ export interface FsNode {
   truncated?: boolean
 }
 
+export interface WorkspaceUsage {
+  used: number
+  quota: number
+}
+
 export interface RunResult {
   stdout: string
   stderr: string
@@ -285,12 +367,48 @@ export interface RunResult {
 }
 
 export const ideApi = {
-  tree: () => api.get<FsNode>('/ide/tree'),
-  readFile: (path: string) => api.get<{ path: string; name: string; content: string; size: number }>(`/ide/file?path=${encodeURIComponent(path)}`),
-  writeFile: (path: string, content: string) => api.post<{ path: string; name: string; size: number }>('/ide/file', { path, content }),
-  mkdir: (path: string) => api.post<{ path: string; type: string }>('/ide/mkdir', { path }),
-  deleteFile: (path: string) => api.delete(`/ide/file?path=${encodeURIComponent(path)}`),
-  run: (path: string, args: string[] = []) => api.post<RunResult>('/ide/run', { path, args }),
+  tree: () => api.get<{ tree: FsNode; usage: WorkspaceUsage }>('/api/v1/ide/tree'),
+  readFile: (path: string) => api.get<{ path: string; name: string; content: string; size: number }>(`/api/v1/ide/file?path=${encodeURIComponent(path)}`),
+  writeFile: (path: string, content: string) => api.post<{ path: string; name: string; size: number }>('/api/v1/ide/file', { path, content }),
+  mkdir: (path: string) => api.post<{ path: string; type: string }>('/api/v1/ide/mkdir', { path }),
+  deleteFile: (path: string) => api.delete(`/api/v1/ide/file?path=${encodeURIComponent(path)}`),
+  run: (path: string, args: string[] = []) => api.post<RunResult>('/api/v1/ide/run', { path, args }),
+}
+
+// ── 附件上传 API ──
+
+export interface Attachment {
+  id: number
+  conversation_id: string | null
+  ref_index: number
+  kind: 'image' | 'doc' | 'file'
+  filename: string
+  mime_type: string | null
+  size: number
+  url: string
+  created_at: string | null
+}
+
+export const uploadApi = {
+  upload: (file: File, conversationId: string | null) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (conversationId) form.append('conversation_id', conversationId)
+    return request<{ ok: boolean; attachment: Attachment; placeholder: string; kind: string }>(
+      '/api/v1/uploads', { method: 'POST', body: form, headers: {} }
+    )
+  },
+  remove: (id: number) => api.delete(`/api/v1/uploads/${id}`),
+}
+
+// ── 上下文占用 API ──
+
+export const chatContextApi = {
+  usage: (conversationId: string | null) =>
+    api.get<{
+      ok: boolean; model: string; context_window: number;
+      used_tokens: number; message_count: number; usage_ratio: number
+    }>(`/api/v1/chat/context-usage${conversationId ? `?conversation_id=${conversationId}` : ''}`),
 }
 
 export { setToken, getToken, ApiError }

@@ -105,6 +105,20 @@ export function Sidebar() {
             退出
           </button>
         </div>
+        {user?.token_quota != null && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1">
+              <span>对话 token 配额</span>
+              <span>{(user.token_used || 0).toLocaleString()} / {user.token_quota.toLocaleString()}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+              <div
+                className={`h-full rounded-full ${user.token_used / user.token_quota > 0.9 ? 'bg-red-500' : user.token_used / user.token_quota > 0.7 ? 'bg-amber-500' : 'bg-accent'}`}
+                style={{ width: `${Math.min(100, (user.token_used / user.token_quota) * 100).toFixed(1)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   )

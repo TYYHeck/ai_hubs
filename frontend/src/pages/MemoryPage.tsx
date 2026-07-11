@@ -41,11 +41,11 @@ export default function MemoryPage() {
     setError('')
     try {
       const [s, c] = await Promise.all([
-        api.get<{ data: Stats }>(`/memory/stats?agent=${encodeURIComponent(agent)}`),
-        api.get<{ data: CommitItem[] }>(`/memory/commits?agent=${encodeURIComponent(agent)}`),
+        api.get<Stats>(`/memory/stats?agent=${encodeURIComponent(agent)}`),
+        api.get<{ agent: string; commits: CommitItem[] }>(`/memory/commits?agent=${encodeURIComponent(agent)}`),
       ])
-      setStats(s.data)
-      setCommits(c.data)
+      setStats(s ?? null)
+      setCommits(c?.commits ?? [])
     } catch (e: any) {
       setError(e?.message || '加载失败')
     }
@@ -79,10 +79,10 @@ export default function MemoryPage() {
 
   const handleContext = async () => {
     try {
-      const r = await api.get<{ data: { role: string; content: string }[] }>(
+      const r = await api.get<{ agent: string; context: { role: string; content: string }[] }>(
         `/memory/context?agent=${encodeURIComponent(agent)}&query=`
       )
-      setContext(r.data)
+      setContext(r?.context ?? [])
       setShowContext(true)
     } catch (e: any) {
       setError(e?.message || '预览失败')
@@ -93,10 +93,10 @@ export default function MemoryPage() {
     if (!ragQuery.trim()) return
     setError('')
     try {
-      const r = await api.post<{ data: RagHit[] }>('/memory/rag/retrieve', {
+      const r = await api.post<{ query: string; results: RagHit[] }>('/memory/rag/retrieve', {
         query: ragQuery, k: 5,
       })
-      setRagHits(r.data)
+      setRagHits(r?.results ?? [])
     } catch (e: any) {
       setError(e?.message || '检索失败')
     }

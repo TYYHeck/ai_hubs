@@ -78,6 +78,7 @@ async def create_task(
         metadata_={
             "agent_ids": data.agent_ids,
             "pipeline_steps": data.pipeline_steps,
+            "assignment": data.assignment,
         },
     )
     session.add(task)
@@ -97,6 +98,7 @@ async def list_modes(current_user=Depends(get_current_user)):
         {"id": "hierarchical", "name": "层级", "desc": "主管 Agent 分解任务，委派成员执行，汇总交付", "icon": "git-merge"},
         {"id": "swarm", "name": "群体自组织", "desc": "Agent 共享上下文，自选子任务协作", "icon": "share-2"},
         {"id": "custom", "name": "自定义流水线", "desc": "按指定顺序串行执行，每个步骤可指定 Agent", "icon": "sliders"},
+        {"id": "auto", "name": "自动工作流", "desc": "按任务内容自动指派最合适 Agent（支持直接匹配或 AI 分析精细指派）", "icon": "sparkles"},
     ]
     return modes
 
@@ -158,10 +160,11 @@ async def execute(
 
     agent_ids = task.metadata_.get("agent_ids", [])
     pipeline_steps = task.metadata_.get("pipeline_steps")
+    assignment = task.metadata_.get("assignment", "direct")
 
     queue: asyncio.Queue = asyncio.Queue()
     asyncio.create_task(
-        _run_and_collect(task_id, agent_ids, pipeline_steps, current_user.id, queue)
+        _run_and_collect(task_id, agent_ids, pipeline_steps, current_user.id, queue, assignment)
     )
 
     return {"task_id": task_id, "status": "started"}
@@ -215,6 +218,7 @@ async def _run_and_collect(
     pipeline_steps: list[str] | None,
     user_id: int,
     event_queue: asyncio.Queue,
+    assignment: str = "direct",
 ):
     """后台执行任务，收集事件到队列"""
     try:
@@ -224,6 +228,7 @@ async def _run_and_collect(
             user_id=user_id,
             agent_ids=agent_ids,
             pipeline_steps=pipeline_steps,
+            assignment=assignment,
         )
     except Exception as e:
         await event_queue.put({

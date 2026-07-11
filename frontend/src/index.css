@@ -42,6 +42,9 @@
   .btn-ghost {
     @apply btn text-neutral-400 hover:text-neutral-200 hover:bg-bg-tertiary;
   }
+  .btn-danger {
+    @apply btn bg-red-600/90 text-white hover:bg-red-600;
+  }
 
   /* 输入框 */
   .input {

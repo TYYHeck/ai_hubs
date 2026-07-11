@@ -85,7 +85,11 @@ export default function SettingsPage() {
 
       {/* LLM 配置 */}
       <div className="card p-5 mb-4">
-        <h2 className="text-sm font-medium text-neutral-200 mb-4">LLM 模型配置</h2>
+        <h2 className="text-sm font-medium text-neutral-200 mb-2">个人 LLM 配置</h2>
+        <p className="text-xs text-neutral-500 mb-4 leading-relaxed">
+          在此填写你自己的 API Key 后，对话将使用<strong className="text-neutral-300">你自己的额度</strong>（不受平台 token 限制）。
+          若留空，将使用平台提供的免费额度（受 token 配额限制，用尽后请填写自己的 Key）。
+        </p>
 
         <div className="space-y-4">
           {/* 提供商 */}

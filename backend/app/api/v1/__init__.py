@@ -12,6 +12,7 @@ from .skills import router as skills_router
 from .datasets import router as datasets_router
 from .ide import router as ide_router
 from .admin import router as admin_router
+from .uploads import router as uploads_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -23,8 +24,10 @@ api_router.include_router(skills_router)
 api_router.include_router(datasets_router)
 api_router.include_router(ide_router)
 api_router.include_router(admin_router)
+api_router.include_router(uploads_router)
 
 __all__ = [
     "api_router", "auth_router", "chat_router", "agents_router", "tasks_router",
     "memory_router", "skills_router", "datasets_router", "ide_router", "admin_router",
+    "uploads_router",
 ]

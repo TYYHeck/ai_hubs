@@ -4,11 +4,16 @@ import { getToken } from './client'
 
 export interface ChatMessage {
   id?: number
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   think_content?: string | null
   agent_name?: string | null
   created_at?: string | null
+  // 工具调用相关
+  tool_name?: string
+  tool_summary?: string
+  tool_result?: string
+  tool_pending?: boolean  // 工具正在执行
 }
 
 export interface Conversation {
@@ -21,11 +26,17 @@ export interface Conversation {
 }
 
 export interface SSEEvent {
-  event: 'start' | 'delta' | 'think' | 'done' | 'error'
+  event: 'start' | 'delta' | 'think' | 'done' | 'error' | 'tool_start' | 'tool_result'
   conversation_id?: string
   content?: string
   message_id?: number
   message?: string
+  // 工具事件
+  name?: string
+  summary?: string
+  args?: Record<string, unknown>
+  result?: string
+  tools_enabled?: boolean
 }
 
 // ── 对话管理 ──
@@ -70,6 +81,9 @@ export function streamChat(
   conversationId: string | null,
   onEvent: (evt: SSEEvent) => void,
   onError: (err: Error) => void,
+  attachmentIds: number[] = [],
+  skills: string[] = [],
+  agentName: string | null = null,
 ): AbortController {
   const controller = new AbortController()
 
@@ -79,7 +93,13 @@ export function streamChat(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${getToken()}`,
     },
-    body: JSON.stringify({ message, conversation_id: conversationId }),
+    body: JSON.stringify({
+      message,
+      conversation_id: conversationId,
+      attachment_ids: attachmentIds,
+      skills,
+      agent_name: agentName,
+    }),
     signal: controller.signal,
   })
     .then(async (res) => {
