@@ -15,7 +15,7 @@ dependencies = [
     "alembic>=1.14.0",
     # 认证
     "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.0.1",
     # AI 框架
     "langchain>=0.3.0",
     "langchain-core>=0.3.0",
