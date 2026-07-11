@@ -205,10 +205,54 @@ _TOOL_MAP: dict[str, callable] = {
 
 
 # ═══════════════════════════════════════════════════════════
+# 工作区快照工具（用于检测执行后新增文件）
+# ═══════════════════════════════════════════════════════════
+
+def _workspace_snapshot(user_id: int) -> set[str]:
+    """返回工作区当前所有文件路径集合（同步）"""
+    from .sandbox import list_files as _list
+    r = _list(".", user_id)
+    if not r.get("ok"):
+        return set()
+    return {e["path"] for e in r.get("entries", []) if e.get("type") == "file"}
+
+
+_OUTPUT_EXT = {
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+    ".pptx", ".docx", ".xlsx", ".pdf",
+    ".csv", ".json", ".html", ".md", ".txt",
+    ".mp3", ".wav", ".mp4", ".avi", ".zip",
+}
+
+
+def _workspace_new_files(user_id: int, pre: set[str]) -> list[dict]:
+    """对比快照，返回新增的输出文件列表"""
+    from .sandbox import _workspace_root
+    import mimetypes
+    root = _workspace_root(user_id)
+    after = _workspace_snapshot(user_id)
+    new_paths = after - pre
+    results = []
+    for rel_path in sorted(new_paths):
+        from pathlib import Path
+        p = root / rel_path
+        try:
+            ext = Path(rel_path).suffix.lower()
+            if ext not in _OUTPUT_EXT:
+                continue
+            size = p.stat().st_size if p.exists() else 0
+            mime, _ = mimetypes.guess_type(str(p))
+            results.append({"path": rel_path, "name": Path(rel_path).name, "size": size, "mime": mime or ""})
+        except Exception:
+            pass
+    return results
+
+
+# ═══════════════════════════════════════════════════════════
 # 工具系统提示（附加到对话 system message）
 # ═══════════════════════════════════════════════════════════
 
-TOOL_SYSTEM_PROMPT = """# 代码执行能力
+TOOL_SYSTEM_PROMPT = """# 代码执行与文件工作区
 
 你现在拥有在隔离沙箱中**真正执行代码**的能力。你可以：
 
@@ -218,20 +262,38 @@ TOOL_SYSTEM_PROMPT = """# 代码执行能力
 4. **write_file** — 将内容写入工作区文件
 5. **list_files** — 查看工作区目录结构
 
+## ⚠️ 文件保存规则（非常重要）
+
+**所有生成/保存的文件必须使用相对路径，绝对不能使用 `/tmp`、`/root`、`/home` 等绝对路径。**
+
+✅ 正确：
+```python
+img.save('logo.png')                    # 保存到工作区根目录
+plt.savefig('output/chart.png')         # 保存到工作区的 output/ 子目录
+with open('result.txt', 'w') as f: ...  # 保存到工作区根目录
+```
+
+❌ 错误：
+```python
+img.save('/tmp/logo.png')      # 用户看不到！
+plt.savefig('/root/chart.png') # 用户看不到！
+```
+
+**原因**：代码在用户专属的远程工作区执行，使用相对路径时文件会出现在 IDE 页面（远程模式）中，用户可以直接预览和下载。使用绝对路径的文件用户无法访问。
+
 ## 使用原则
 
 - **先读后改**：修改文件前，先用 read_file 查看当前内容
-- **先写后跑**：需要执行代码时，先用 write_file 写入文件，再用 run_terminal 或 run_code 执行
-- **查看结果**：代码执行后，分析 stdout/stderr 和退出码，向用户解释运行结果
-- **在失败时修复**：如果代码编译失败或运行出错，根据错误信息修改代码并重试
-- **控制输出量**：避免一次性输出大量数据；如果结果很长，做摘要或用 list_files 查看输出文件
+- **查看结果**：代码执行后，分析 stdout/stderr 和退出码，告知用户运行结果
+- **报告新文件**：代码执行结果中若包含 `new_files`，务必告诉用户文件已生成，可以在「IDE → 远程」查看
+- **在失败时修复**：如果代码出错，根据错误信息修改后重试（最多 3 次）
+- **控制输出量**：避免一次性打印大量数据；结果太长时做摘要
 
 ## 重要安全注意
 
 - 所有操作限制在当前用户的沙箱工作区中，无法访问他人文件
 - 代码最长运行时间 30 秒，超时自动终止
 - 工作区配额 500MB，写入前注意检查
-- 文件路径必须使用相对路径（相对于工作区根）
 
 ## 主动创建任务（重要）
 
@@ -260,13 +322,7 @@ async def execute_tool(
     user_id: int,
     session: "AsyncSession | None" = None,
 ) -> str:
-    """执行工具调用，返回 JSON 字符串结果（供 LLM 消费）。
-
-    tool_name: 工具名称（run_code / run_terminal / create_task / ...）
-    tool_args: 工具参数（由 LLM 生成的 JSON 对象）
-    user_id: 当前用户 ID，用于隔离沙箱工作区
-    session: 数据库会话（create_task 等需要写库的工具需要）
-    """
+    """执行工具调用，返回 JSON 字符串结果（供 LLM 消费）。"""
     if tool_name not in _TOOL_MAP:
         return json.dumps({"error": f"未知工具: {tool_name}"}, ensure_ascii=False)
 
@@ -276,6 +332,13 @@ async def execute_tool(
             return await _execute_create_task(tool_args, user_id, session)
 
         fn = _TOOL_MAP[tool_name]
+
+        # run_code / run_terminal 执行前先快照工作区，用于检测新增文件
+        pre_snapshot: set[str] = set()
+        is_exec = tool_name in ("run_code", "run_terminal")
+        if is_exec:
+            pre_snapshot = _workspace_snapshot(user_id)
+
         if tool_name == "run_code":
             result = fn(
                 code=tool_args.get("code", ""),
@@ -290,23 +353,20 @@ async def execute_tool(
                 cwd_rel=tool_args.get("cwd", ""),
             )
         elif tool_name == "read_file":
-            result = fn(
-                path=tool_args.get("path", ""),
-                user_id=user_id,
-            )
+            result = fn(path=tool_args.get("path", ""), user_id=user_id)
         elif tool_name == "write_file":
-            result = fn(
-                path=tool_args.get("path", ""),
-                content=tool_args.get("content", ""),
-                user_id=user_id,
-            )
+            result = fn(path=tool_args.get("path", ""), content=tool_args.get("content", ""), user_id=user_id)
         elif tool_name == "list_files":
-            result = fn(
-                path=tool_args.get("path", ""),
-                user_id=user_id,
-            )
+            result = fn(path=tool_args.get("path", ""), user_id=user_id)
         else:
             result = {"error": f"工具未实现: {tool_name}"}
+
+        # 执行后扫描新文件，附加到结果供 AI 告知用户
+        if is_exec:
+            new_files = _workspace_new_files(user_id, pre_snapshot)
+            if new_files:
+                result["new_files"] = new_files
+                result["new_files_tip"] = f"已在远程工作区生成 {len(new_files)} 个文件，可在 IDE 页面（远程模式）查看或下载。"
 
         logger.info(f"Tool [{tool_name}] executed for user {user_id}: exit_code={result.get('exit_code', 'N/A')}")
         return json.dumps(result, ensure_ascii=False)
