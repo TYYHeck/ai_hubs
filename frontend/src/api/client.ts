@@ -166,6 +166,12 @@ export const api = {
       body: data !== undefined ? JSON.stringify(data) : undefined,
     }),
 
+  form: <T>(path: string, formData: FormData) =>
+    request<T>(path, {
+      method: 'POST',
+      body: formData,
+    }),
+
   put: <T>(path: string, data?: unknown) =>
     request<T>(path, {
       method: 'PUT',

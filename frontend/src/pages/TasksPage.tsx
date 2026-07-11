@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight, Sparkles, Brain, FileText, Download, Eye } from 'lucide-react'
+import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight, Sparkles, Brain, FileText, Download, Eye, Wrench, CheckCircle2, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, ideApi } from '../api/client'
@@ -13,6 +13,7 @@ interface TaskData {
   result: string | null; error: string | null
   output_files?: { path: string; name: string; size: number; is_new: boolean; ext: string }[]
   created_at: string | null; started_at: string | null; finished_at: string | null
+  events?: Array<{ event: string; data: Record<string, any> }>
 }
 
 interface ModeInfo { id: string; name: string; desc: string; icon: string }
@@ -276,7 +277,7 @@ export default function TasksPage() {
                       <p className="text-text-dim text-[11px] mt-1">指派: {t.assigned_agent}</p>
                     )}
                     {t.result && (
-                      <div className="text-xs mt-1 bg-bg-tertiary rounded p-2 prose dark:prose-invert prose-xs max-w-none"
+                      <div className="text-xs mt-1 bg-bg-tertiary rounded p-2 prose dark:prose-invert prose-xs max-w-none overflow-hidden"
                         style={{ maxHeight: '6em' }}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {t.result.length > 280 ? t.result.slice(0, 280) + '…' : t.result}
@@ -334,6 +335,131 @@ export default function TasksPage() {
                       <div><span className="text-text-muted text-[10px] uppercase tracking-wide">完成</span><br /><span className="text-text-primary">{t.finished_at?.slice(0, 16) || '-'}</span></div>
                       <div><span className="text-text-muted text-[10px] uppercase tracking-wide">ID</span><br /><span className="font-mono text-text-primary">{t.id.slice(0, 8)}</span></div>
                     </div>
+
+                    {/* 工作流阶段时间线 - 所有模式都显示 */}
+                    {t.events && t.events.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-xs text-text-muted font-medium mb-2 flex items-center gap-2">
+                          <GitBranch size={12} /> 工作流阶段
+                          <span className="text-text-dim font-normal">({t.events.length} 个事件)</span>
+                        </div>
+                        <div className="bg-bg-tertiary rounded-lg p-3 max-h-[300px] overflow-y-auto">
+                          <div className="relative">
+                            <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                            {t.events.map((evt, idx) => {
+                              const isToolStart = evt.event === 'tool_start'
+                              const isToolResult = evt.event === 'tool_result'
+                              const isAutoAssign = evt.event === 'auto_assign_start'
+                              const isAutoAssigned = evt.event === 'auto_assigned'
+                              const isAgentStart = evt.event === 'agent_start'
+                              const isAgentDone = evt.event === 'agent_done'
+                              const isTaskStart = evt.event === 'task_start'
+                              const isTaskCompleted = evt.event === 'task_completed'
+                              const isTaskFailed = evt.event === 'task_failed'
+                              const isSequential = evt.event === 'sequential_step'
+                              const isParallelStart = evt.event === 'parallel_start'
+                              const isParallelDone = evt.event === 'parallel_done'
+                              const isDebate = evt.event === 'debate_round'
+                              const isThink = evt.event === 'think'
+
+                              let icon = <div className="w-3.5 h-3.5 rounded-full bg-bg-tertiary border-2 border-text-dim/40" />
+                              let title = evt.event
+                              let desc = ''
+                              let colorClass = 'text-text-muted'
+
+                              if (isAutoAssign) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-blue-500" />
+                                title = 'AI 分析任务'
+                                desc = `候选 Agent: ${evt.data?.candidates?.join(', ') || '-'}`
+                                colorClass = 'text-blue-600 dark:text-blue-400'
+                              } else if (isAutoAssigned) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-accent" />
+                                title = '任务分配'
+                                desc = `策略: ${evt.data?.strategy || '-'} → Agent: ${evt.data?.agent || '-'}`
+                                colorClass = 'text-accent'
+                              } else if (isTaskStart) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-blue-500" />
+                                title = '任务开始'
+                                colorClass = 'text-blue-600 dark:text-blue-400'
+                              } else if (isAgentStart) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-yellow-500" />
+                                title = `${evt.data?.agent || 'Agent'} 开始执行`
+                                desc = `模型: ${evt.data?.model || '-'}`
+                                colorClass = 'text-yellow-600 dark:text-yellow-400'
+                              } else if (isToolStart) {
+                                icon = <Wrench size={14} className="text-purple-500" />
+                                title = `调用工具: ${evt.data?.tool || '-'}`
+                                desc = evt.data?.summary || ''
+                                colorClass = 'text-purple-600 dark:text-purple-400'
+                              } else if (isToolResult) {
+                                icon = <CheckCircle2 size={14} className="text-green-500" />
+                                title = `工具完成: ${evt.data?.tool || '-'}`
+                                desc = evt.data?.result_preview ? `${evt.data.result_preview.slice(0, 80)}${evt.data.result_preview.length > 80 ? '...' : ''}` : ''
+                                colorClass = 'text-green-600 dark:text-green-400'
+                              } else if (isAgentDone) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-green-500" />
+                                title = `${evt.data?.agent || 'Agent'} 执行完成`
+                                desc = `结果长度: ${evt.data?.length || 0} 字符`
+                                colorClass = 'text-green-600 dark:text-green-400'
+                              } else if (isTaskCompleted) {
+                                icon = <CheckCircle2 size={14} className="text-green-500" />
+                                title = '任务完成'
+                                colorClass = 'text-green-600 dark:text-green-400'
+                              } else if (isTaskFailed) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-red-500" />
+                                title = '任务失败'
+                                desc = evt.data?.error || ''
+                                colorClass = 'text-red-600 dark:text-red-400'
+                              } else if (isSequential) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-blue-400" />
+                                title = `串行步骤 ${evt.data?.step}/${evt.data?.total}`
+                                desc = evt.data?.agent || ''
+                                colorClass = 'text-blue-600 dark:text-blue-400'
+                              } else if (isParallelStart) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-cyan-500" />
+                                title = '并行执行开始'
+                                desc = `${evt.data?.count || 0} 个 Agent 并行`
+                                colorClass = 'text-cyan-600 dark:text-cyan-400'
+                              } else if (isParallelDone) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-green-500" />
+                                title = '并行执行完成'
+                                colorClass = 'text-green-600 dark:text-green-400'
+                              } else if (isDebate) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-orange-500" />
+                                title = `辩论第 ${evt.data?.round || 0} 轮`
+                                desc = evt.data?.agent || ''
+                                colorClass = 'text-orange-600 dark:text-orange-400'
+                              } else if (isThink) {
+                                icon = <Brain size={14} className="text-purple-500" />
+                                title = 'AI 思考中...'
+                                colorClass = 'text-purple-600 dark:text-purple-400'
+                              }
+
+                              return (
+                                <div key={idx} className="relative pl-6 pb-3 last:pb-0">
+                                  <div className="absolute left-0 top-0.5">
+                                    {icon}
+                                  </div>
+                                  <div className="text-xs">
+                                    <span className={`font-medium ${colorClass}`}>{title}</span>
+                                    {desc && (
+                                      <p className="text-text-dim mt-0.5 break-words">{desc}</p>
+                                    )}
+                                    {evt.data?.args && isToolStart && Object.keys(evt.data.args).length > 0 && (
+                                      <div className="mt-1 bg-bg-secondary/60 rounded p-1.5 text-[10px] font-mono text-text-muted break-all">
+                                        {JSON.stringify(evt.data.args).slice(0, 120)}
+                                        {JSON.stringify(evt.data.args).length > 120 && '...'}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* 产出文件 */}
                     {t.output_files && t.output_files.length > 0 && (
                       <div className="mb-4">
@@ -343,12 +469,10 @@ export default function TasksPage() {
                         <div className="flex flex-wrap gap-2">
                           {t.output_files.map((f, i) => (
                             <div key={i} className="inline-flex items-center gap-1 rounded-lg bg-green-500/10 border border-green-500/30 overflow-hidden">
-                              <FilePreviewButton
-                                path={f.path}
-                                label={f.name}
-                                className="!bg-transparent !border-0 !rounded-none text-green-700 dark:text-green-300 hover:!bg-green-500/10 pr-1"
-                              />
-                              <span className="text-[10px] text-green-700 dark:text-green-500 pr-1">{f.is_new ? '新' : ''}</span>
+                              <button onClick={() => window.open(ideApi.downloadUrl(f.path), '_blank')} className="p-1 text-green-600 dark:text-green-400 hover:bg-green-500/20" title="预览">
+                                <Eye size={11} />
+                              </button>
+                              <span className="text-[10px] text-green-700 dark:text-green-500 px-1 truncate max-w-[120px]">{f.name}</span>
                               <a href={ideApi.downloadUrl(f.path)} download={f.name}
                                 className="p-1 text-green-600 dark:text-green-400 hover:bg-green-500/20"
                                 title="下载">
@@ -359,6 +483,7 @@ export default function TasksPage() {
                         </div>
                       </div>
                     )}
+
                     {/* 完整结果 - Markdown 渲染 */}
                     {t.result && (
                       <div className="mb-3">
@@ -373,8 +498,7 @@ export default function TasksPage() {
                             复制
                           </button>
                         </div>
-                        <div className="prose prose-sm max-w-none bg-bg-tertiary rounded-lg p-4 overflow-auto max-h-[500px] text-text-primary break-words"
-                          style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                        <div className="prose prose-sm max-w-none bg-bg-tertiary rounded-lg p-4 overflow-y-auto max-h-[400px] text-text-primary break-words">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {t.result}
                           </ReactMarkdown>

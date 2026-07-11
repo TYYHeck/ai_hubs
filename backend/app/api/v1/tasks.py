@@ -43,7 +43,17 @@ async def list_tasks(
     stmt = stmt.order_by(Task.created_at.desc())
     result = await session.execute(stmt)
     tasks = result.scalars().all()
-    return [t.to_dict() for t in tasks]
+    
+    task_list = []
+    for t in tasks:
+        item = t.to_dict()
+        evt_stmt = select(TaskEvent).where(TaskEvent.task_id == t.id).order_by(TaskEvent.created_at)
+        evt_result = await session.execute(evt_stmt)
+        events = evt_result.scalars().all()
+        item["events"] = [e.to_dict() for e in events]
+        item["output_files"] = t.metadata_.get("output_files", [])
+        task_list.append(item)
+    return task_list
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

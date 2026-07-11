@@ -378,16 +378,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }))
             break
           case 'done':
-            // 解析最后一条 assistant 消息中的 <ask> 标签
+            // 解析最后一条 assistant 消息中的 <ask> 标签，并添加产出文件
             set((state) => {
               const msgs = [...state.messages]
               for (let i = msgs.length - 1; i >= 0; i--) {
                 if (msgs[i].role === 'assistant') {
                   const askData = parseAskData(msgs[i].content)
+                  const updates: Partial<ChatMessage> = {}
                   if (askData && askData.length > 0) {
-                    msgs[i] = { ...msgs[i], ask_data: askData, ask_answered: false }
-                    return { messages: msgs, streaming: false, streamingContent: '' }
+                    updates.ask_data = askData
+                    updates.ask_answered = false
                   }
+                  if (evt.output_files && evt.output_files.length > 0) {
+                    updates.output_files = evt.output_files
+                  }
+                  msgs[i] = { ...msgs[i], ...updates }
+                  return { messages: msgs, streaming: false, streamingContent: '' }
                 }
               }
               return { streaming: false, streamingContent: '' }

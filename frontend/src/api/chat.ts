@@ -26,6 +26,8 @@ export interface ChatMessage {
   tool_result?: string
   tool_pending?: boolean  // 工具正在执行
   tool_args?: Record<string, unknown>  // 工具调用的参数（path/method/body 等），用于前端感知副作用
+  // 产出文件
+  output_files?: { path: string; name: string; size: number; is_new: boolean; ext: string }[]
   // 交互式提问（<ask> 标签）
   ask_data?: AskQuestion[]     // 从 <ask> 标签中解析出的问题
   ask_answered?: boolean       // 用户是否已回答
@@ -64,6 +66,8 @@ export interface SSEEvent {
   args?: Record<string, unknown>
   result?: string
   tools_enabled?: boolean
+  // 产出文件
+  output_files?: { path: string; name: string; size: number; is_new: boolean; ext: string }[]
   // 交互式组件事件
   title?: string
   interaction_id?: string

@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react'
 import { X, Download, ExternalLink, FileText, Image as ImageIcon, File, Music, Video } from 'lucide-react'
 import { ideApi } from '../api/client'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export interface FileMeta {
   path: string
@@ -39,24 +41,48 @@ export function FilePreviewButton({ path, label, className = '' }: { path: strin
 export function FilePreviewModal({ path, onClose, title }: { path: string; onClose: () => void; title?: string }) {
   const [meta, setMeta] = useState<FileMeta | null>(null)
   const [text, setText] = useState<string | null>(null)
+  const [imageBlobUrl, setImageBlobUrl] = useState<string | null>(null)
+  const [mediaBlobUrl, setMediaBlobUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
 
   useEffect(() => {
     let cancel = false
-    setLoading(true); setErr(''); setText(null)
+    let blobUrl: string | null = null
+    setLoading(true); setErr(''); setText(null); setImageBlobUrl(null); setMediaBlobUrl(null)
     ;(async () => {
       try {
         const m = await ideApi.fileInfo(path)
         if (cancel) return
         setMeta(m)
+        const token = localStorage.getItem('ai_hubs_token') || ''
         if (m.is_text && m.size < 1024 * 1024) {
           const res = await fetch(ideApi.previewUrl(path), {
-            headers: { Authorization: `Bearer ${localStorage.getItem('ai_hubs_token') || ''}` },
+            headers: { Authorization: `Bearer ${token}` },
           })
           if (res.ok) {
             const t = await res.text()
             if (!cancel) setText(t)
+          }
+        }
+        if (m.is_image) {
+          const res = await fetch(ideApi.previewUrl(path, true), {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (res.ok) {
+            const blob = await res.blob()
+            blobUrl = URL.createObjectURL(blob)
+            if (!cancel) setImageBlobUrl(blobUrl)
+          }
+        }
+        if (m.is_media) {
+          const res = await fetch(ideApi.previewUrl(path, true), {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (res.ok) {
+            const blob = await res.blob()
+            blobUrl = URL.createObjectURL(blob)
+            if (!cancel) setMediaBlobUrl(blobUrl)
           }
         }
       } catch (e) {
@@ -64,7 +90,10 @@ export function FilePreviewModal({ path, onClose, title }: { path: string; onClo
       }
       if (!cancel) setLoading(false)
     })()
-    return () => { cancel = true }
+    return () => {
+      cancel = true
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+    }
   }, [path])
 
   const downloadHref = ideApi.downloadUrl(path)
@@ -113,18 +142,36 @@ export function FilePreviewModal({ path, onClose, title }: { path: string; onClo
             <div className="h-full flex items-center justify-center text-text-muted">文件不存在</div>
           ) : meta.is_image ? (
             <div className="h-full flex items-center justify-center p-4">
-              <img src={previewHref} alt={name} className="max-w-full max-h-full object-contain" />
+              {imageBlobUrl ? (
+                <img src={imageBlobUrl} alt={name} className="max-w-full max-h-full object-contain" />
+              ) : (
+                <div className="text-text-muted">加载中…</div>
+              )}
             </div>
           ) : meta.is_pdf ? (
             <iframe src={previewHref} className="w-full h-full" title={name} />
           ) : meta.is_text ? (
-            <pre className="p-4 text-xs text-text-primary whitespace-pre-wrap break-words font-mono">{text || '空文件'}</pre>
+            meta.ext === 'md' ? (
+              <div className="p-4 text-sm text-text-primary max-w-none prose prose-sm">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{text || '空文件'}</ReactMarkdown>
+              </div>
+            ) : (
+              <pre className="p-4 text-xs text-text-primary whitespace-pre-wrap break-words font-mono">{text || '空文件'}</pre>
+            )
           ) : meta.is_media && meta.mime.startsWith('audio/') ? (
             <div className="h-full flex items-center justify-center p-8">
-              <audio src={previewHref} controls className="w-full max-w-md" />
+              {mediaBlobUrl ? (
+                <audio src={mediaBlobUrl} controls className="w-full max-w-md" />
+              ) : (
+                <div className="text-text-muted">加载中…</div>
+              )}
             </div>
           ) : meta.is_media ? (
-            <video src={previewHref} controls className="w-full h-full" />
+            mediaBlobUrl ? (
+              <video src={mediaBlobUrl} controls className="w-full h-full" />
+            ) : (
+              <div className="h-full flex items-center justify-center text-text-muted">加载中…</div>
+            )
           ) : (
             // 其它二进制（pptx/docx/xlsx/zip 等）：给个下载引导
             <div className="h-full flex flex-col items-center justify-center text-text-muted gap-3 p-8">

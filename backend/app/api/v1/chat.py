@@ -35,6 +35,7 @@ from ...core.tools import (
     TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT,
     should_enable_tools, should_enable_code_tools, execute_tool, get_tool_summary,
 )
+from ...core.orchestrator import _collect_output_files
 from ...core.internal_tools import (
     INTERNAL_API_TOOL, USER_INPUT_TOOL,
     execute_internal_api, build_interactive_event,
@@ -515,11 +516,13 @@ async def chat_stream(
                 current_user.add_token_usage(est_tokens)
                 await session.flush()
     
-            # 7. 发送完成事件
+            # 7. 收集产出文件并发送完成事件
+            output_files = await _collect_output_files(current_user.id)
             yield _sse({
                 "event": "done",
                 "message_id": ai_msg.id,
                 "conversation_id": conv_id,
+                "output_files": output_files,
             })
     
         except Exception as e:

@@ -14,8 +14,10 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import {
   Plus, Folder, RefreshCw, Upload, Download, Eye, Trash2,
   FileCode, FolderOpen, ChevronRight, ChevronDown,
-  Play, Terminal, Code2, MessageSquare, X, GripVertical,
-  ZoomIn, ZoomOut, Maximize2,
+  Play, Terminal, Code2, X, GripVertical,
+  ZoomIn, ZoomOut, Maximize2, Menu,
+  User, Bot, Loader2, FileText, Paperclip, Send,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
 } from 'lucide-react'
 import { ideApi, type FsNode, type RunResult } from '../api/client'
 import { FilePreviewModal } from '../components/FilePreviewModal'
@@ -35,6 +37,13 @@ function langOf(path: string) {
     case 'java': return java()
     default: return []
   }
+}
+
+const textExts = ['py', 'js', 'mjs', 'jsx', 'ts', 'tsx', 'json', 'html', 'htm', 'css', 'md', 'txt', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'java', 'go', 'rs', 'php', 'sql', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'log']
+
+function isTextFile(path: string): boolean {
+  const ext = path.split('.').pop()?.toLowerCase() || ''
+  return textExts.includes(ext)
 }
 
 interface TreeNodeProps {
@@ -80,6 +89,211 @@ function TreeNode({ node, depth, onOpen, activePath, onDelete, onPreview, onDown
   )
 }
 
+function ChatSidebar() {
+  const { conversations, currentConvId, selectConversation, newConversation, deleteConversation } = useChatStore()
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+
+  return (
+    <div className="w-48 flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border">
+        <span className="text-[10px] text-text-muted">对话列表</span>
+        <button onClick={() => newConversation()} className="p-0.5 text-text-muted hover:text-accent" title="新对话">
+          <Plus size={10} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto py-1">
+        {conversations.map(c => (
+          <div key={c.id}
+            className={`px-2 py-1.5 text-xs cursor-pointer transition-colors ${
+              currentConvId === c.id ? 'bg-accent/10 text-accent' : 'text-text-secondary hover:bg-bg-tertiary'
+            }`}
+            onClick={() => selectConversation(c.id)}
+            onMouseEnter={() => setHoveredId(c.id)}
+            onMouseLeave={() => setHoveredId(null)}>
+            <div className="flex items-center justify-between">
+              <span className="truncate flex-1">{c.title}</span>
+              {hoveredId === c.id && (
+                <button onClick={e => { e.stopPropagation(); deleteConversation(c.id) }} className="text-text-dim hover:text-red-500">
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+            <span className="text-[10px] text-text-dim">{c.updated_at?.slice(0, 10)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ChatPanel() {
+  const {
+    messages, streaming, error,
+    attachments, uploading,
+    sendMessage, clearError,
+    addAttachments, removeAttachment,
+    pauseGeneration,
+  } = useChatStore()
+
+  const [input, setInput] = useState('')
+  const [showSidebar, setShowSidebar] = useState(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, streaming])
+
+  const handleSend = async () => {
+    if (!input.trim() && attachments.length === 0) return
+    await sendMessage(input)
+    setInput('')
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    for (const file of files) {
+      const result = await addAttachments([file])
+      if (result?.placeholder) {
+        setInput(prev => prev ? `${prev} ${result.placeholder}` : result.placeholder)
+      }
+    }
+    e.target.value = ''
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-bg-secondary">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-bg-tertiary">
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => setShowSidebar(!showSidebar)} className="p-0.5 text-text-muted hover:text-text-primary" title="对话列表">
+            <Menu size={12} />
+          </button>
+          <span className="text-xs text-text-muted font-medium">对话</span>
+        </div>
+        {streaming && (
+          <button onClick={pauseGeneration} className="p-0.5 text-text-muted hover:text-red-500 dark:hover:text-red-400" title="中断生成">
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      <div className="flex-1 overflow-hidden flex">
+        {showSidebar && <ChatSidebar />}
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+            {messages.map((msg, i) => {
+              if (msg.role === 'tool') {
+                return (
+                  <div key={msg.id || i} className="flex gap-2">
+                    <div className="w-6 h-6 rounded-full bg-bg-tertiary text-text-muted flex items-center justify-center flex-shrink-0">
+                      <Terminal size={12} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-[10px] text-text-dim mb-0.5">
+                        {msg.tool_name === 'call_internal_api' ? '内部调用' :
+                         msg.tool_name === 'request_user_input' ? '交互' :
+                         msg.tool_name || '工具'}
+                      </div>
+                      <div className="px-3 py-1.5 rounded-lg bg-bg-tertiary/50 text-xs text-text-secondary border border-border/50">
+                        {msg.tool_summary && <div className="text-accent font-medium mb-1">{msg.tool_summary}</div>}
+                        {msg.tool_result || msg.content}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div key={msg.id || i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-muted'}`}>
+                    {msg.role === 'user' ? <User size={12} /> : <Bot size={12} />}
+                  </div>
+                  <div className={`max-w-[85%] ${msg.role === 'user' ? 'text-right' : ''}`}>
+                    <div className={`text-xs text-text-muted mb-0.5 ${msg.role === 'user' ? 'text-right' : ''}`}>
+                      {msg.role === 'user' ? '我' : msg.agent_name || 'AI'}
+                    </div>
+                    <div className={`px-3 py-1.5 rounded-lg text-xs ${msg.role === 'user' ? 'bg-accent text-white rounded-br-none' : 'bg-bg-tertiary text-text-secondary rounded-bl-none'}`}>
+                      {msg.content}
+                    </div>
+                    {msg.output_files && msg.output_files.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1 justify-start">
+                        {msg.output_files.map((f, idx) => (
+                          <div key={idx} className="inline-flex items-center gap-0.5 rounded bg-green-500/10 border border-green-500/30 overflow-hidden">
+                            <button onClick={() => window.open(ideApi.downloadUrl(f.path), '_blank')} className="p-0.5 text-green-600 dark:text-green-400 hover:bg-green-500/20">
+                              <Eye size={10} />
+                            </button>
+                            <span className="text-[10px] text-green-700 dark:text-green-500 px-1">{f.name}</span>
+                            <a href={ideApi.downloadUrl(f.path)} download={f.name} className="p-0.5 text-green-600 dark:text-green-400 hover:bg-green-500/20">
+                              <Download size={10} />
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            {streaming && (
+              <div className="flex gap-2">
+                <div className="w-6 h-6 rounded-full bg-bg-tertiary text-text-muted flex items-center justify-center flex-shrink-0">
+                  <Loader2 size={12} className="animate-spin" />
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-bg-tertiary text-text-secondary rounded-bl-none text-xs">
+                  <span className="animate-pulse">AI 思考中…</span>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+          {error && (
+            <div className="px-3 py-1 bg-red-500/10 border-t border-red-500/30 text-red-400 text-xs flex items-center justify-between">
+              <span>{error}</span>
+              <button onClick={clearError}><X size={12} /></button>
+            </div>
+          )}
+          <div className="border-t border-border px-3 py-2 bg-bg-tertiary">
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {attachments.map((a, i) => (
+                  <div key={i} className="flex items-center gap-0.5 rounded bg-bg-secondary px-1.5 py-0.5 text-[10px] text-text-muted">
+                    <FileText size={10} />
+                    <span>{a.filename}</span>
+                    <button onClick={() => removeAttachment(i)}><X size={8} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => fileRef.current?.click()} className="p-2 text-text-muted hover:text-accent flex-shrink-0" title="上传文件">
+                <Paperclip size={14} />
+              </button>
+              <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFileUpload} />
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="输入消息…"
+                className="flex-1 bg-transparent text-xs text-text-primary resize-none focus:outline-none placeholder:text-text-dim"
+                rows={1}
+                style={{ minHeight: '24px' }}
+              />
+              <button onClick={handleSend} disabled={(input.trim() === '' && attachments.length === 0) || streaming} className="p-2 bg-accent hover:bg-accent-hover text-white disabled:opacity-50 flex-shrink-0 rounded transition-colors" title="发送">
+                <Send size={12} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function WorkspacePage() {
   const [tree, setTree] = useState<FsNode | null>(null)
   const [loading, setLoading] = useState(false)
@@ -92,23 +306,17 @@ export default function WorkspacePage() {
   const [previewNode, setPreviewNode] = useState<FsNode | null>(null)
   const [treeError, setTreeError] = useState('')
   const [msg, setMsg] = useState('')
-  const [showChatPanel, setShowChatPanel] = useState(false)
-  const [workspaceWidth, setWorkspaceWidth] = useState(70)
-  const [isDragging, setIsDragging] = useState(false)
   const [fontSize, setFontSize] = useState(14)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [chatWidth, setChatWidth] = useState(400)
+  const [treeWidth, setTreeWidth] = useState(160)
+  const [isDraggingTree, setIsDraggingTree] = useState(false)
+  const [isDraggingChat, setIsDraggingChat] = useState(false)
+  const [showTree, setShowTree] = useState(true)
+  const [showChat, setShowChat] = useState(true)
   const uploadRef = useRef<HTMLInputElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const {
-    conversations, currentConvId, selectConversation, newConversation, deleteConversation,
-    loadConversations,
-  } = useChatStore()
-
-  useEffect(() => {
-    loadConversations()
-  }, [loadConversations])
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const loadTree = useCallback(async () => {
     setLoading(true); setTreeError('')
@@ -122,6 +330,12 @@ export default function WorkspacePage() {
   const openFile = useCallback(async (n: FsNode) => {
     if (n.type !== 'file') return
     try {
+      if (!isTextFile(n.path)) {
+        setCurrentPath(n.path)
+        setContent('')
+        setDirty(false)
+        return
+      }
       const r = await ideApi.readFile(n.path)
       setCurrentPath(n.path); setContent(r.content); setDirty(false)
     } catch (e) { setTreeError((e as Error)?.message || '读取失败') }
@@ -148,10 +362,16 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (dirty) {
-      const cleanup = debouncedSave()
-      return cleanup
+      debouncedSave()
+    } else {
+      setSaveStatus('idle')
     }
-    setSaveStatus('idle')
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+    }
   }, [dirty, debouncedSave])
 
   const run = async () => {
@@ -214,68 +434,93 @@ export default function WorkspacePage() {
     }
   }
 
-  const extensions = useMemo(() => [langOf(currentPath), autocompletion(), keymap.of(completionKeymap)], [currentPath])
+  const extensions = useMemo(() => {
+    const lang = langOf(currentPath)
+    const base = [autocompletion(), keymap.of(completionKeymap)]
+    if (Array.isArray(lang)) {
+      return [...lang, ...base]
+    }
+    return [lang, ...base]
+  }, [currentPath])
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging || !containerRef.current) return
+  const handleTreeMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingTree || !containerRef.current) return
     const rect = containerRef.current.getBoundingClientRect()
-    const newWidth = ((e.clientX - rect.left) / rect.width) * 100
-    setWorkspaceWidth(Math.max(30, Math.min(85, newWidth)))
-  }, [isDragging])
+    const newWidth = e.clientX - rect.left
+    setTreeWidth(Math.max(100, Math.min(300, newWidth)))
+  }, [isDraggingTree])
+
+  const handleChatMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingChat || !containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const newWidth = rect.right - e.clientX
+    setChatWidth(Math.max(280, Math.min(600, newWidth)))
+  }, [isDraggingChat])
 
   const handleMouseUp = useCallback(() => {
-    setIsDragging(false)
+    setIsDraggingTree(false)
+    setIsDraggingChat(false)
   }, [])
 
   useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove)
+    if (isDraggingTree || isDraggingChat) {
+      document.addEventListener('mousemove', isDraggingTree ? handleTreeMouseMove : handleChatMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
       return () => {
-        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mousemove', isDraggingTree ? handleTreeMouseMove : handleChatMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
       }
     }
-  }, [isDragging, handleMouseMove, handleMouseUp])
+  }, [isDraggingTree, isDraggingChat, handleTreeMouseMove, handleChatMouseMove, handleMouseUp])
 
   return (
     <div className="flex h-full overflow-hidden" ref={containerRef}>
-      <div className="flex flex-col" style={{ width: `${workspaceWidth}%`, minWidth: 0 }}>
+      <div className="flex flex-col flex-1 min-w-0">
         <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-bg-secondary">
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-text-muted font-medium">工作区</span>
-            <button onClick={newFile} className="p-1 rounded text-text-muted hover:text-text-primary" title="新建"><Plus size={12} /></button>
-            <button onClick={loadTree} className="p-1 rounded text-text-muted hover:text-text-primary" title="刷新"><RefreshCw size={12} /></button>
-            <button onClick={() => uploadRef.current?.click()} disabled={uploading} className="p-1 rounded text-text-muted hover:text-text-primary disabled:opacity-40" title="上传"><Upload size={12} /></button>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setShowTree(!showTree)} className="p-1 rounded text-text-muted hover:text-text-primary" title={showTree ? '隐藏文件树' : '显示文件树'}>
+              {showTree ? <PanelLeftClose size={12} /> : <PanelLeftOpen size={12} />}
+            </button>
+            <div className="w-px h-3 bg-border" />
+            <button onClick={newFile} className="p-1 rounded text-text-muted hover:text-text-primary" title="新建文件"><Plus size={12} /></button>
+            <button onClick={loadTree} className="p-1 rounded text-text-muted hover:text-text-primary" title="刷新文件"><RefreshCw size={12} /></button>
+            <button onClick={() => uploadRef.current?.click()} disabled={uploading} className="p-1 rounded text-text-muted hover:text-text-primary disabled:opacity-40" title="上传文件"><Upload size={12} /></button>
             <input ref={uploadRef} type="file" multiple className="hidden" onChange={handleUpload} />
-            <button onClick={run} disabled={running || !currentPath} className="p-1 rounded border border-green-500 bg-green-500/10 text-green-600 hover:bg-green-500 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title={running ? '运行中…' : '运行'}>
+            <button onClick={run} disabled={running || !currentPath} className="p-1 rounded border border-green-500 bg-green-500/10 text-green-600 hover:bg-green-500 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title={running ? '运行中…' : '运行代码'}>
               <Play size={12} />
             </button>
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={() => setFontSize(f => Math.max(10, f - 2))} className="p-1.5 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="缩小字体">
-              <ZoomOut size={12} />
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowChat(!showChat)} className="p-1 rounded text-text-muted hover:text-text-primary" title={showChat ? '隐藏对话' : '显示对话'}>
+              {showChat ? <PanelRightClose size={12} /> : <PanelRightOpen size={12} />}
             </button>
-            <span className="text-[10px] text-text-dim w-8 text-center">{fontSize}px</span>
-            <button onClick={() => setFontSize(f => Math.min(24, f + 2))} className="p-1.5 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="放大字体">
-              <ZoomIn size={12} />
-            </button>
-            <button onClick={() => setFontSize(14)} className="p-1.5 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="重置字体">
-              <Maximize2 size={12} />
-            </button>
+            <div className="w-px h-3 bg-border" />
+            <button onClick={() => setFontSize(f => Math.max(10, f - 2))} className="p-1 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="缩小字体"><ZoomOut size={12} /></button>
+            <span className="text-[10px] text-text-dim w-8 text-center hidden sm:inline">{fontSize}px</span>
+            <button onClick={() => setFontSize(f => Math.min(24, f + 2))} className="p-1 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="放大字体"><ZoomIn size={12} /></button>
+            <button onClick={() => setFontSize(14)} className="p-1 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="重置字体"><Maximize2 size={12} /></button>
           </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          <div className="w-40 flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col">
-            <div className="flex-1 overflow-y-auto py-1 text-xs">
-              {loading ? <div className="p-2 text-text-dim">加载中…</div> :
-               treeError ? <div className="p-2 text-red-400">{treeError}</div> :
-               tree ? <TreeNode node={tree} depth={0} onOpen={openFile} activePath={currentPath} onDelete={removeNode} onPreview={setPreviewNode} onDownload={handleDownload} /> :
-               <div className="p-2 text-text-dim">空工作区</div>}
-            </div>
-            {msg && <div className="px-2 py-1 text-[10px] text-green-400 border-t border-border truncate">{msg}</div>}
-          </div>
+          {showTree && (
+            <>
+              <div className="flex flex-col flex-shrink-0" style={{ width: `${treeWidth}px` }}>
+                <div className="flex-1 overflow-y-auto py-1 text-xs">
+                  {loading ? <div className="p-2 text-text-dim">加载中…</div> :
+                   treeError ? <div className="p-2 text-red-400">{treeError}</div> :
+                   tree ? <TreeNode node={tree} depth={0} onOpen={openFile} activePath={currentPath} onDelete={removeNode} onPreview={setPreviewNode} onDownload={handleDownload} /> :
+                   <div className="p-2 text-text-dim">空工作区</div>}
+                </div>
+                {msg && <div className="px-2 py-1 text-[10px] text-green-400 border-t border-border truncate">{msg}</div>}
+              </div>
+
+              <div className="w-[1px] bg-border cursor-col-resize hover:bg-accent/50 transition-colors flex-shrink-0"
+                onMouseDown={() => setIsDraggingTree(true)}>
+                <GripVertical size={10} className="mx-auto text-text-dim" />
+              </div>
+            </>
+          )}
 
           <div className="flex flex-col flex-1 min-w-0">
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-bg-secondary flex-shrink-0">
@@ -287,14 +532,22 @@ export default function WorkspacePage() {
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               {currentPath ? (
-                <CodeMirror key={currentPath} value={content} height="100%" theme={oneDark} extensions={[extensions]}
-                  onChange={val => { setContent(val); setDirty(true) }} className="h-full" style={{ fontSize: `${fontSize}px` }} />
+                content || isTextFile(currentPath) ? (
+                  <CodeMirror key={currentPath} value={content} height="100%" theme={oneDark} extensions={extensions}
+                    onChange={val => { setContent(val); setDirty(true) }} className="h-full" style={{ fontSize: `${fontSize}px` }} />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-text-dim text-sm bg-bg-tertiary">
+                    <FileCode size={48} className="mb-4 opacity-30" />
+                    <p>二进制文件，无法在编辑器中显示</p>
+                    <p className="text-xs mt-1">请使用预览按钮查看或下载</p>
+                  </div>
+                )
               ) : (
                 <div className="h-full flex items-center justify-center text-text-dim text-xs">从左侧选择文件开始编辑</div>
               )}
             </div>
             {runResult && (
-              <div className="h-36 flex-shrink-0 border-t border-border bg-bg-secondary flex flex-col">
+              <div className="h-32 sm:h-36 flex-shrink-0 border-t border-border bg-bg-secondary flex flex-col">
                 <div className="flex items-center gap-1.5 px-3 py-1 border-b border-border text-xs text-text-muted flex-shrink-0">
                   <Terminal size={12} /> 输出
                   <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] ${runResult.exit_code === 0 ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-400'}`}>exit {runResult.exit_code}</span>
@@ -310,59 +563,17 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      <div
-        className={`w-0.5 bg-border cursor-col-resize flex-shrink-0 flex items-center justify-center hover:bg-accent/50 transition-colors ${isDragging ? 'bg-accent' : ''}`}
-        onMouseDown={() => setIsDragging(true)}
-        title="拖拽调整宽度"
-      >
-        <GripVertical size={14} className="text-text-dim opacity-0 hover:opacity-100 transition-opacity" />
-      </div>
-
-      <div className="flex flex-col" style={{ width: `${100 - workspaceWidth}%`, minWidth: 0 }}>
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-bg-secondary flex-shrink-0">
-          <button onClick={() => setShowChatPanel(true)}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-muted hover:text-accent hover:bg-accent/10 transition-colors">
-            <MessageSquare size={14} /> 对话
-          </button>
-        </div>
-        <div className="flex-1 flex items-center justify-center text-text-dim text-xs">
-          <div className="text-center">
-            <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
-            <p>点击上方按钮打开对话面板</p>
+      {showChat && (
+        <>
+          <div className="w-[1px] bg-border cursor-col-resize hover:bg-accent/50 transition-colors flex-shrink-0"
+            onMouseDown={() => setIsDraggingChat(true)}>
+            <GripVertical size={10} className="mx-auto text-text-dim" />
           </div>
-        </div>
-      </div>
 
-      {showChatPanel && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/20" onClick={() => setShowChatPanel(false)} />
-          <div className="absolute top-0 left-0 h-full w-96 bg-bg-primary border-r border-border flex flex-col shadow-xl">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary">
-              <button onClick={() => { newConversation(); setShowChatPanel(false) }}
-                className="btn-primary text-xs flex items-center gap-2">
-                <Plus size={14} /> 新对话
-              </button>
-              <button onClick={() => setShowChatPanel(false)} className="p-1 rounded text-text-muted hover:text-text-primary">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {conversations.length === 0 ? (
-                <div className="p-4 text-center text-xs text-text-dim">暂无对话</div>
-              ) : conversations.map((conv) => (
-                <div key={conv.id}
-                  onClick={() => { selectConversation(conv.id); setShowChatPanel(false) }}
-                  className={`group flex items-center gap-2 px-3 py-2.5 cursor-pointer text-sm transition-colors ${
-                    currentConvId === conv.id ? 'bg-accent/10 text-accent' : 'text-text-muted hover:bg-bg-tertiary'}`}>
-                  <span className="flex-1 truncate">{conv.title || '新对话'}</span>
-                  <button onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id) }}
-                    className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red-500 dark:hover:text-red-400 transition-opacity">
-                    <X size={14} /></button>
-                </div>
-              ))}
-            </div>
+          <div className="flex-shrink-0" style={{ width: `${chatWidth}px` }}>
+            <ChatPanel />
           </div>
-        </div>
+        </>
       )}
 
       {previewNode && (

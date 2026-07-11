@@ -36,7 +36,7 @@ export const AppRouter = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
-      { path: '/', element: <Navigate to="/workspace" replace /> },
+      { path: '/', element: <DashboardPage /> },
       { path: '/chat', element: <ChatPage /> },
       { path: '/agents', element: <AgentsPage /> },
       { path: '/tasks', element: <TasksPage /> },

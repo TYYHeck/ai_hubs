@@ -1,149 +1,125 @@
-// AI Hubs — 侧边栏导航
-
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, ListTodo, Package,
-  Brain, BookOpen, Database, Code2, Workflow, Shield, Settings, LayoutTemplate,
+  Brain, BookOpen, Database, Code2, Workflow, Shield, Settings, LayoutTemplate, X,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
 
-const navItems = [
+interface NavItem {
+  to: string
+  icon: typeof LayoutDashboard
+  label: string
+}
+
+const baseItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, label: '仪表盘' },
   { to: '/agents', icon: Bot, label: 'Agent' },
   { to: '/tasks', icon: ListTodo, label: '任务' },
+  { to: '/workflow', icon: Workflow, label: '工作流' },
+  { to: '/knowledge', icon: BookOpen, label: '知识库' },
   { to: '/skills', icon: Package, label: '技能市场' },
   { to: '/memory', icon: Brain, label: '记忆' },
-  { to: '/knowledge', icon: BookOpen, label: '知识库' },
   { to: '/datasets', icon: Database, label: '数据集' },
-  { to: '/workflow', icon: Workflow, label: '工作流' },
   { to: '/settings', icon: Settings, label: '设置' },
 ]
 
-const workspaceItem = { to: '/workspace', icon: LayoutTemplate, label: '智能工作台' }
+const splitItems: NavItem[] = [
+  { to: '/chat', icon: MessageSquare, label: '对话' },
+  { to: '/ide', icon: Code2, label: 'IDE' },
+]
 
-const adminItems = [
+const mergedItems: NavItem[] = [
+  { to: '/workspace', icon: LayoutTemplate, label: '工作空间' },
+]
+
+const adminItems: NavItem[] = [
   { to: '/admin', icon: Shield, label: '后台管理' },
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const splitLayout = useThemeStore((s) => s.splitLayout)
 
-  return (
-    <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col flex-shrink-0">
-      {/* Logo */}
-      <div className="px-5 py-4 border-b border-border">
+  const navItems = splitLayout
+    ? [...baseItems.slice(0, 1), ...splitItems, ...baseItems.slice(1)]
+    : [...baseItems.slice(0, 1), ...mergedItems, ...baseItems.slice(1)]
+
+  const renderNav = () => (
+    <nav className="flex-1 overflow-y-auto py-2">
+      {navItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.to === '/'}
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+              isActive
+                ? 'text-accent bg-accent/10 border-r-2 border-accent'
+                : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+            }`
+          }
+        >
+          <item.icon size={18} />
+          {item.label}
+        </NavLink>
+      ))}
+
+      {user?.role === 'admin' && (
+        <>
+          <div className="px-5 py-2 mt-2 text-xs text-text-dim uppercase tracking-wider">
+            管理
+          </div>
+          {adminItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'text-accent bg-accent/10 border-r-2 border-accent'
+                    : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+                }`
+              }
+            >
+              <item.icon size={18} />
+              {item.label}
+            </NavLink>
+          ))}
+        </>
+      )}
+    </nav>
+  )
+
+  const renderContent = () => (
+    <>
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
             AH
           </div>
           <span className="text-text-primary font-semibold">AI Hubs</span>
         </div>
+        {isOpen && (
+          <button
+            onClick={onClose}
+            className="p-1 rounded text-text-muted hover:text-text-primary lg:hidden"
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
-      {/* 导航 */}
-      <nav className="flex-1 overflow-y-auto py-2">
-        {navItems.map((item) => {
-          if (item.to === '/') {
-            return (
-              <>
-                <NavLink key={item.to} to={item.to} end className={({ isActive }) =>
-                  `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                    isActive
-                      ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                      : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-                  }`
-                }>
-                  <item.icon size={18} />
-                  {item.label}
-                </NavLink>
-                <NavLink key={workspaceItem.to} to={workspaceItem.to} className={({ isActive }) =>
-                  `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                    isActive
-                      ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                      : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-                  }`
-                }>
-                  <workspaceItem.icon size={18} />
-                  {workspaceItem.label}
-                </NavLink>
-              </>
-            )
-          }
-          return (
-            <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) =>
-              `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                isActive
-                  ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                  : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-              }`
-            }>
-              <item.icon size={18} />
-              {item.label}
-            </NavLink>
-          )
-        })}
+      {renderNav()}
 
-        {!splitLayout && (
-          <>
-            <NavLink
-              to="/chat"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                  isActive
-                    ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                    : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-                }`
-              }
-            >
-              <MessageSquare size={18} />
-              对话
-            </NavLink>
-            <NavLink
-              to="/ide"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                  isActive
-                    ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                    : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-                }`
-              }
-            >
-              <Code2 size={18} />
-              IDE
-            </NavLink>
-          </>
-        )}
-
-        {/* 管理员菜单 */}
-        {user?.role === 'admin' && (
-          <>
-            <div className="px-5 py-2 mt-2 text-xs text-text-dim uppercase tracking-wider">
-              管理
-            </div>
-            {adminItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                    isActive
-                      ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                      : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-                  }`
-                }
-              >
-                <item.icon size={18} />
-                {item.label}
-              </NavLink>
-            ))}
-          </>
-        )}
-      </nav>
-
-      {/* 用户信息 */}
       <div className="px-4 py-3 border-t border-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-bg-tertiary flex items-center justify-center text-text-muted text-sm">
@@ -176,6 +152,23 @@ export function Sidebar() {
           </div>
         )}
       </div>
+    </>
+  )
+
+  if (isOpen) {
+    return (
+      <div className="fixed inset-0 z-50 lg:relative lg:z-auto">
+        <div className="absolute inset-0 bg-black/50 lg:hidden" onClick={onClose} />
+        <div className="absolute left-0 top-0 h-full w-64 bg-bg-secondary border-r border-border shadow-xl flex flex-col lg:relative lg:w-56 lg:shadow-none">
+          {renderContent()}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col flex-shrink-0 hidden lg:flex">
+      {renderContent()}
     </aside>
   )
 }

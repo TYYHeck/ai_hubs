@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(ssh *)",
+      "Bash(git reset *)",
+      "Bash(scp *)",
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "mcp__gitnexus__list_repos"
+    ]
+  }
+}

@@ -12,8 +12,10 @@ import {
   Send, Plus, Trash2, Bot, User, Loader2, AlertCircle, Paperclip,
   Search, X, Keyboard, Cpu, ListTodo, Sparkles, FileText, Image as ImageIcon,
   ChevronDown, Check, Star, Code, Terminal, Play, CheckCircle, XCircle,
-  Settings,
+  Settings, Eye, Download,
 } from 'lucide-react'
+import { ideApi } from '../api/client'
+import { FilePreviewModal } from '../components/FilePreviewModal'
 
 // ── 自动补全词条（@Agent / #技能 / /命令）──
 interface Completer {
@@ -63,6 +65,9 @@ export default function ChatPage() {
 
   // 防多重点击
   const [sending, setSending] = useState(false)
+
+  // 文件预览
+  const [previewPath, setPreviewPath] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -274,10 +279,43 @@ export default function ChatPage() {
   const contextPct = context ? Math.round(context.usage_ratio * 100) : 0
   const contextColor = contextPct > 80 ? 'bg-red-500' : contextPct > 50 ? 'bg-amber-500' : 'bg-accent'
 
+  // 对话列表宽度（可拖拽）
+  const [sidebarWidth, setSidebarWidth] = useState(240)
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false)
+  const sidebarDragRef = useRef<HTMLDivElement>(null)
+
+  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDraggingSidebar(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isDraggingSidebar) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.min(Math.max(160, e.clientX), 400)
+      setSidebarWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsDraggingSidebar(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDraggingSidebar])
+
   return (
     <div className="flex h-full relative">
-      {/* 左侧对话列表（折叠式） */}
-      <div className="w-60 border-r border-border bg-bg-secondary flex flex-col flex-shrink-0">
+      {/* 左侧对话列表（可拖拽宽度） */}
+      <div
+        className="border-r border-border bg-bg-secondary flex flex-col flex-shrink-0"
+        style={{ width: `${sidebarWidth}px` }}>
         <div className="p-3 border-b border-border flex items-center justify-between">
           <button onClick={() => { newConversation(); setTaskOpen(false) }}
             className="btn-primary w-full text-sm flex items-center justify-center gap-2">
@@ -299,6 +337,15 @@ export default function ChatPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 拖拽条 */}
+      <div
+        ref={sidebarDragRef}
+        onMouseDown={handleSidebarMouseDown}
+        className="w-1 bg-border cursor-col-resize hover:bg-accent/50 transition-colors flex-shrink-0 relative group"
+        style={{ cursor: isDraggingSidebar ? 'col-resize' : 'col-resize' }}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-text-dim/30 rounded-full group-hover:bg-accent/50" />
       </div>
 
       {/* 主区 */}
@@ -509,7 +556,8 @@ export default function ChatPage() {
                 <MessageBubble key={i} msg={msg}
                   msgIndex={messages.indexOf(msg)}
                   highlight={searchTerm}
-                  streaming={streaming && i === messages.length - 1 && !searchTerm} />
+                  streaming={streaming && i === messages.length - 1 && !searchTerm}
+                  onPreview={setPreviewPath} />
               ))}
               <div ref={messagesEndRef} />
             </div>
@@ -604,19 +652,19 @@ export default function ChatPage() {
             </div>
 
             {/* 状态栏 */}
-            <div className="flex items-center gap-4 mt-2 text-[11px] text-text-muted">
-              <span className="flex items-center gap-1.5"><Cpu size={12} />
+            <div className="flex items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-text-muted flex-wrap">
+              <span className="flex items-center gap-1.5 flex-shrink-0"><Cpu size={12} />
                 模型 {context?.model || activeModel || llmConfig.model || '—'}</span>
-              <span className="flex items-center gap-1.5 flex-1 max-w-[260px]">
-                长上下文
+              <span className="flex items-center gap-1.5 flex-1 min-w-[140px] max-w-[260px]">
+                <span className="flex-shrink-0">上下文</span>
                 <span className="flex-1 h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
                   <span className={`h-full rounded-full ${contextColor}`}
                     style={{ width: `${Math.min(100, contextPct)}%` }} />
                 </span>
-                {context ? `${contextPct}% (${(context.used_tokens / 1000).toFixed(1)}k/${context.context_window / 1000}k)` : ''}
+                {context ? `${contextPct}%` : ''}
               </span>
-              <span className="text-text-dim">{messages.length} 条消息</span>
-              <span className="text-text-dim">Ctrl+K 聚焦 · Ctrl+F 搜索 · Ctrl+L 清屏</span>
+              <span className="text-text-dim flex-shrink-0">{messages.length} 条消息</span>
+              <span className="text-text-dim flex-shrink-0 hidden sm:inline">Ctrl+K 聚焦 · Ctrl+F 搜索 · Ctrl+L 清屏</span>
             </div>
           </div>
         </div>
@@ -625,6 +673,9 @@ export default function ChatPage() {
       {/* 全局任务侧边栏 */}
       {taskOpen && (
         <TaskDrawer open onClose={() => setTaskOpen(false)} />
+      )}
+      {previewPath && (
+        <FilePreviewModal path={previewPath} onClose={() => setPreviewPath(null)} />
       )}
     </div>
   )
@@ -784,8 +835,8 @@ function handleInteractiveResponse(msgIndex: number, response: string) {
 }
 
 // ── 消息气泡（支持 agent 前缀 + 搜索高亮 + 占位符渲染 + 工具消息 + 交互提问）──
-function MessageBubble({ msg, highlight, streaming, msgIndex }: {
-  msg: import('../api/chat').ChatMessage; highlight?: string; streaming: boolean; msgIndex?: number
+function MessageBubble({ msg, highlight, streaming, msgIndex, onPreview }: {
+  msg: import('../api/chat').ChatMessage; highlight?: string; streaming: boolean; msgIndex?: number; onPreview: (path: string) => void
 }) {
   const isUser = msg.role === 'user'
   const isTool = msg.role === 'tool'
@@ -855,6 +906,23 @@ function MessageBubble({ msg, highlight, streaming, msgIndex }: {
             (streaming ? <span className="animate-pulse text-text-muted">思考中...</span> : '')}
           {streaming && msg.content && <span className="inline-block w-0.5 h-4 bg-accent ml-0.5 animate-pulse" />}
         </div>
+        {/* 产出文件 */}
+        {!isUser && msg.output_files && msg.output_files.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {msg.output_files.map((f, i) => (
+              <div key={i} className="inline-flex items-center gap-0.5 rounded bg-green-500/10 border border-green-500/30 overflow-hidden">
+                <button onClick={() => onPreview(f.path)} className="p-0.5 text-green-600 dark:text-green-400 hover:bg-green-500/20" title="预览">
+                  <Eye size={10} />
+                </button>
+                <span className="text-[10px] text-green-700 dark:text-green-500 px-1">{f.name}</span>
+                <a href={ideApi.downloadUrl(f.path)} download={f.name}
+                  className="p-0.5 text-green-600 dark:text-green-400 hover:bg-green-500/20" title="下载">
+                  <Download size={10} />
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
         {/* 交互式提问表单 */}
         {!isUser && msg.ask_data && msg.ask_data.length > 0 && !msg.ask_answered && msgIndex != null && (
           <AskForm questions={msg.ask_data} onSubmit={(answers) => submitAskAnswer(msgIndex, answers)} />

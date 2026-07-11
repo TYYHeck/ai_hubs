@@ -339,20 +339,20 @@ function LayoutSelector() {
         <LayoutTemplate size={13} /><span>布局模式</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <button onClick={() => setSplitLayout(false)}
-          className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-xs transition-all ${!splitLayout ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-muted hover:border-text-dim hover:text-text-secondary'}`}>
-          <Columns size={18} />
-          <span className="font-medium">默认</span>
-          <span className="text-[10px] text-text-dim text-center">对话/IDE 分页独立显示</span>
-        </button>
         <button onClick={() => setSplitLayout(true)}
           className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-xs transition-all ${splitLayout ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-muted hover:border-text-dim hover:text-text-secondary'}`}>
+          <Columns size={18} />
+          <span className="font-medium">拆分模式</span>
+          <span className="text-[10px] text-text-dim text-center">对话/IDE 独立显示</span>
+        </button>
+        <button onClick={() => setSplitLayout(false)}
+          className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-xs transition-all ${!splitLayout ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-muted hover:border-text-dim hover:text-text-secondary'}`}>
           <LayoutTemplate size={18} />
-          <span className="font-medium">合并视图</span>
+          <span className="font-medium">合并模式</span>
           <span className="text-[10px] text-text-dim text-center">文件树+编辑器+对话三栏</span>
         </button>
       </div>
-      {splitLayout && <p className="mt-2 text-[11px] text-accent">已开启 — 侧边栏「合并视图」入口已显示</p>}
+      {!splitLayout && <p className="mt-2 text-[11px] text-accent">已开启 — 侧边栏「工作空间」入口已显示</p>}
     </div>
   )
 }

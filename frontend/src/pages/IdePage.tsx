@@ -174,9 +174,21 @@ export default function IdePage() {
     } catch (e) { setError((e as Error)?.message || '选择文件夹失败') }
   }
 
+  const isTextFile = (path: string): boolean => {
+    const textExts = ['py', 'js', 'mjs', 'jsx', 'ts', 'tsx', 'json', 'html', 'htm', 'css', 'md', 'txt', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'java', 'go', 'rs', 'php', 'sql', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'log']
+    const ext = path.split('.').pop()?.toLowerCase() || ''
+    return textExts.includes(ext)
+  }
+
   const openFile = useCallback(async (n: FsNode) => {
     if (n.type !== 'file') return
     try {
+      if (!isTextFile(n.path)) {
+        setCurrentPath(n.path)
+        setContent('')
+        setDirty(false)
+        return
+      }
       const r = isLocal && desktopIde ? await desktopIde.readFile(n.path) : await ideApi.readFile(n.path)
       setCurrentPath(n.path)
       setContent(r.content)
@@ -269,16 +281,52 @@ export default function IdePage() {
     setRunning(false)
   }
 
-  const extensions = useMemo(
-    () => [langOf(currentPath), autocompletion(), keymap.of(completionKeymap)],
-    [currentPath],
-  )
+  const extensions = useMemo(() => {
+    const lang = langOf(currentPath)
+    const base = [autocompletion(), keymap.of(completionKeymap)]
+    if (Array.isArray(lang)) {
+      return [...lang, ...base]
+    }
+    return [lang, ...base]
+  }, [currentPath])
+
+  // 文件树宽度（可拖拽）
+  const [sidebarWidth, setSidebarWidth] = useState(256)
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false)
+
+  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDraggingSidebar(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isDraggingSidebar) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.min(Math.max(140, e.clientX), 400)
+      setSidebarWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsDraggingSidebar(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDraggingSidebar])
 
   return (
     <>
     <div className="flex h-full">
-      {/* 文件树 */}
-      <div className="w-64 flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col">
+      {/* 文件树（可拖拽宽度） */}
+      <div
+        className="flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col"
+        style={{ width: `${sidebarWidth}px` }}>
         {/* 模式切换 */}
         <div className="px-3 py-2 border-b border-border">
           <div className="flex items-center gap-1 bg-bg-tertiary rounded p-0.5">
@@ -368,6 +416,14 @@ export default function IdePage() {
         </div>
       </div>
 
+      {/* 拖拽条 */}
+      <div
+        onMouseDown={handleSidebarMouseDown}
+        className="w-1 bg-border cursor-col-resize hover:bg-accent/50 transition-colors flex-shrink-0 relative group"
+        style={{ cursor: isDraggingSidebar ? 'col-resize' : 'col-resize' }}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-12 bg-text-dim/30 rounded-full group-hover:bg-accent/50" />
+      </div>
+
       {/* 编辑区 */}
       <div className="flex-1 flex flex-col min-w-0">
         {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-500/10 border-b border-red-500/30 px-4 py-2">{error}</div>}
@@ -398,15 +454,23 @@ export default function IdePage() {
 
         <div className="flex-1 min-h-0 overflow-hidden">
           {currentPath ? (
-            <CodeMirror
-              key={currentPath}
-              value={content}
-              height="100%"
-              theme={oneDark}
-              extensions={[extensions]}
-              onChange={(val) => { setContent(val); setDirty(true) }}
-              className="h-full text-sm"
-            />
+            content || isTextFile(currentPath) ? (
+              <CodeMirror
+                key={currentPath}
+                value={content}
+                height="100%"
+                theme={oneDark}
+                extensions={extensions}
+                onChange={(val) => { setContent(val); setDirty(true) }}
+                className="h-full text-sm"
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-text-dim text-sm bg-bg-tertiary">
+                <FileCode size={48} className="mb-4 opacity-30" />
+                <p>二进制文件，无法在编辑器中显示</p>
+                <p className="text-xs mt-1">请使用右侧预览按钮查看或下载</p>
+              </div>
+            )
           ) : (
             <div className="h-full flex items-center justify-center text-text-dim text-sm">
               {isLocal && !rootPath
