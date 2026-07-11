@@ -18,7 +18,7 @@
 | **向量库** | ChromaDB（嵌入式） | 纯 Python，无需独立服务，桌面端零配置 |
 | **AI 框架** | LangChain + LangGraph | ReAct Agent、流式、工具调用的事实标准 |
 | **任务队列** | asyncio + 后台线程（轻量）/ Celery（可选重型） | 单进程内调度足够，避免引入 Redis 依赖 |
-| **认证** | JWT (python-jose) + bcrypt (passlib) | 无状态、多端通用 |
+| **认证** | JWT (python-jose) + 原生 bcrypt（不依赖 passlib） | 无状态、多端通用 |
 | **邮件** | smtplib + QQ邮箱 SMTP | 验证码发送，需求指定 3526145827@qq.com |
 | **测试** | pytest + pytest-asyncio + httpx (AsyncClient) | 异步测试、API 集成测试 |
 

@@ -29,9 +29,9 @@ python -m app.main                 # 默认 127.0.0.1:8080
 python -m app.main --port 9090     # 自定义端口
 ```
 
-- 数据库：默认尝试 MySQL（若有密码），否则自动回退 SQLite（`data/ai_hubs.db`）。
-  也可用环境变量强制：`export DB_URL=sqlite+aiosqlite:///./data/test.db`
-- 首次启动自动建表，并创建默认管理员 `admin / admin123`（可用 `ADMIN_PASSWORD` 环境变量修改）。
+- 数据库：读 `backend/config.yaml`，`mysql.password` 非空则用 MySQL，否则回退 SQLite（`data/ai_hubs.db`）。
+  也可通过环境变量 `DB_URL` 强制指定（如 `sqlite+aiosqlite:///./data/test.db`）。
+- 首次启动自动建表，并**仅在账户不存在时** seed 默认管理员 `admin / admin123`（可在 `backend/config.yaml` 的 `auth.default_admin_password` 修改）。
 - 前端由后端在 `frontend/dist` 存在时一并托管（SPA），无需单独起前端服务即可访问网页端。
 
 ## 3. 前端运行与构建
@@ -105,4 +105,4 @@ python tests/smoke_m6.py
    ```
    后端 `systemctl restart ai_hubs` 后由 Nginx 反代 `/api`、`/ws`、`/health`、`/metrics`。
 3. **默认管理员**：`admin / admin123`（如需修改，在服务器 `config.yaml` 或环境变量 `ADMIN_PASSWORD` 设置）。
-4. **LLM API Key**：在设置页或服务器 `.env` 填入真实 Key 后对话功能方可使用。
+4. **LLM API Key**：v4 **不读取** `.env` 环境变量，必须写入 `data/llm_config.json`（位于项目根 `ai_hubs/data/`，含 `provider`/`model`/`api_key`/`base_url`）；也可在网页端「设置 → 模型 / LLM 配置」填入并保存。修改后**无需重启**服务即可生效。
