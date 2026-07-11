@@ -645,7 +645,7 @@ function MessageBubble({ msg, highlight, streaming }: {
       </div>
       <div className={`flex flex-col gap-1 max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
         {!isUser && msg.agent_name && (
-          <span className="text-xs text-accent px-1">[{msg.agent_name}]</span>
+          <span className="text-xs text-accent px-1">{msg.agent_name}</span>
         )}
         <div className={`px-4 py-2.5 rounded-lg text-sm leading-relaxed ${
           isUser ? 'bg-accent text-white rounded-tr-sm'
