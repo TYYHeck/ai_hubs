@@ -9,9 +9,9 @@ const SOURCE_LABEL: Record<string, string> = {
   custom: '自定义',
 }
 const SOURCE_COLOR: Record<string, string> = {
-  builtin: 'text-sky-400 bg-sky-500/10',
-  github: 'text-purple-400 bg-purple-500/10',
-  custom: 'text-emerald-400 bg-emerald-500/10',
+  builtin: 'text-sky-600 dark:text-sky-400 bg-sky-500/10',
+  github: 'text-purple-600 dark:text-purple-400 bg-purple-500/10',
+  custom: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10',
 }
 
 export default function SkillsPage() {
@@ -158,8 +158,8 @@ export default function SkillsPage() {
         ))}
       </div>
 
-      {error && <div className="mb-3 text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">{error}</div>}
-      {msg && <div className="mb-3 text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">{msg}</div>}
+      {error && <div className="mb-3 text-sm text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">{error}</div>}
+      {msg && <div className="mb-3 text-sm text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">{msg}</div>}
 
       {tab === 'mine' && (
         <>
@@ -196,14 +196,14 @@ export default function SkillsPage() {
                   <p className="text-xs text-text-muted line-clamp-2 mb-3 flex-1">{s.description || '（无描述）'}</p>
                   <div className="flex items-center justify-between gap-2">
                     <button onClick={() => toggleInstall(s)}
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${s.is_installed ? 'border-green-500/40 text-green-400' : 'border-border text-text-muted hover:text-text-primary'}`}>
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${s.is_installed ? 'border-green-500/40 text-green-600 dark:text-green-400' : 'border-border text-text-muted hover:text-text-primary'}`}>
                       {s.is_installed ? <><Check size={12} /> 已安装</> : <><Download size={12} /> 安装</>}
                     </button>
                     {s.source === 'custom' && (
                       <div className="flex items-center gap-1">
                         <button onClick={() => openEdit(s)} className="p-1.5 rounded border border-border text-text-muted hover:text-text-primary" title="编辑">
                           <Edit3 size={12} /></button>
-                        <button onClick={() => remove(s)} className="p-1.5 rounded border border-border text-text-muted hover:text-red-400" title="删除">
+                        <button onClick={() => remove(s)} className="p-1.5 rounded border border-border text-text-muted hover:text-red-500 dark:hover:text-red-400" title="删除">
                           <Trash2 size={12} /></button>
                       </div>
                     )}
@@ -228,7 +228,7 @@ export default function SkillsPage() {
               <Search size={14} /> 检索
             </button>
           </div>
-          {ghError && <div className="mb-3 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2">{ghError}（可直接创建本地技能）</div>}
+          {ghError && <div className="mb-3 text-sm text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2">{ghError}（可直接创建本地技能）</div>}
           {ghLoading ? <div className="text-sm text-text-dim">检索中…</div> :
             ghItems.length === 0 ? <div className="text-sm text-text-dim py-8 text-center">暂无结果。尝试更换关键词。</div> :
             <>

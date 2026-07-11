@@ -147,6 +147,7 @@ interface ChatState {
   deleteConversation: (id: string) => Promise<void>
   sendMessage: (text: string, agentName?: string | null, model?: string | null) => void
   clearError: () => void
+  clearMessages: () => void
 
   // 技能
   toggleSkill: (name: string) => void
@@ -457,6 +458,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+  clearMessages: () => set({ messages: [], streamingContent: '', error: null }),
 
   toggleSkill: (name) => {
     set((state) => ({

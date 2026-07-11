@@ -136,6 +136,24 @@ def _enforce_quota(root: Path, extra_bytes: int = 0) -> None:
         )
 
 
+def _resolve_safe(root: Path, rel: str) -> Path:
+    """安全解析路径（与 _resolve 等价，供 IDE API 复用，越界抛 PermissionError）。"""
+    return _resolve(root, rel)
+
+
+def _enforce_quota_http(root: Path, extra_bytes: int = 0) -> None:
+    """配额校验的 HTTP 版本：超限时抛出 413 HTTPException 而非 PermissionError。"""
+    from fastapi import HTTPException, status as http_status
+
+    try:
+        _enforce_quota(root, extra_bytes)
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(e),
+        ) from e
+
+
 def _run_cmd(cmd: list[str], cwd: str, timeout: int = _RUN_TIMEOUT) -> subprocess.CompletedProcess:
     """执行命令并捕获输出"""
     return subprocess.run(
@@ -190,7 +208,15 @@ def run_code(
     _enforce_quota(root, len(encoded))
     target.write_text(code, encoding="utf-8")
 
-    return _execute_file(str(target), user_id, args, timeout)
+    is_temp = not filename  # 未指定文件名 → AI 临时文件，执行后删除
+    try:
+        return _execute_file(str(target), user_id, args, timeout)
+    finally:
+        if is_temp:
+            try:
+                target.unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 def _execute_file(filepath: str, user_id: int, args: list[str], timeout: int = _RUN_TIMEOUT) -> dict:

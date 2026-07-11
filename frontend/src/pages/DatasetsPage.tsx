@@ -139,8 +139,8 @@ export default function DatasetsPage() {
       </div>
       <p className="text-sm text-text-muted mb-4">数据集分类管理、记录 CRUD、导入(CSV/JSON)与导出，供 RAG 检索使用。</p>
 
-      {error && <div className="mb-3 text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">{error}</div>}
-      {msg && <div className="mb-3 text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">{msg}</div>}
+      {error && <div className="mb-3 text-sm text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">{error}</div>}
+      {msg && <div className="mb-3 text-sm text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">{msg}</div>}
 
       {!active ? (
         <>
@@ -163,7 +163,7 @@ export default function DatasetsPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-text-dim">{d.record_count} 条记录</span>
                     <button onClick={(e) => { e.stopPropagation(); remove(d) }}
-                      className="p-1.5 rounded border border-border text-text-muted hover:text-red-400" title="删除">
+                      className="p-1.5 rounded border border-border text-text-muted hover:text-red-500 dark:hover:text-red-400" title="删除">
                       <Trash2 size={12} /></button>
                   </div>
                 </div>
@@ -219,7 +219,7 @@ export default function DatasetsPage() {
                           </td>
                         ))}
                         <td className="px-3 py-2 text-right">
-                          <button onClick={() => removeRecord(r.id)} className="text-text-muted hover:text-red-400" title="删除">
+                          <button onClick={() => removeRecord(r.id)} className="text-text-muted hover:text-red-500 dark:hover:text-red-400" title="删除">
                             <Trash2 size={12} /></button>
                         </td>
                       </tr>

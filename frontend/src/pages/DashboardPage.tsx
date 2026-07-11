@@ -30,10 +30,10 @@ export default function DashboardPage() {
   }, [])
 
   const statItems = [
-    { label: 'Agent 数', value: stats?.agents ?? '—', icon: Bot, color: 'text-blue-400' },
-    { label: '运行中任务', value: stats?.running_tasks ?? '—', icon: ListTodo, color: 'text-green-400' },
-    { label: '记忆条目', value: stats?.memory_entries ?? '—', icon: Brain, color: 'text-purple-400' },
-    { label: '知识库', value: stats?.datasets ?? '—', icon: BookOpen, color: 'text-orange-400' },
+    { label: 'Agent 数', value: stats?.agents ?? '—', icon: Bot, color: 'text-blue-600 dark:text-blue-400' },
+    { label: '运行中任务', value: stats?.running_tasks ?? '—', icon: ListTodo, color: 'text-green-600 dark:text-green-400' },
+    { label: '记忆条目', value: stats?.memory_entries ?? '—', icon: Brain, color: 'text-purple-600 dark:text-purple-400' },
+    { label: '知识库', value: stats?.datasets ?? '—', icon: BookOpen, color: 'text-orange-600 dark:text-orange-400' },
   ]
 
   return (

@@ -55,12 +55,12 @@ interface TaskEvent {
 }
 
 const statusColors: Record<string, string> = {
-  pending: 'bg-yellow-500/20 text-yellow-400',
-  running: 'bg-blue-500/20 text-blue-400',
-  completed: 'bg-green-500/20 text-green-400',
-  failed: 'bg-red-500/20 text-red-400',
-  paused: 'bg-purple-500/20 text-purple-400',
-  cancelled: 'bg-gray-500/20 text-gray-400',
+  pending: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
+  running: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+  completed: 'bg-green-500/20 text-green-600 dark:text-green-400',
+  failed: 'bg-red-500/20 text-red-600 dark:text-red-400',
+  paused: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
+  cancelled: 'bg-gray-500/20 text-gray-600 dark:text-gray-400',
 }
 const statusLabel: Record<string, string> = {
   pending: '等待中', running: '运行中', completed: '已完成',
@@ -133,7 +133,7 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
-          <ListTodo size={18} className="text-purple-400" />
+          <ListTodo size={18} className="text-purple-600 dark:text-purple-400" />
           <span className="text-sm font-medium text-text-primary">任务流程</span>
         </div>
         <button onClick={onClose} className="text-text-muted hover:text-text-secondary"><X size={16} /></button>
@@ -142,10 +142,10 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       {/* 正在工作的 Agent */}
       {workingAgent && (
         <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center gap-2">
-          <Bot size={16} className="text-blue-400" />
-          <span className="text-xs text-blue-300">当前工作中：</span>
-          <span className="text-sm font-medium text-blue-200">{workingAgent}</span>
-          <Loader2 size={14} className="text-blue-400 animate-spin ml-auto" />
+          <Bot size={16} className="text-blue-600 dark:text-blue-400" />
+          <span className="text-xs text-blue-600 dark:text-blue-300">当前工作中：</span>
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-200">{workingAgent}</span>
+          <Loader2 size={14} className="text-blue-600 dark:text-blue-400 animate-spin ml-auto" />
         </div>
       )}
 
@@ -183,16 +183,16 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 </div>
               )}
               {t.output_files && t.output_files.length > 0 && (
-                <div className="flex items-center gap-1 mt-1 text-[10px] text-green-400">
+                <div className="flex items-center gap-1 mt-1 text-[10px] text-green-600 dark:text-green-400">
                   <FileText size={10} /> {t.output_files.length} 个产出文件
                 </div>
               )}
               <div className="flex items-center gap-1 mt-2">
                 {t.status === 'pending' && (
-                  <button onClick={() => handleExecute(t.id)} className="p-1 text-green-400 hover:bg-green-500/10 rounded" title="执行">
+                  <button onClick={() => handleExecute(t.id)} className="p-1 text-green-600 dark:text-green-400 hover:bg-green-500/10 rounded" title="执行">
                     <Play size={13} /></button>
                 )}
-                <button onClick={() => handleDelete(t.id)} className="p-1 text-text-muted hover:text-red-400 rounded ml-auto" title="删除">
+                <button onClick={() => handleDelete(t.id)} className="p-1 text-text-muted hover:text-red-500 dark:hover:text-red-400 rounded ml-auto" title="删除">
                   <Trash2 size={13} /></button>
               </div>
 

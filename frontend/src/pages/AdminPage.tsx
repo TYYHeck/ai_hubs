@@ -79,12 +79,12 @@ function DashboardTab({ dash, loading }: { dash: AdminDashboard | null; loading:
   }
 
   const statCards = [
-    { label: '用户总数', value: dash.users.total, icon: Users, color: 'text-blue-400' },
-    { label: '活跃用户', value: dash.users.active, icon: Activity, color: 'text-green-400' },
-    { label: '管理员', value: dash.users.admins, icon: Shield, color: 'text-amber-400' },
-    { label: 'Agent', value: dash.agents.total, icon: Bot, color: 'text-purple-400' },
-    { label: '技能', value: dash.skills.total, icon: Package, color: 'text-orange-400' },
-    { label: '数据集', value: dash.datasets.total, icon: Database, color: 'text-cyan-400' },
+    { label: '用户总数', value: dash.users.total, icon: Users, color: 'text-blue-600 dark:text-blue-400' },
+    { label: '活跃用户', value: dash.users.active, icon: Activity, color: 'text-green-600 dark:text-green-400' },
+    { label: '管理员', value: dash.users.admins, icon: Shield, color: 'text-amber-600 dark:text-amber-400' },
+    { label: 'Agent', value: dash.agents.total, icon: Bot, color: 'text-purple-600 dark:text-purple-400' },
+    { label: '技能', value: dash.skills.total, icon: Package, color: 'text-orange-600 dark:text-orange-400' },
+    { label: '数据集', value: dash.datasets.total, icon: Database, color: 'text-cyan-600 dark:text-cyan-400' },
     { label: '任务', value: dash.tasks.total, icon: ListTodo, color: 'text-pink-400' },
     { label: '对话 / 消息', value: `${dash.conversations.total} / ${dash.messages.total}`, icon: MessageSquare, color: 'text-teal-400' },
   ]
@@ -289,7 +289,7 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
                     <button onClick={() => openEdit(u)} className="text-text-muted hover:text-accent p-1.5 rounded" title="编辑">
                       <Pencil size={15} />
                     </button>
-                    <button onClick={() => setDeleteUser(u)} className="text-text-muted hover:text-red-400 p-1.5 rounded" title="删除">
+                    <button onClick={() => setDeleteUser(u)} className="text-text-muted hover:text-red-500 dark:hover:text-red-400 p-1.5 rounded" title="删除">
                       <Trash2 size={15} />
                     </button>
                   </td>
@@ -362,7 +362,7 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       {deleteUser && (
         <Modal onClose={() => setDeleteUser(null)} small>
           <div className="flex items-center gap-2 mb-3">
-            <UserX size={18} className="text-red-400" />
+            <UserX size={18} className="text-red-500 dark:text-red-400" />
             <h3 className="text-base font-medium text-text-primary">删除用户</h3>
           </div>
           <p className="text-sm text-text-muted mb-6">
@@ -486,7 +486,7 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
                   <span className="px-2 py-0.5 rounded-full text-xs bg-bg-tertiary text-text-muted">{a.category}</span>
                 </td>
                 <td className="py-2 px-2">
-                  {a.is_default ? <span className="text-green-400 text-xs">✓ 默认</span> : <span className="text-text-dim">—</span>}
+                  {a.is_default ? <span className="text-green-600 dark:text-green-400 text-xs">✓ 默认</span> : <span className="text-text-dim">—</span>}
                 </td>
                 <td className="py-2 px-2">
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
@@ -500,7 +500,7 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
                     <Copy size={14} />
                   </button>
                   <button onClick={() => setDeleteTarget(a)}
-                    className="text-text-muted hover:text-red-400 p-1.5 rounded" title="删除">
+                    className="text-text-muted hover:text-red-500 dark:hover:text-red-400 p-1.5 rounded" title="删除">
                     <Trash2 size={14} />
                   </button>
                 </td>
@@ -547,7 +547,7 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       {deleteTarget && (
         <Modal onClose={() => setDeleteTarget(null)} small>
           <div className="flex items-center gap-2 mb-3">
-            <UserX size={18} className="text-red-400" />
+            <UserX size={18} className="text-red-500 dark:text-red-400" />
             <h3 className="text-base font-medium text-text-primary">删除 Agent</h3>
           </div>
           <p className="text-sm text-text-muted mb-6">
@@ -720,7 +720,7 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
                 <td className="py-2 px-2 text-text-muted text-xs">{s.version}</td>
                 <td className="py-2 px-2">
                   {s.is_installed
-                    ? <span className="text-green-400 text-xs">✓ 已安装</span>
+                    ? <span className="text-green-600 dark:text-green-400 text-xs">✓ 已安装</span>
                     : <span className="text-text-dim text-xs">—</span>}
                 </td>
                 <td className="py-2 px-2 whitespace-nowrap">
@@ -729,11 +729,11 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
                     <Pencil size={14} />
                   </button>
                   <button onClick={() => doSync(s)}
-                    className="text-text-muted hover:text-blue-400 p-1.5 rounded" title="同步">
+                    className="text-text-muted hover:text-blue-500 dark:hover:text-blue-400 p-1.5 rounded" title="同步">
                     <RefreshCw size={14} />
                   </button>
                   <button onClick={() => setDeleteTarget(s)}
-                    className="text-text-muted hover:text-red-400 p-1.5 rounded" title="删除">
+                    className="text-text-muted hover:text-red-500 dark:hover:text-red-400 p-1.5 rounded" title="删除">
                     <Trash2 size={14} />
                   </button>
                 </td>
@@ -807,7 +807,7 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       {deleteTarget && (
         <Modal onClose={() => setDeleteTarget(null)} small>
           <div className="flex items-center gap-2 mb-3">
-            <UserX size={18} className="text-red-400" />
+            <UserX size={18} className="text-red-500 dark:text-red-400" />
             <h3 className="text-base font-medium text-text-primary">删除技能</h3>
           </div>
           <p className="text-sm text-text-muted mb-6">

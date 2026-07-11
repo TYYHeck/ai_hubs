@@ -53,7 +53,7 @@ export interface Conversation {
 }
 
 export interface SSEEvent {
-  event: 'start' | 'delta' | 'think' | 'done' | 'error' | 'tool_start' | 'tool_result'
+  event: 'start' | 'delta' | 'think' | 'done' | 'error' | 'tool_start' | 'tool_result' | 'interactive'
   conversation_id?: string
   content?: string
   message_id?: number
@@ -64,6 +64,14 @@ export interface SSEEvent {
   args?: Record<string, unknown>
   result?: string
   tools_enabled?: boolean
+  // 交互式组件事件
+  title?: string
+  interaction_id?: string
+  interaction_type?: 'confirm' | 'select' | 'multi_select' | 'form'
+  options?: { value: string; label: string }[]
+  fields?: { name: string; label: string; type: string; options?: { value: string; label: string }[]; placeholder?: string }[]
+  confirm_text?: string
+  cancel_text?: string
 }
 
 // ── 对话管理 ──

@@ -16,13 +16,16 @@ import os
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import mimetypes
+import urllib.parse
+
 from ...config import DATA_DIR
-from ...core.sandbox import _workspace_root, _resolve, _dir_size, _enforce_quota, _execute_file
+from ...core.sandbox import _workspace_root, _resolve, _dir_size, _enforce_quota, _resolve_safe, _enforce_quota_http, _execute_file
 from ...database import get_session
 from ...models.user import User
 from ..deps import get_current_user
@@ -257,4 +260,151 @@ async def run_file(
         exit_code=result["exit_code"],
         timed_out=result["timed_out"],
         command=result["command"],
+    )
+
+
+# ═══════════════════════════════════════════════════════════
+# 上传（multipart，支持任意文件，含二进制/二进制/Office）
+# ═══════════════════════════════════════════════════════════
+
+@router.post("/files/upload", status_code=status.HTTP_201_CREATED)
+async def upload_file(
+    path: str = Form(..., description="目标相对路径（含文件名，如 data/report.pdf）"),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """上传文件到工作区指定路径（multipart/form-data）。
+
+    - 适合上传二进制文件（PPT/DOCX/XLSX/PDF/图片 等），不受 500MB 配额限制（但受配额总量约束）
+    - 自动创建父目录
+    - 文件名与 `path` 末段不一致时，使用 path 的末段作最终名
+    """
+    root = _workspace_root(current_user.id)
+    target = _resolve_safe(root, path)
+    if target.is_dir():
+        raise HTTPException(status_code=400, detail="路径是目录")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="空文件")
+
+    try:
+        existing = target.stat().st_size if target.exists() else 0
+    except OSError:
+        existing = 0
+    new_bytes = len(content)
+    _enforce_quota_http(root, max(0, new_bytes - existing))
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.write_bytes(content)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"写入失败: {e}")
+    return {
+        "path": path,
+        "name": target.name,
+        "size": target.stat().st_size,
+        "mime_type": file.content_type or mimetypes.guess_type(target.name)[0] or "application/octet-stream",
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# 预览：直接返回文件内容（带正确 Content-Type），供浏览器内嵌查看
+# ═══════════════════════════════════════════════════════════
+
+_PREVIEWABLE_TEXT_EXT = {
+    ".txt", ".md", ".json", ".csv", ".tsv", ".log", ".xml", ".yaml", ".yml",
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css", ".scss", ".sass", ".less",
+    ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".java", ".go", ".rs", ".rb", ".php", ".sh", ".bash",
+    ".ini", ".cfg", ".toml", ".env", ".gitignore", ".sql",
+}
+
+
+@router.get("/files/preview")
+async def preview_file(
+    path: str = Query(..., description="相对路径"),
+    inline: bool = Query(True, description="True=浏览器内嵌打开，False=强制下载"),
+    current_user: User = Depends(get_current_user),
+):
+    """预览/下载文件：浏览器内嵌打开（图片/PDF/音视频/文本）或直接返回字节流。
+
+    - 文本类（≤1MB）直接返回 UTF-8
+    - 图片/PDF/视频 直接返回字节 + Content-Disposition: inline
+    - 其他二进制（如 pptx/docx/xlsx）默认走 inline（office 浏览器/Office Online 可在线打开）
+    """
+    root = _workspace_root(current_user.id)
+    target = _resolve_safe(root, path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    ext = target.suffix.lower()
+    mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+
+    # 文本文件 → 直接返回文本，便于前端 embed 显示
+    if ext in _PREVIEWABLE_TEXT_EXT:
+        try:
+            raw = target.read_bytes()
+            if len(raw) > 1 * 1024 * 1024:
+                # 超过 1MB 的文本走 download，避免大响应
+                return FileResponse(str(target), filename=target.name, media_type="text/plain; charset=utf-8")
+            text = raw.decode("utf-8", errors="replace")
+            return Response(
+                content=text,
+                media_type="text/plain; charset=utf-8",
+                headers={"Content-Disposition": f'inline; filename*=UTF-8\'\'{urllib.parse.quote(target.name)}'},
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"读取失败: {e}")
+
+    # 二进制文件（图片/PDF/音视频/Office）
+    disposition = "inline" if inline else "attachment"
+    return FileResponse(
+        path=str(target),
+        media_type=mime,
+        filename=target.name,
+        headers={"Content-Disposition": f'{disposition}; filename*=UTF-8\'\'{urllib.parse.quote(target.name)}'},
+    )
+
+
+@router.get("/files/info")
+async def file_info(
+    path: str = Query(...),
+    current_user: User = Depends(get_current_user),
+):
+    """获取文件元信息（用于前端预览/下载时的决策：mime/大小/是否文本）。"""
+    root = _workspace_root(current_user.id)
+    target = _resolve_safe(root, path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    ext = target.suffix.lower()
+    mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    return {
+        "path": path,
+        "name": target.name,
+        "size": target.stat().st_size,
+        "ext": ext,
+        "mime": mime,
+        "is_text": ext in _PREVIEWABLE_TEXT_EXT,
+        "is_image": mime.startswith("image/"),
+        "is_pdf": mime == "application/pdf",
+        "is_media": mime.startswith("audio/") or mime.startswith("video/"),
+    }
+
+
+@router.get("/files/download")
+async def download_file(
+    path: str = Query(...),
+    current_user: User = Depends(get_current_user),
+):
+    """下载文件：强制 Content-Disposition: attachment。"""
+    root = _workspace_root(current_user.id)
+    target = _resolve_safe(root, path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    return FileResponse(
+        path=str(target),
+        media_type=mime,
+        filename=target.name,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urllib.parse.quote(target.name)}"},
     )

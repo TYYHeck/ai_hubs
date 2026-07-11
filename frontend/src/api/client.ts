@@ -455,6 +455,28 @@ export const ideApi = {
   mkdir: (path: string) => api.post<{ path: string; type: string }>('/api/v1/ide/mkdir', { path }),
   deleteFile: (path: string) => api.delete(`/api/v1/ide/file?path=${encodeURIComponent(path)}`),
   run: (path: string, args: string[] = []) => api.post<RunResult>('/api/v1/ide/run', { path, args }),
+  // 文件上传（二进制，多 part）
+  upload: (path: string, file: File) => {
+    const form = new FormData()
+    form.append('path', path)
+    form.append('file', file)
+    return fetch('/api/v1/ide/files/upload', {
+      method: 'POST',
+      body: form,
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).then(r => r.json())
+  },
+  // 文件信息（mime/大小/是否文本等）
+  fileInfo: (path: string) => api.get<{
+    path: string; name: string; size: number; ext: string; mime: string;
+    is_text: boolean; is_image: boolean; is_pdf: boolean; is_media: boolean;
+  }>(`/api/v1/ide/files/info?path=${encodeURIComponent(path)}`),
+  // 预览（直接内嵌 URL）
+  previewUrl: (path: string, inline: boolean = true) =>
+    `/api/v1/ide/files/preview?path=${encodeURIComponent(path)}&inline=${inline}`,
+  // 下载 URL
+  downloadUrl: (path: string) =>
+    `/api/v1/ide/files/download?path=${encodeURIComponent(path)}`,
 }
 
 // ── 附件上传 API ──

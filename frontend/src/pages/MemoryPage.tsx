@@ -143,9 +143,9 @@ export default function MemoryPage() {
   }
 
   const typeColor: Record<string, string> = {
-    turn: 'text-blue-400',
-    rollback: 'text-amber-400',
-    compress: 'text-purple-400',
+    turn: 'text-blue-600 dark:text-blue-400',
+    rollback: 'text-amber-600 dark:text-amber-400',
+    compress: 'text-purple-600 dark:text-purple-400',
   }
 
   return (
@@ -169,7 +169,7 @@ export default function MemoryPage() {
             {isAll ? <Database size={14} className="text-accent" /> : isGlobal ? <Globe size={14} className="text-accent" /> : <Bot size={14} className="text-text-muted" />}
             <span className="flex-1 text-left">{selectedLabel}</span>
             {selectedAgent && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedAgent.config_mode === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedAgent.config_mode === 'global' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'bg-green-500/20 text-green-600 dark:text-green-400'}`}>
                 {selectedAgent.config_mode === 'global' ? '全局配置' : '单独配置'}
               </span>
             )}
@@ -219,7 +219,7 @@ export default function MemoryPage() {
                 >
                   <Bot size={14} className="text-text-muted" />
                   <span>{a.name}</span>
-                  <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${a.config_mode === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                  <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${a.config_mode === 'global' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'bg-green-500/20 text-green-600 dark:text-green-400'}`}>
                     {a.config_mode === 'global' ? '全局配置' : '单独配置'}
                   </span>
                 </button>
@@ -244,8 +244,8 @@ export default function MemoryPage() {
         </button>
       </div>
 
-      {error && <div className="mb-3 text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">{error}</div>}
-      {msg && <div className="mb-3 text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">{msg}</div>}
+      {error && <div className="mb-3 text-sm text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">{error}</div>}
+      {msg && <div className="mb-3 text-sm text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">{msg}</div>}
 
       {/* 统计 */}
       {stats && (
@@ -255,7 +255,7 @@ export default function MemoryPage() {
             <div className="text-xs text-text-muted mt-1">记忆条目</div>
           </div>
           <div className="bg-bg-secondary border border-border rounded-lg p-4">
-            <div className="text-2xl font-bold text-purple-400">{stats.compressed_entries}</div>
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.compressed_entries}</div>
             <div className="text-xs text-text-muted mt-1">已压缩归档</div>
           </div>
           <div className="bg-bg-secondary border border-border rounded-lg p-4">
@@ -289,7 +289,7 @@ export default function MemoryPage() {
                 <button
                   onClick={() => handleRollback(c.commit_hash)}
                   disabled={needsAgent}
-                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${needsAgent ? 'border-border/30 text-text-dim cursor-not-allowed' : 'border-border text-text-muted hover:text-amber-400 hover:border-amber-400/40'}`}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${needsAgent ? 'border-border/30 text-text-dim cursor-not-allowed' : 'border-border text-text-muted hover:text-amber-500 dark:hover:text-amber-400 hover:border-amber-500/40'}`}
                   title={needsAgent ? '请先选择特定 Agent' : '回退到此提交'}
                 >
                   <RotateCcw size={12} /> 回退
@@ -309,7 +309,7 @@ export default function MemoryPage() {
               <div className="text-sm text-text-dim">空（运行任务后产生记忆）</div>
             ) : context.map((m, i) => (
               <div key={i} className="text-sm">
-                <span className={`font-mono text-xs mr-2 ${m.role === 'system' ? 'text-purple-400' : m.role === 'user' ? 'text-blue-400' : 'text-green-400'}`}>
+                <span className={`font-mono text-xs mr-2 ${m.role === 'system' ? 'text-purple-600 dark:text-purple-400' : m.role === 'user' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
                   [{m.role}]
                 </span>
                 <span className="text-text-secondary">{m.content}</span>

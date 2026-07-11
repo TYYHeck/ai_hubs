@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
@@ -14,8 +14,10 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import {
   Code2, FileCode, Folder, FolderOpen, Plus, Save, Trash2, Play, RefreshCw,
   ChevronRight, ChevronDown, Terminal, Monitor, Cloud, FolderOpen as FolderOpenIcon,
+  Upload, Download, Eye,
 } from 'lucide-react'
 import { ideApi, type FsNode, type RunResult, type WorkspaceUsage } from '../api/client'
+import { FilePreviewModal } from '../components/FilePreviewModal'
 
 // ── 桌面端本地 IDE 桥接（Electron preload 注入）──
 interface DesktopIde {
@@ -57,9 +59,10 @@ interface TreeNodeProps {
   onOpen: (n: FsNode) => void
   activePath: string
   onDelete: (n: FsNode) => void
+  onPreview: (n: FsNode) => void
 }
 
-function TreeNode({ node, depth, onOpen, activePath, onDelete }: TreeNodeProps) {
+function TreeNode({ node, depth, onOpen, activePath, onDelete, onPreview }: TreeNodeProps) {
   const [open, setOpen] = useState(depth < 2)
   const isDir = node.type === 'dir'
   const pad = { paddingLeft: `${depth * 14 + 8}px` }
@@ -76,7 +79,7 @@ function TreeNode({ node, depth, onOpen, activePath, onDelete }: TreeNodeProps) 
           {node.truncated && <span className="text-[10px] text-text-dim">…</span>}
         </div>
         {open && node.children?.map((c) => (
-          <TreeNode key={c.path} node={c} depth={depth + 1} onOpen={onOpen} activePath={activePath} onDelete={onDelete} />
+          <TreeNode key={c.path} node={c} depth={depth + 1} onOpen={onOpen} activePath={activePath} onDelete={onDelete} onPreview={onPreview} />
         ))}
       </div>
     )
@@ -90,9 +93,20 @@ function TreeNode({ node, depth, onOpen, activePath, onDelete }: TreeNodeProps) 
       <span className="w-[14px]" />
       <FileCode size={14} className="text-text-muted flex-shrink-0" />
       <span className="text-sm flex-1 truncate">{node.name}</span>
-      <button onClick={(e) => { e.stopPropagation(); onDelete(node) }}
-        className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400" title="删除">
-        <Trash2 size={12} /></button>
+      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
+        <button onClick={(e) => { e.stopPropagation(); onPreview(node) }}
+          className="p-1 text-text-muted hover:text-accent" title="预览/下载">
+          <Eye size={11} />
+        </button>
+        <a href={ideApi.downloadUrl(node.path)} download={node.name} onClick={(e) => e.stopPropagation()}
+          className="p-1 text-text-muted hover:text-accent" title="下载">
+          <Download size={11} />
+        </a>
+        <button onClick={(e) => { e.stopPropagation(); onDelete(node) }}
+          className="p-1 text-text-muted hover:text-red-500 dark:hover:text-red-400" title="删除">
+          <Trash2 size={11} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -114,6 +128,8 @@ export default function IdePage() {
 
   const [runResult, setRunResult] = useState<RunResult | null>(null)
   const [running, setRunning] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
 
   const isLocal = mode === 'local'
 
@@ -218,6 +234,21 @@ export default function IdePage() {
     } catch (e) { setError((e as Error)?.message || '删除失败') }
   }
 
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files?.length) return
+    setUploading(true); setError('')
+    try {
+      for (const f of Array.from(files)) {
+        await ideApi.upload(f.name, f)
+      }
+      setMsg(`已上传 ${files.length} 个文件`)
+      await loadTree()
+    } catch (err) { setError((err as Error)?.message || '上传失败') }
+    setUploading(false)
+    e.target.value = ''
+  }
+
   const run = async () => {
     if (!currentPath) { setError('请先打开一个脚本文件'); return }
     setRunning(true)
@@ -282,6 +313,15 @@ export default function IdePage() {
             <button onClick={newFile} className="p-1 rounded text-text-muted hover:text-text-primary" title="新建文件"><Plus size={14} /></button>
             <button onClick={newFolder} className="p-1 rounded text-text-muted hover:text-text-primary" title="新建文件夹"><Folder size={14} /></button>
             <button onClick={loadTree} className="p-1 rounded text-text-muted hover:text-text-primary" title="刷新"><RefreshCw size={14} /></button>
+            {!isLocal && (
+              <>
+                <button onClick={() => uploadInputRef.current?.click()} disabled={uploading}
+                  className="p-1 rounded text-text-muted hover:text-text-primary disabled:opacity-40" title="上传文件">
+                  <Upload size={14} />
+                </button>
+                <input ref={uploadInputRef} type="file" multiple className="hidden" onChange={handleUpload} />
+              </>
+            )}
           </div>
         </div>
         {!isLocal && usage && (
@@ -328,17 +368,17 @@ export default function IdePage() {
 
       {/* 编辑区 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {error && <div className="text-sm text-red-400 bg-red-500/10 border-b border-red-500/30 px-4 py-2">{error}</div>}
-        {msg && <div className="text-sm text-green-400 bg-green-500/10 border-b border-green-500/30 px-4 py-2">{msg}</div>}
+        {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-500/10 border-b border-red-500/30 px-4 py-2">{error}</div>}
+        {msg && <div className="text-sm text-green-600 dark:text-green-400 bg-green-500/10 border-b border-green-500/30 px-4 py-2">{msg}</div>}
 
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-secondary">
           <div className="flex items-center gap-2 min-w-0">
             <Code2 size={16} className="text-accent flex-shrink-0" />
             <span className="text-sm text-text-primary truncate">
               {currentPath || '未打开文件'}
-              {dirty && <span className="text-amber-400 ml-1">●</span>}
+              {dirty && <span className="text-amber-600 dark:text-amber-400 ml-1">●</span>}
             </span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${isLocal ? 'bg-blue-500/15 text-blue-400' : 'bg-purple-500/15 text-purple-400'}`}>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${isLocal ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400' : 'bg-purple-500/15 text-purple-600 dark:text-purple-400'}`}>
               {isLocal ? '本地' : '远程'}
             </span>
           </div>
@@ -379,14 +419,14 @@ export default function IdePage() {
           <div className="h-48 flex-shrink-0 border-t border-border bg-bg-secondary flex flex-col">
             <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border text-xs text-text-muted">
               <Terminal size={14} /> 输出（{isLocal ? '本地电脑' : '远程服务器'}）
-              <span className={`ml-2 px-2 py-0.5 rounded ${runResult.timed_out ? 'bg-red-500/15 text-red-400' : runResult.exit_code === 0 ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded ${runResult.timed_out ? 'bg-red-500/15 text-red-600 dark:text-red-400' : runResult.exit_code === 0 ? 'bg-green-500/15 text-green-600 dark:text-green-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'}`}>
                 exit {runResult.exit_code}{runResult.timed_out ? ' (timeout)' : ''}
               </span>
               <span className="text-text-dim ml-2 truncate">{runResult.command}</span>
             </div>
             <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-text-secondary whitespace-pre-wrap">
               {runResult.stdout}
-              {runResult.stderr && <span className="text-red-400">{runResult.stderr}</span>}
+              {runResult.stderr && <span className="text-red-600 dark:text-red-400">{runResult.stderr}</span>}
               {!runResult.stdout && !runResult.stderr && <span className="text-text-dim">（无输出）</span>}
             </pre>
           </div>

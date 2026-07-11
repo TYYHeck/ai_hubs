@@ -27,9 +27,23 @@ from ..models.task import Task as TaskModel, TaskEvent as TaskEventModel
 from .llm import llm_manager
 from .memory import memory_manager
 from .rag import rag_service
+from .tools import TOOL_SYSTEM_PROMPT
 from ..config import settings
 
 logger = logging.getLogger("ai_hubs.orchestrator")
+
+
+import re as _re
+
+def _clean_result(text: str) -> str:
+    """清理 LLM 输出中残留的 XML/DSML 工具调用标签。"""
+    # 移除 <| |DSML| |...> 或 < | | DSML | | ... > 形式的标签
+    text = _re.sub(r'<\s*\|\s*\|\s*\w[\w\s]*\|[^>]*>', '', text)
+    text = _re.sub(r'</\s*\|\s*\|\s*\w[\w\s]*\|[^>]*>', '', text)
+    # 移除 <tool_calls>...</tool_calls> 整块（含内容）
+    text = _re.sub(r'<tool_calls>.*?</tool_calls>', '', text, flags=_re.DOTALL)
+    text = _re.sub(r'<invoke\b[^>]*>.*?</invoke>', '', text, flags=_re.DOTALL)
+    return text.strip()
 
 # 运行中的任务（内存跟踪，支持暂停/恢复）
 _active_tasks: dict[str, asyncio.Event] = {}  # task_id -> pause_event
@@ -181,6 +195,8 @@ async def run_single(
             system_parts.append(m["content"])
     if rag_ctx:
         system_parts.append(rag_ctx)
+    # 注入工具使用指引（含 create_task 主动调用提示）
+    system_parts.append(TOOL_SYSTEM_PROMPT)
     system_content = "\n\n".join(system_parts) or "你是一个 AI 助手。"
 
     messages = [{"role": "system", "content": system_content}]
@@ -779,7 +795,7 @@ async def execute_task(
                     **extra_kw,
                 )
 
-            task.result = result
+            task.result = _clean_result(result)
             task.status = "completed"
             task.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
 

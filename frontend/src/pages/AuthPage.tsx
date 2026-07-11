@@ -127,7 +127,7 @@ export default function AuthPage() {
 
         {/* 顶部错误提示 */}
         {topError && (
-          <div className="mb-4 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="mb-4 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
             <AlertCircle size={16} className="flex-shrink-0" />
             <span>{topError}</span>
           </div>

@@ -27,7 +27,7 @@ export default function ChatPage() {
     conversations, currentConvId, messages, streaming, error,
     attachments, uploading, context, selectedSkills, sendQueue,
     loadConversations, selectConversation, newConversation,
-    deleteConversation, sendMessage, clearError,
+    deleteConversation, sendMessage, clearError, clearMessages,
     toggleSkill, clearSkills,
     enqueueMessage, removeQueued, clearQueue, pauseGeneration,
     addAttachments, removeAttachment, refreshContext,
@@ -107,6 +107,23 @@ export default function ChatPage() {
   const doSend = useCallback(() => {
     const text = input.trim()
     if (!text) return
+
+    // ── 本地指令拦截（不发给 AI）──
+    const cmd = text.toLowerCase().split(/\s/)[0]
+    if (cmd === '/clear') { clearMessages(); setInput(''); return }
+    if (cmd === '/new') { newConversation(); setInput(''); return }
+    if (cmd === '/help') {
+      setInput('')
+      sendMessage('请列出所有可用的斜杠命令及其功能说明。', null, null)
+      return
+    }
+    const navMap: Record<string, string> = {
+      '/ide': '/ide', '/tasks': '/tasks', '/agents': '/agents',
+      '/memory': '/memory', '/datasets': '/datasets', '/setting': '/settings',
+      '/设置': '/settings',
+    }
+    if (navMap[cmd]) { navigate(navMap[cmd]); setInput(''); return }
+
     const activeAgent = agents.find(a => a.id === activeAgentId)
     const agentName = activeAgent?.name ?? null
 
@@ -125,7 +142,7 @@ export default function ChatPage() {
     setHistoryIdx(-1)
     setCompletion(null)
     refreshContext()
-  }, [input, streaming, sending, sendMessage, enqueueMessage, refreshContext, agents, activeAgentId, activeModel])
+  }, [input, streaming, sending, sendMessage, enqueueMessage, refreshContext, agents, activeAgentId, activeModel, clearMessages, newConversation, navigate])
 
   // 暂停：中断当前 AI 思考（保留对话与已生成内容），而非开启新对话
   const handlePause = () => {
@@ -195,11 +212,21 @@ export default function ChatPage() {
     } else if (mCmd) {
       const frag = mCmd[3].toLowerCase()
       const pool = [
+        // 基础实用指令
+        '/clear', '/new', '/help',
+        // 文件生成
         '/ppt', '/幻灯片', '/docx', '/word', '/xlsx', '/excel', '/表格',
-        '/pdf', '/search', '/搜索', '/agent', '/智能体', '/create-agent',
-        '/task', '/任务', '/theme', '/主题', '/font', '/字体',
+        '/pdf', '/search', '/搜索',
+        // 智能体与任务
+        '/agent', '/智能体', '/create-agent', '/task', '/任务',
+        // 外观
+        '/theme', '/主题', '/font', '/字体',
+        // 技能与设置
         '/skill', '/技能', '/setting', '/设置',
+        // 代码运行
         '/run', '/python', '/js', '/node', '/bash', '/终端', '/code',
+        // 导航
+        '/ide', '/tasks', '/agents', '/memory', '/datasets',
       ]
       const items = pool.filter(n => n.toLowerCase().includes(frag)).slice(0, 8)
       if (items.length) {
@@ -267,7 +294,7 @@ export default function ChatPage() {
                 currentConvId === conv.id ? 'bg-accent/10 text-accent' : 'text-text-muted hover:bg-bg-tertiary'}`}>
               <span className="flex-1 truncate">{conv.title || '新对话'}</span>
               <button onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id) }}
-                className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red-400 transition-opacity">
+                className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red-500 dark:hover:text-red-400 transition-opacity">
                 <Trash2 size={14} /></button>
             </div>
           ))}
@@ -304,7 +331,7 @@ export default function ChatPage() {
                   ) : agents.filter(a => a.name.toLowerCase().includes(agentQuery.toLowerCase())).map(a => (
                     <div key={a.id} onClick={() => { setActiveAgentId(a.id); setAgentOpen(false); setAgentQuery('') }}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary cursor-pointer">
-                      {a.is_default && <Star size={11} className="text-amber-300" />}
+                      {a.is_default && <Star size={11} className="text-amber-600 dark:text-amber-300" />}
                       <span className="flex-1 truncate">{a.name}</span>
                       {activeAgentId === a.id && <Check size={13} className="text-accent" />}
                     </div>
@@ -346,7 +373,7 @@ export default function ChatPage() {
                   ) : (providers[llmConfig.provider]?.models || []).map(m => (
                     <div key={m} onClick={() => { setActiveModel(m); setModelOpen(false) }}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary cursor-pointer">
-                      <Cpu size={12} className="text-blue-400" />
+                      <Cpu size={12} className="text-blue-600 dark:text-blue-400" />
                       <span className="flex-1 truncate">{m}</span>
                       {activeModel === m && <Check size={13} className="text-accent" />}
                     </div>
@@ -379,7 +406,7 @@ export default function ChatPage() {
                   ) : installedSkills.filter(s => s.name.toLowerCase().includes(skillSearch.toLowerCase())).map(s => (
                     <div key={s.id} onClick={() => toggleSkill(s.name)}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary cursor-pointer">
-                      <Code size={12} className="text-green-400" />
+                      <Code size={12} className="text-green-600 dark:text-green-400" />
                       <span className="flex-1 truncate">{s.name}</span>
                       {selectedSkills.includes(s.name) && <Check size={13} className="text-accent" />}
                     </div>
@@ -403,7 +430,7 @@ export default function ChatPage() {
             <Search size={14} /> 搜索
           </button>
           <button onClick={() => setTaskOpen(true)}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors" title="任务流程">
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white transition-colors" title="任务流程">
             <ListTodo size={14} /> 任务
           </button>
           <input ref={fileRef} type="file" multiple className="hidden"
@@ -415,9 +442,9 @@ export default function ChatPage() {
           <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border bg-bg-tertiary/50 flex-wrap">
             <span className="text-[11px] text-text-muted">本次对话技能：</span>
             {selectedSkills.map(s => (
-              <span key={s} className="text-[11px] px-2 py-0.5 rounded bg-green-500/10 text-green-400 flex items-center gap-1">
+              <span key={s} className="text-[11px] px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400 flex items-center gap-1">
                 <Sparkles size={9} />{s}
-                <button onClick={() => toggleSkill(s)} className="hover:text-red-400"><X size={9} /></button>
+                <button onClick={() => toggleSkill(s)} className="hover:text-red-500 dark:hover:text-red-400"><X size={9} /></button>
               </span>
             ))}
             <button onClick={clearSkills} className="text-[11px] text-text-muted hover:text-text-secondary ml-1">清空</button>
@@ -452,7 +479,7 @@ export default function ChatPage() {
 
         {/* 错误 */}
         {error && (
-          <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
+          <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-sm flex items-center gap-2">
             <AlertCircle size={14} className="flex-shrink-0" />
             <span className="flex-1 truncate">{error}</span>
             <button onClick={clearError} className="text-text-muted hover:text-text-secondary">×</button>
@@ -461,10 +488,10 @@ export default function ChatPage() {
 
         {/* LLM 未配置 */}
         {llmConfigured === false && (
-          <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm flex items-center gap-2">
+          <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-sm flex items-center gap-2">
             <AlertCircle size={14} />
             <span className="flex-1">未配置 LLM API Key，对话功能不可用</span>
-            <button onClick={() => navigate('/settings')} className="text-yellow-400 underline">去配置</button>
+            <button onClick={() => navigate('/settings')} className="text-yellow-600 dark:text-yellow-400 underline">去配置</button>
           </div>
         )}
 
@@ -501,11 +528,11 @@ export default function ChatPage() {
           <div className="px-4 flex flex-wrap gap-2 border-t border-border pt-2">
             {attachments.map(a => (
               <div key={a.id} className="flex items-center gap-1.5 text-xs bg-bg-tertiary border border-border rounded px-2 py-1">
-                {a.kind === 'image' ? <ImageIcon size={12} className="text-green-400" />
-                  : a.kind === 'doc' ? <FileText size={12} className="text-blue-400" />
+                {a.kind === 'image' ? <ImageIcon size={12} className="text-green-600 dark:text-green-400" />
+                  : a.kind === 'doc' ? <FileText size={12} className="text-blue-600 dark:text-blue-400" />
                   : <Paperclip size={12} className="text-text-muted" />}
                 <span className="text-text-secondary max-w-[140px] truncate">{a.filename}</span>
-                <button onClick={() => removeAttachment(a.id)} className="text-text-dim hover:text-red-400"><X size={11} /></button>
+                <button onClick={() => removeAttachment(a.id)} className="text-text-dim hover:text-red-500 dark:hover:text-red-400"><X size={11} /></button>
               </div>
             ))}
           </div>
@@ -536,7 +563,7 @@ export default function ChatPage() {
                   <span key={i} className="text-[11px] px-2 py-0.5 rounded bg-bg-tertiary border border-border text-text-secondary flex items-center gap-1 max-w-[220px]">
                     <ListTodo size={10} className="text-accent flex-shrink-0" />
                     <span className="truncate">{q.text}</span>
-                    <button onClick={() => removeQueued(i)} className="hover:text-red-400"><X size={9} /></button>
+                    <button onClick={() => removeQueued(i)} className="hover:text-red-500 dark:hover:text-red-400"><X size={9} /></button>
                   </span>
                 ))}
                 <button onClick={clearQueue} className="text-[11px] text-text-muted hover:text-text-secondary">清空</button>
@@ -745,14 +772,14 @@ function InteractiveWidget({ interactive, onRespond }: {
 
 // ── 处理交互式组件响应 ──
 function handleInteractiveResponse(msgIndex: number, response: string) {
-  const store = useChatStore.getState()
-  const msgs = [...store.messages]
+  const state = useChatStore.getState()
+  const msgs = [...state.messages]
   const msg = msgs[msgIndex]
   if (msg && msg.interactive) {
     msgs[msgIndex] = { ...msg, interactive_answered: true, content: response }
-    store.setState({ messages: msgs })
+    useChatStore.setState({ messages: msgs })
     // 将用户响应作为后续消息发送回对话
-    store.sendMessage(response, undefined, undefined)
+    state.sendMessage(response, undefined, undefined)
   }
 }
 
@@ -786,15 +813,15 @@ function MessageBubble({ msg, highlight, streaming, msgIndex }: {
     return (
       <div className="flex gap-2 items-start">
         <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-purple-500/20 border border-purple-500/40 mt-0.5">
-          <Terminal size={12} className="text-purple-400" />
+          <Terminal size={12} className="text-purple-600 dark:text-purple-400" />
         </div>
         <div className="flex flex-col gap-1 max-w-[85%]">
           <div className="px-3 py-2 rounded-lg text-xs bg-purple-500/5 border border-purple-500/20 text-text-secondary">
             <div className="flex items-center gap-1.5 text-text-muted mb-1">
               {msg.tool_pending ? (
-                <Loader2 size={11} className="animate-spin text-purple-400" />
+                <Loader2 size={11} className="animate-spin text-purple-600 dark:text-purple-400" />
               ) : (
-                <CheckCircle size={11} className="text-green-400" />
+                <CheckCircle size={11} className="text-green-600 dark:text-green-400" />
               )}
               <span className="font-medium">{msg.tool_summary || `执行 ${msg.tool_name || '工具'}`}</span>
             </div>
@@ -849,8 +876,8 @@ function ContentWithRefs({ text, highlight, isUser }: { text: string; highlight?
         if (/^\[(?:image|doc|Doc|file)#\d+\]$/.test(p)) {
           const kind = p.startsWith('[image') || p.startsWith('[Image') ? 'image' : p.startsWith('[doc') || p.startsWith('[Doc') ? 'doc' : 'file'
           const Icon = kind === 'image' ? ImageIcon : kind === 'doc' ? FileText : Paperclip
-          const color = kind === 'image' ? 'text-green-400 border-green-500/40'
-            : kind === 'doc' ? 'text-blue-400 border-blue-500/40' : 'text-text-muted border-border'
+          const color = kind === 'image' ? 'text-green-600 dark:text-green-400 border-green-500/40'
+            : kind === 'doc' ? 'text-blue-600 dark:text-blue-400 border-blue-500/40' : 'text-text-muted border-border'
           return (
             <span key={i} className={`inline-flex items-center gap-1 mx-0.5 px-1.5 py-0.5 rounded border text-[11px] ${color} bg-black/20 align-middle`}>
               <Icon size={10} />{p}
@@ -921,7 +948,7 @@ function AskForm({ questions, onSubmit }: {
   return (
     <div className="mt-2 w-full max-w-[440px] bg-bg-tertiary border border-border rounded-lg p-4 space-y-3">
       <div className="flex items-center gap-2 text-xs text-text-muted mb-2">
-        <Sparkles size={12} className="text-amber-400" />
+        <Sparkles size={12} className="text-amber-600 dark:text-amber-400" />
         请选择或填写以下问题
       </div>
       {questions.map((q) => (
@@ -969,8 +996,8 @@ function AskForm({ questions, onSubmit }: {
                 onClick={() => { setAnswers((a) => ({ ...a, [q.id]: 'yes' })); }}
                 className={`flex-1 text-sm px-4 py-2 rounded border transition-colors ${
                   answers[q.id] === 'yes'
-                    ? 'border-green-500 bg-green-500/10 text-green-400'
-                    : 'border-border text-text-muted hover:border-green-500/40 hover:text-green-300'
+                    ? 'border-green-500 bg-green-500/10 text-green-600 dark:text-green-400'
+                    : 'border-border text-text-muted hover:border-green-500/40 hover:text-green-600 dark:hover:text-green-300'
                 }`}
               >
                 {q.yes || '确认'}
@@ -979,8 +1006,8 @@ function AskForm({ questions, onSubmit }: {
                 onClick={() => { setAnswers((a) => ({ ...a, [q.id]: 'no' })); }}
                 className={`flex-1 text-sm px-4 py-2 rounded border transition-colors ${
                   answers[q.id] === 'no'
-                    ? 'border-red-500 bg-red-500/10 text-red-400'
-                    : 'border-border text-text-muted hover:border-red-500/40 hover:text-red-300'
+                    ? 'border-red-500 bg-red-500/10 text-red-600 dark:text-red-400'
+                    : 'border-border text-text-muted hover:border-red-500/40 hover:text-red-600 dark:hover:text-red-300'
                 }`}
               >
                 {q.no || '取消'}
