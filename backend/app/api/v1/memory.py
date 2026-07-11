@@ -28,7 +28,7 @@ async def list_commits(
     limit: int = 50,
     current_user: User = Depends(get_current_user),
 ):
-    """列出某 Agent 的记忆提交历史（git 式）。"""
+    """列出某 Agent 的记忆提交历史（git 式）。agent=__all__ 查全量。"""
     commits = await memory_manager.list_commits(current_user.id, agent, limit=limit)
     return {"agent": agent, "commits": commits}
 

@@ -404,15 +404,13 @@ class MemoryManager:
         self, user_id: int, agent_name: str, limit: int = 50
     ) -> list[dict]:
         async with create_session() as session:
-            res = await session.execute(
-                select(MemoryCommit)
-                .where(
-                    MemoryCommit.user_id == user_id,
-                    MemoryCommit.agent_name == agent_name,
-                )
-                .order_by(desc(MemoryCommit.created_at))
-                .limit(limit)
+            q = select(MemoryCommit).where(
+                MemoryCommit.user_id == user_id,
             )
+            if agent_name != "__all__":
+                q = q.where(MemoryCommit.agent_name == agent_name)
+            q = q.order_by(desc(MemoryCommit.created_at)).limit(limit)
+            res = await session.execute(q)
             commits = res.scalars().all()
         return [c.to_dict() for c in commits]
 
@@ -501,19 +499,19 @@ class MemoryManager:
             return rb.to_dict()
 
     async def get_stats(self, user_id: int, agent_name: str) -> dict:
-        """记忆统计信息。"""
+        """记忆统计信息。agent_name=__all__ 查全量。"""
         async with create_session() as session:
-            res = await session.execute(
-                select(
-                    func.count(MemoryEntry.id),
-                    func.sum(func.cast(MemoryEntry.compressed, Integer)),
-                ).where(
-                    MemoryEntry.user_id == user_id,
-                    MemoryEntry.agent_name == agent_name,
-                )
+            q = select(
+                func.count(MemoryEntry.id),
+                func.sum(func.cast(MemoryEntry.compressed, Integer)),
+            ).where(
+                MemoryEntry.user_id == user_id,
             )
+            if agent_name != "__all__":
+                q = q.where(MemoryEntry.agent_name == agent_name)
+            res = await session.execute(q)
             total, compressed = res.first()
-            branch = await self._get_branch(session, user_id, agent_name)
+            branch = await self._get_branch(session, user_id, agent_name) if agent_name != "__all__" else None
             return {
                 "agent_name": agent_name,
                 "total_entries": total or 0,

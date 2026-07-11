@@ -25,7 +25,7 @@ interface RagHit {
 }
 
 export default function MemoryPage() {
-  const [agent, setAgent] = useState('__global__')
+  const [agent, setAgent] = useState('__all__')
   const [agents, setAgents] = useState<Agent[]>([])
   const [agentSearch, setAgentSearch] = useState('')
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
@@ -57,8 +57,12 @@ export default function MemoryPage() {
   }, [])
 
   // 当前选中的 Agent 信息
-  const selectedAgent = agent === '__global__' ? null : agents.find(a => a.name === agent)
-  const selectedLabel = agent === '__global__' ? '全局记忆' : (agent || '—')
+  const isAll = agent === '__all__'
+  const isGlobal = agent === '__global__'
+  const selectedAgent = (isAll || isGlobal) ? null : agents.find(a => a.name === agent)
+  const selectedLabel = isAll ? '全部记忆' : isGlobal ? '全局记忆' : (agent || '—')
+  // 是否选中了需要具体 agent 的操作模式
+  const needsAgent = isAll
 
   // 搜索过滤 Agent 列表
   const filteredAgents = agentSearch.trim()
@@ -155,11 +159,16 @@ export default function MemoryPage() {
             onClick={() => { setShowAgentDropdown(!showAgentDropdown); setAgentSearch('') }}
             className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200 min-w-[180px] hover:border-accent/50 transition-colors"
           >
-            {agent === '__global__' ? <Globe size={14} className="text-accent" /> : <Bot size={14} className="text-neutral-400" />}
+            {isAll ? <Database size={14} className="text-accent" /> : isGlobal ? <Globe size={14} className="text-accent" /> : <Bot size={14} className="text-neutral-400" />}
             <span className="flex-1 text-left">{selectedLabel}</span>
             {selectedAgent && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedAgent.config_mode === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
                 {selectedAgent.config_mode === 'global' ? '全局配置' : '单独配置'}
+              </span>
+            )}
+            {isAll && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent">
+                {stats ? stats.total_entries + ' 条' : ''}
               </span>
             )}
             <ChevronDown size={14} className="text-neutral-500" />
@@ -176,6 +185,15 @@ export default function MemoryPage() {
                   placeholder="搜索 Agent…"
                 />
               </div>
+              {/* 全部记忆选项 */}
+              <button
+                onClick={() => { setAgent('__all__'); setShowAgentDropdown(false); setAgentSearch('') }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${isAll ? 'bg-accent/10 text-accent' : 'text-neutral-300'}`}
+              >
+                <Database size={14} className="text-accent" />
+                <span>全部记忆</span>
+                <span className="ml-auto text-[10px] text-neutral-500">汇总所有</span>
+              </button>
               {/* 全局记忆选项 */}
               <button
                 onClick={() => { setAgent('__global__'); setShowAgentDropdown(false); setAgentSearch('') }}
@@ -185,8 +203,8 @@ export default function MemoryPage() {
                 <span>全局记忆</span>
                 <span className="ml-auto text-[10px] text-neutral-500">所有 Agent 共享</span>
               </button>
-              {/* Agent 列表 */}
-              {filteredAgents.map(a => (
+              {/* Agent 列表 */
+              filteredAgents.map(a => (
                 <button
                   key={a.id ?? a.name}
                   onClick={() => { setAgent(a.name); setShowAgentDropdown(false); setAgentSearch('') }}
@@ -205,10 +223,16 @@ export default function MemoryPage() {
             </div>
           )}
         </div>
-        <button onClick={handleCompress} className="flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm text-neutral-300 hover:text-neutral-100">
+        <button onClick={handleCompress} disabled={needsAgent}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm transition-colors ${needsAgent ? 'text-neutral-700 cursor-not-allowed' : 'text-neutral-300 hover:text-neutral-100'}`}
+          title={needsAgent ? '请先选择特定 Agent' : '压缩记忆'}
+        >
           <Archive size={14} /> 压缩记忆
         </button>
-        <button onClick={handleContext} className="flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm text-neutral-300 hover:text-neutral-100">
+        <button onClick={handleContext} disabled={needsAgent}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm transition-colors ${needsAgent ? 'text-neutral-700 cursor-not-allowed' : 'text-neutral-300 hover:text-neutral-100'}`}
+          title={needsAgent ? '请先选择特定 Agent' : '预览上下文'}
+        >
           <History size={14} /> 预览上下文
         </button>
       </div>
@@ -257,8 +281,9 @@ export default function MemoryPage() {
                 <span className="text-xs text-neutral-600">{c.message_count} 条</span>
                 <button
                   onClick={() => handleRollback(c.commit_hash)}
-                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-border text-neutral-400 hover:text-amber-400 hover:border-amber-400/40"
-                  title="回退到此提交"
+                  disabled={needsAgent}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${needsAgent ? 'border-border/30 text-neutral-700 cursor-not-allowed' : 'border-border text-neutral-400 hover:text-amber-400 hover:border-amber-400/40'}`}
+                  title={needsAgent ? '请先选择特定 Agent' : '回退到此提交'}
                 >
                   <RotateCcw size={12} /> 回退
                 </button>
