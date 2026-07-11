@@ -19,11 +19,14 @@
     "@codemirror/lang-markdown": "^6.2.5",
     "@codemirror/lang-python": "^6.1.6",
     "@codemirror/theme-one-dark": "^6.1.2",
+    "@tailwindcss/typography": "^0.5.20",
     "@uiw/react-codemirror": "^4.23.0",
     "lucide-react": "^0.400.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.26.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^4.5.5"
   },
   "devDependencies": {

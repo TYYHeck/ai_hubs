@@ -650,7 +650,7 @@ function MessageBubble({ msg, highlight, streaming }: {
         <div className={`px-4 py-2.5 rounded-lg text-sm leading-relaxed ${
           isUser ? 'bg-accent text-white rounded-tr-sm'
                  : 'bg-bg-secondary border border-border text-neutral-200 rounded-tl-sm'}`}>
-          {msg.content ? <ContentWithRefs text={msg.content} highlight={highlight} /> :
+          {msg.content ? <ContentWithRefs text={msg.content} highlight={highlight} isUser={isUser} /> :
             (streaming ? <span className="animate-pulse text-neutral-500">思考中...</span> : '')}
           {streaming && msg.content && <span className="inline-block w-0.5 h-4 bg-accent ml-0.5 animate-pulse" />}
         </div>
@@ -659,8 +659,11 @@ function MessageBubble({ msg, highlight, streaming }: {
   )
 }
 
-// 渲染 [image#N] / [Doc #N] 占位符为可点击标签
-function ContentWithRefs({ text, highlight }: { text: string; highlight?: string }) {
+// 渲染 [image#N] / [Doc #N] 占位符为可点击标签，AI 消息启用 Markdown 渲染
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
+function ContentWithRefs({ text, highlight, isUser }: { text: string; highlight?: string; isUser?: boolean }) {
   const parts = text.split(/(\[(?:image|Doc|file)#\d+\])/g)
   return (
     <>
@@ -676,8 +679,18 @@ function ContentWithRefs({ text, highlight }: { text: string; highlight?: string
             </span>
           )
         }
+        // 用户消息保持纯文本，AI 消息启用 Markdown 渲染
+        if (!isUser && p.trim()) {
+          return (
+            <div key={i} className="markdown-content">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {p}
+              </ReactMarkdown>
+            </div>
+          )
+        }
+        // 用户消息纯文本 + 搜索高亮
         if (highlight && p.toLowerCase().includes(highlight.toLowerCase())) {
-          // 简单高亮
           const idx = p.toLowerCase().indexOf(highlight.toLowerCase())
           return <span key={i}>{p.slice(0, idx)}<mark className="bg-yellow-400/30 text-yellow-200 rounded">{highlight}</mark>{p.slice(idx + highlight.length)}</span>
         }
