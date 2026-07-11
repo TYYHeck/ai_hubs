@@ -100,4 +100,24 @@ export const systemApi = {
     request<{ status: string; version: string; database: string; db_available: boolean }>('/health'),
 }
 
+// ── 通用 API 封装 ──
+
+export const api = {
+  get: <T>(path: string) => request<T>(path),
+
+  post: <T>(path: string, data?: unknown) =>
+    request<T>(path, {
+      method: 'POST',
+      body: data !== undefined ? JSON.stringify(data) : undefined,
+    }),
+
+  put: <T>(path: string, data?: unknown) =>
+    request<T>(path, {
+      method: 'PUT',
+      body: data !== undefined ? JSON.stringify(data) : undefined,
+    }),
+
+  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+}
+
 export { setToken, getToken, ApiError }

@@ -1,5 +1,288 @@
-import { ListTodo } from 'lucide-react'
-import { PlaceholderPage } from './PlaceholderPage'
+import { useState, useEffect } from 'react'
+import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { api } from '../api/client'
+
+interface TaskData {
+  id: string; title: string; description: string; status: string
+  mode: string; priority: number; assigned_agent: string | null
+  think_depth: number; think_visibility: string
+  result: string | null; error: string | null
+  created_at: string | null; started_at: string | null; finished_at: string | null
+}
+
+interface ModeInfo { id: string; name: string; desc: string; icon: string }
+
+const modeIcons: Record<string, JSX.Element> = {
+  user: <Zap size={14} />, 'arrow-right': <GitBranch size={14} />,
+  'git-branch': <GitBranch size={14} />, 'message-square': <GitBranch size={14} />,
+  'check-square': <GitBranch size={14} />, 'git-merge': <GitBranch size={14} />,
+  'share-2': <GitBranch size={14} />, sliders: <GitBranch size={14} />,
+}
+const statusColors: Record<string, string> = {
+  pending: 'bg-yellow-500/20 text-yellow-400', running: 'bg-blue-500/20 text-blue-400',
+  completed: 'bg-green-500/20 text-green-400', failed: 'bg-red-500/20 text-red-400',
+  paused: 'bg-purple-500/20 text-purple-400', cancelled: 'bg-gray-500/20 text-gray-400',
+}
+
 export default function TasksPage() {
-  return <PlaceholderPage title="任务管理" description="创建任务、8种编排模式、暂停恢复、实时日志" icon={<ListTodo size={40} />} milestone="M3: Agent管理+任务编排" />
+  const [tasks, setTasks] = useState<TaskData[]>([])
+  const [modes, setModes] = useState<ModeInfo[]>([])
+  const [agents, setAgents] = useState<{id:number;name:string}[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    title: '', description: '', mode: 'single', agent_ids: [] as number[],
+    think_depth: 1, think_visibility: 'visible' as string, priority: 0, tags: '',
+  })
+  const [error, setError] = useState('')
+
+  const fetchData = async () => {
+    try {
+      const [tRes, mRes, aRes] = await Promise.all([
+        api.get<{ data: TaskData[] }>('/tasks'),
+        api.get<{ data: ModeInfo[] }>('/tasks/modes'),
+        api.get<{ data: { id: number; name: string }[] }>('/agents'),
+      ])
+      setTasks(tRes.data)
+      setModes(mRes.data)
+      setAgents(aRes.data.map((a) => ({ id: a.id, name: a.name })))
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchData() }, [])
+  // 每5秒自动刷新任务状态
+  useEffect(() => {
+    const iv = setInterval(fetchData, 5000)
+    return () => clearInterval(iv)
+  }, [])
+
+  const resetForm = () => {
+    setForm({ title: '', description: '', mode: 'single', agent_ids: [], think_depth: 1, think_visibility: 'visible', priority: 0, tags: '' })
+    setShowForm(false)
+    setError('')
+  }
+
+  const handleCreate = async () => {
+    if (!form.title.trim()) { setError('标题不能为空'); return }
+    try {
+      await api.post('/tasks', {
+        ...form,
+        tags: form.tags.split(',').map(s => s.trim()).filter(Boolean),
+      })
+      resetForm()
+      fetchData()
+    } catch (e: any) {
+      setError(e.response?.data?.detail || '创建失败')
+    }
+  }
+
+  const handleExecute = async (taskId: string) => {
+    await api.post(`/tasks/${taskId}/execute`)
+    fetchData()
+  }
+
+  const handlePause = async (taskId: string) => {
+    await api.post(`/tasks/${taskId}/pause`)
+    fetchData()
+  }
+
+  const handleResume = async (taskId: string) => {
+    await api.post(`/tasks/${taskId}/resume`)
+    fetchData()
+  }
+
+  const handleDelete = async (taskId: string) => {
+    if (!confirm('确定删除此任务？')) return
+    await api.delete(`/tasks/${taskId}`)
+    fetchData()
+  }
+
+  const toggleAgent = (id: number) => {
+    setForm(prev => ({
+      ...prev,
+      agent_ids: prev.agent_ids.includes(id)
+        ? prev.agent_ids.filter(a => a !== id)
+        : [...prev.agent_ids, id],
+    }))
+  }
+
+  if (loading) return <div className="p-8 text-gray-400">加载中...</div>
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <ListTodo size={22} className="text-purple-400" />
+          <h1 className="text-lg font-semibold text-white">任务管理</h1>
+          <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">{tasks.length} 个</span>
+        </div>
+        <button onClick={() => { resetForm(); setShowForm(true) }}
+          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm transition-colors">
+          <Plus size={16} /> 新建任务
+        </button>
+      </div>
+
+      {error && (
+        <div className="mx-6 mt-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-2 rounded-lg text-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError('')}><X size={14} /></button>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="mx-6 mt-4 bg-white/[0.03] border border-white/10 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-medium">新建任务</h3>
+            <button onClick={resetForm} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">标题 *</label>
+              <input value={form.title} onChange={e => setForm({...form, title: e.target.value})}
+                className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 outline-none" placeholder="任务名称" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">编排模式</label>
+              <select value={form.mode} onChange={e => setForm({...form, mode: e.target.value})}
+                className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 outline-none">
+                {modes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-400 mb-1">描述 / 输入</label>
+              <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={3}
+                className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 outline-none resize-none"
+                placeholder="告诉 Agent 要做什么..." />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">思考深度 {form.think_depth}</label>
+              <input type="range" min="1" max="3" value={form.think_depth}
+                onChange={e => setForm({...form, think_depth: parseInt(e.target.value)})}
+                className="w-full accent-purple-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">思考可见性</label>
+              <select value={form.think_visibility} onChange={e => setForm({...form, think_visibility: e.target.value})}
+                className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 outline-none">
+                <option value="visible">可见</option>
+                <option value="hidden">隐藏</option>
+                <option value="folded">折叠</option>
+              </select>
+            </div>
+          </div>
+          {/* Agent 选择 */}
+          <div className="mt-4">
+            <label className="block text-xs text-gray-400 mb-2">选择 Agent ({form.agent_ids.length} 个已选)</label>
+            <div className="flex flex-wrap gap-2">
+              {agents.map(a => (
+                <button key={a.id}
+                  onClick={() => toggleAgent(a.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                    form.agent_ids.includes(a.id)
+                      ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                      : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
+                  }`}>
+                  {form.agent_ids.includes(a.id) ? '✓' : '+'} {a.name}
+                </button>
+              ))}
+              {agents.length === 0 && <span className="text-xs text-gray-600">暂无 Agent，请先创建</span>}
+            </div>
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={handleCreate}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-lg text-sm transition-colors">
+              <Plus size={14} /> 创建
+            </button>
+            <button onClick={resetForm} className="text-gray-400 hover:text-white px-4 py-2 text-sm transition-colors">取消</button>
+          </div>
+        </div>
+      )}
+
+      {/* 任务列表 */}
+      <div className="flex-1 overflow-auto px-6 py-4">
+        {tasks.length === 0 ? (
+          <div className="text-center text-gray-500 mt-20">
+            <ListTodo size={48} className="mx-auto mb-4 opacity-30" />
+            <p>还没有任务，点击上方按钮创建</p>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {tasks.map(t => (
+              <div key={t.id}
+                className={`bg-white/[0.03] border rounded-xl overflow-hidden transition-colors ${
+                  expandedId === t.id ? 'border-white/20' : 'border-white/10 hover:border-white/20'
+                }`}>
+                <div className="p-4 flex items-start justify-between cursor-pointer"
+                  onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColors[t.status] || 'text-gray-400'}`}>
+                        {t.status === 'pending' ? '等待中' : t.status === 'running' ? '运行中' : t.status === 'completed' ? '已完成' : t.status === 'failed' ? '失败' : t.status === 'paused' ? '已暂停' : t.status}
+                      </span>
+                      <span className="text-white font-medium truncate">{t.title}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500">{t.mode}</span>
+                    </div>
+                    <p className="text-gray-500 text-xs truncate">{t.description || '无描述'}</p>
+                    {t.assigned_agent && (
+                      <p className="text-gray-600 text-[11px] mt-1">指派: {t.assigned_agent}</p>
+                    )}
+                    {t.result && (
+                      <p className="text-gray-400 text-xs mt-1 line-clamp-2 bg-black/20 rounded p-2">{t.result.slice(0, 200)}</p>
+                    )}
+                    {t.error && (
+                      <p className="text-red-400 text-xs mt-1 bg-red-500/10 rounded p-2">{t.error}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 ml-3" onClick={e => e.stopPropagation()}>
+                    {t.status === 'pending' && (
+                      <button onClick={() => handleExecute(t.id)}
+                        className="p-1.5 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors" title="执行">
+                        <Play size={15} />
+                      </button>
+                    )}
+                    {t.status === 'running' && (
+                      <button onClick={() => handlePause(t.id)}
+                        className="p-1.5 text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition-colors" title="暂停">
+                        <Pause size={15} />
+                      </button>
+                    )}
+                    {t.status === 'paused' && (
+                      <button onClick={() => handleResume(t.id)}
+                        className="p-1.5 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors" title="恢复">
+                        <RotateCw size={15} />
+                      </button>
+                    )}
+                    <button onClick={() => handleDelete(t.id)}
+                      className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors" title="删除">
+                      <Trash2 size={15} />
+                    </button>
+                    <span className="text-gray-600 ml-1">
+                      {expandedId === t.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </span>
+                  </div>
+                </div>
+                {/* 展开详情 */}
+                {expandedId === t.id && (
+                  <div className="px-4 pb-4 border-t border-white/5 pt-3">
+                    <div className="grid grid-cols-4 gap-3 text-xs text-gray-500">
+                      <div><span className="text-gray-600">模式</span><br />{t.mode}</div>
+                      <div><span className="text-gray-600">优先级</span><br />{t.priority}</div>
+                      <div><span className="text-gray-600">思考深度</span><br />{t.think_depth}</div>
+                      <div><span className="text-gray-600">思考可见</span><br />{t.think_visibility}</div>
+                      <div><span className="text-gray-600">创建</span><br />{t.created_at?.slice(0, 16) || '-'}</div>
+                      <div><span className="text-gray-600">开始</span><br />{t.started_at?.slice(0, 16) || '-'}</div>
+                      <div><span className="text-gray-600">完成</span><br />{t.finished_at?.slice(0, 16) || '-'}</div>
+                      <div><span className="text-gray-600">ID</span><br />{t.id}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }

@@ -84,7 +84,7 @@ app.add_middleware(
 )
 
 # 注册 API 路由
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api/v1")
 
 
 # ============================================================

@@ -17,7 +17,7 @@ from ...services.auth_service import (
 from ..deps import get_current_user
 from ...models.user import User
 
-router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
+router = APIRouter(prefix="/auth", tags=["认证"])
 
 
 @router.post("/send-code")

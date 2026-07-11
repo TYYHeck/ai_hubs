@@ -182,6 +182,31 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+class SessionContext:
+    """异步上下文管理器，便于在非路由代码中使用（async with ... as session）"""
+
+    def __init__(self):
+        if _session_factory is None:
+            raise RuntimeError("数据库引擎未初始化")
+        self._ctx = _session_factory()
+
+    async def __aenter__(self) -> AsyncSession:
+        self._session = await self._ctx.__aenter__()
+        return self._session
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            await self._session.rollback()
+        else:
+            await self._session.commit()
+        await self._ctx.__aexit__(exc_type, exc_val, exc_tb)
+
+
+def create_session() -> SessionContext:
+    """创建一个数据库会话（用于 async with 语句）"""
+    return SessionContext()
+
+
 def get_db_type() -> str:
     """获取当前数据库类型"""
     return _db_type

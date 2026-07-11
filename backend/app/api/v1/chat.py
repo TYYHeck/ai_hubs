@@ -27,7 +27,7 @@ from ...schemas.chat import ChatRequest, CreateConversationRequest, LLMConfigReq
 from ..deps import get_current_user
 from ...core.llm import llm_manager, get_llm_config, save_llm_config, PROVIDERS
 
-router = APIRouter(prefix="/api/v1", tags=["对话"])
+router = APIRouter(prefix="", tags=["对话"])
 
 
 # ============================================================
