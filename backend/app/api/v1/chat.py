@@ -243,20 +243,27 @@ async def chat_stream(
                 )
                 skills_rows = (await session.execute(sk_stmt)).scalars().all()
                 if skills_rows:
-                    # 行为模式注入：所有技能都有角色描述，让 LLM 据此调整行为
-                    desc_parts = []
-                    for sk in skills_rows:
-                        desc_parts.append(f"- **{sk.name}**：{sk.description or '无描述'}")
-                    skill_ctx = (
-                        "\n\n# 当前激活的技能\n"
-                        "你已激活以下技能。请将每个技能的描述作为你的行为准则，"
-                        "调整你的回复风格和能力以匹配该技能的定义：\n\n"
-                        + "\n".join(desc_parts)
-                    )
+                    # 区分代码类技能 vs 行为类技能
+                    code_skills = [sk for sk in skills_rows if (sk.config or {}).get("code")]
+                    behavior_skills = [sk for sk in skills_rows if not (sk.config or {}).get("code")]
+
+                    # 行为模式注入：用强指令要求 LLM 真正扮演该角色
+                    if behavior_skills:
+                        desc_parts = []
+                        for sk in behavior_skills:
+                            desc_parts.append(f"- **{sk.name}**：{sk.description or '无描述'}")
+                        skill_ctx = (
+                            "\n\n# 🔴 最高优先级：激活的行为技能\n"
+                            "以下技能已激活且必须严格遵守。这不是可选的参考信息，"
+                            "而是你必须执行的行为指令。请以该技能定义的身份、"
+                            "语气和交互方式来回复，主动引导对话，提问以理解用户需求。\n\n"
+                            + "\n".join(desc_parts)
+                        )
 
                     # 代码工具注入：仅对包含代码的技能追加可执行实现
-                    code_skills = [sk for sk in skills_rows if (sk.config or {}).get("code")]
                     if code_skills:
+                        if not skill_ctx:
+                            skill_ctx = "\n\n# 当前激活的技能\n"
                         code_blocks = []
                         for sk in code_skills:
                             cfg = sk.config or {}
@@ -556,11 +563,16 @@ def _build_default_system_prompt(skills: list[str]) -> str:
         "## 核心原则",
         "",
         "1. **先理解再执行**：收到用户需求后，先确认意图，再选择合适的方式执行。",
-        "2. **优先使用工具**：涉及代码执行、文件操作时，调用 run_code / run_terminal / write_file 等工具。",
-        "3. **分步执行**：复杂任务拆解为子步骤，逐步完成并告知用户进度。",
-        "4. **安装依赖**：运行技能代码前，先用 run_terminal 安装所需 Python 包（如 pip install python-docx）。",
-        "5. **输出清晰**：结果使用 Markdown 格式，代码块标注语言，表格对齐。",
-        "6. **错误自愈**：代码执行失败时，分析 stderr 并修正重试（最多 3 次）。",
+        "2. **交互式对话**：面对需求模糊、方案设计、头脑风暴、架构规划等开放性任务时，",
+        "   必须主动提问以澄清需求。不要只是输出模板或框架，",
+        "   要用提问引导用户给出关键信息，逐步收敛到具体方案。",
+        "   ⚠️ 如果用户说「设计一个XX」「帮我规划XX」「讨论XX方案」，务必先问清楚：",
+        "   目标场景、约束条件、偏好技术栈、性能要求等，再给出建议。",
+        "3. **优先使用工具**：涉及代码执行、文件操作时，调用对应工具。",
+        "4. **分步执行**：复杂任务拆解为子步骤，逐步完成并告知用户进度。",
+        "5. **安装依赖**：运行技能代码前，先用 run_terminal 安装所需 Python 包（如 pip install python-docx）。",
+        "6. **输出清晰**：结果使用 Markdown 格式，代码块标注语言，表格对齐。",
+        "7. **错误自愈**：代码执行失败时，分析 stderr 并修正重试（最多 3 次）。",
         "",
         "## 可用命令",
         "",
@@ -590,12 +602,20 @@ def _build_default_system_prompt(skills: list[str]) -> str:
         "- **PPT (.pptx)**：用 python-pptx 库创建/编辑，先 `pip install python-pptx`",
         "- **网页搜索**：用 requests + beautifulsoup4 抓取，先 `pip install requests beautifulsoup4`",
         "",
-        "## 回复格式",
+        "## 回复策略",
         "",
-        "1. 简短确认用户意图（1 句话）",
-        "2. 执行操作（调用工具或编写代码）",
+        "根据任务类型选择回复模式：",
+        "",
+        "**模式 A — 执行类任务**（代码编写、文档生成、数据处理）：",
+        "1. 简短确认意图",
+        "2. 执行操作",
         "3. 展示结果并解释",
-        "4. 必要时提供后续建议",
+        "",
+        "**模式 B — 设计/咨询类任务**（方案设计、技术选型、架构规划、需求分析）：",
+        "1. 复述你的理解，确认方向正确",
+        "2. **提 2-3 个关键问题**收集缺失信息（不要跳过这一步）",
+        "3. 根据回答给出具体建议和方案",
+        "4. 询问是否需要进一步细化",
     ])
 
     # 如果用户选中了特定技能，追加针对性提示
@@ -604,9 +624,13 @@ def _build_default_system_prompt(skills: list[str]) -> str:
         lines.append("\n## 当前激活的技能")
         for s in skills:
             lines.append(f"- **{s}**")
+        lines.append("\n你必须优先使用这些技能的能力来解决问题。")
         if any(n in names for n in ("docx", "xlsx", "pdf", "ppt", "web-search")):
-            lines.append("\n你可以在沙箱中运行这些技能的参考实现代码。请先用 run_terminal 安装对应依赖。")
+            lines.append("你可以在沙箱中运行这些技能的参考实现代码。请先用 run_terminal 安装对应依赖。")
         if any(n in names for n in ("run-python", "run-js", "run-bash", "coding", "code-runner")):
-            lines.append("\n代码执行工具已启用，可直接编写和运行代码。")
+            lines.append("代码执行工具已启用，可直接编写和运行代码。")
+        # 设计/头脑风暴类技能：强调交互性
+        if any(n in names for n in ("coding",)):
+            lines.append("收到方案设计或架构规划请求时，请先提问澄清需求再给出建议，不要只输出空模板。")
 
     return "\n".join(lines)
