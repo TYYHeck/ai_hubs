@@ -210,10 +210,14 @@ async def chat_stream(
             history = [m for m in history if m.id != user_msg.id]
     
             messages = []
-            if req.system_prompt:
-                messages.append({"role": "system", "content": req.system_prompt})
     
-            # 技能注入：把用户选用的已安装技能说明与入口代码作为系统上下文
+            # ── 构建系统级 System Prompt（角色 + 技能清单 + 命令列表）──
+            base_prompt = req.system_prompt or ""
+            if not base_prompt:
+                base_prompt = _build_default_system_prompt(req.skills or [])
+    
+            # 注入技能上下文（已安装技能的详细实现代码）
+            skill_ctx = ""
             if req.skills:
                 from ...models.skill import Skill as SkillModel
                 sk_stmt = select(SkillModel).where(
@@ -233,10 +237,16 @@ async def chat_stream(
                             f"入口文件：{entry}\n参考实现：\n```\n{code_view}\n```"
                         )
                     skill_ctx = (
-                        "\n\n# 可用技能\n以下是本次对话可用的技能定义，请在其适用场景下调用对应能力：\n\n"
+                        "\n\n# 可用技能实现\n以下是本次对话选用的技能详细实现代码，"
+                        "请用 run_terminal 先安装对应依赖，再在适用场景下调用：\n\n"
                         + "\n\n".join(skill_blocks)
                     )
-                    messages.append({"role": "system", "content": skill_ctx})
+    
+            # 组装第一条 system message：基础 prompt + 技能上下文
+            full_system = base_prompt
+            if skill_ctx:
+                full_system += skill_ctx
+            messages.append({"role": "system", "content": full_system})
     
             for m in history:
                 messages.append({"role": m.role, "content": m.content})
@@ -480,3 +490,86 @@ async def context_usage(
 def _sse(data: dict) -> str:
     """格式化 SSE 事件"""
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+# ═══════════════════════════════════════════════════════════
+# 默认 System Prompt 构建
+# ═══════════════════════════════════════════════════════════
+
+_SKILL_COMMANDS: dict[str, list[str]] = {
+    "docx":       ["/docx", "/word"],
+    "xlsx":       ["/xlsx", "/excel", "/表格"],
+    "pdf":        ["/pdf"],
+    "ppt":        ["/ppt", "/幻灯片"],
+    "web-search": ["/search", "/搜索"],
+    "run-python": ["/run", "/python"],
+    "run-js":     ["/js", "/node"],
+    "run-bash":   ["/bash", "/终端"],
+    "coding":     ["/code"],
+}
+
+
+def _build_default_system_prompt(skills: list[str]) -> str:
+    """构建包含技能清单、命令列表和使用指令的默认 System Prompt。"""
+    lines = [
+        "你是一个通用人工智能助手，部署在 AI Hubs 平台上。",
+        "你具备代码编写、文档生成（Word/Excel/PDF/PPT）、图片读取、",
+        "终端操作、网页搜索等多种能力。",
+        "",
+        "## 核心原则",
+        "",
+        "1. **先理解再执行**：收到用户需求后，先确认意图，再选择合适的方式执行。",
+        "2. **优先使用工具**：涉及代码执行、文件操作时，调用 run_code / run_terminal / write_file 等工具。",
+        "3. **分步执行**：复杂任务拆解为子步骤，逐步完成并告知用户进度。",
+        "4. **安装依赖**：运行技能代码前，先用 run_terminal 安装所需 Python 包（如 pip install python-docx）。",
+        "5. **输出清晰**：结果使用 Markdown 格式，代码块标注语言，表格对齐。",
+        "6. **错误自愈**：代码执行失败时，分析 stderr 并修正重试（最多 3 次）。",
+        "",
+        "## 可用命令",
+        "",
+        "在对话中输入 `/命令` 可快速触发对应能力：",
+    ]
+
+    # 列出所有命令
+    for skill_name, cmds in _SKILL_COMMANDS.items():
+        lines.append(f"- {', '.join(cmds)} → {skill_name}")
+
+    lines.extend([
+        "",
+        "## 文件工作区",
+        "",
+        "你可以通过以下工具操作用户的沙箱工作区：",
+        "- `write_file(path, content)` — 写入文件",
+        "- `read_file(path)` — 读取文件",
+        "- `list_files(path?)` — 查看目录",
+        "- `run_code(language, code)` — 执行代码（python/js/bash/c/cpp/java）",
+        "- `run_terminal(command)` — 执行终端命令",
+        "",
+        "## 文档处理指南",
+        "",
+        "- **Word (.docx)**：用 python-docx 库读写，先 `pip install python-docx`",
+        "- **Excel (.xlsx)**：用 openpyxl 库读写，支持公式、图表、样式，先 `pip install openpyxl`",
+        "- **PDF**：用 PyPDF2/pdfplumber 读取，reportlab 创建，先 `pip install PyPDF2 pdfplumber reportlab`",
+        "- **PPT (.pptx)**：用 python-pptx 库创建/编辑，先 `pip install python-pptx`",
+        "- **网页搜索**：用 requests + beautifulsoup4 抓取，先 `pip install requests beautifulsoup4`",
+        "",
+        "## 回复格式",
+        "",
+        "1. 简短确认用户意图（1 句话）",
+        "2. 执行操作（调用工具或编写代码）",
+        "3. 展示结果并解释",
+        "4. 必要时提供后续建议",
+    ])
+
+    # 如果用户选中了特定技能，追加针对性提示
+    if skills:
+        names = [s.lower().strip() for s in skills]
+        lines.append("\n## 当前激活的技能")
+        for s in skills:
+            lines.append(f"- **{s}**")
+        if any(n in names for n in ("docx", "xlsx", "pdf", "ppt", "web-search")):
+            lines.append("\n你可以在沙箱中运行这些技能的参考实现代码。请先用 run_terminal 安装对应依赖。")
+        if any(n in names for n in ("run-python", "run-js", "run-bash", "coding", "code-runner")):
+            lines.append("\n代码执行工具已启用，可直接编写和运行代码。")
+
+    return "\n".join(lines)

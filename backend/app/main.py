@@ -30,6 +30,7 @@ from .config import settings, PROJECT_ROOT
 from .database import init_database, close_database, get_db_type, is_db_available
 from .api.v1 import api_router
 from .services.auth_service import ensure_default_admin
+from .services.builtin_skills import ensure_builtin_skills
 from .database import get_session
 
 logger = logging.getLogger("ai_hubs")
@@ -55,6 +56,10 @@ async def lifespan(app: FastAPI):
     # 创建默认管理员
     async for session in get_session():
         await ensure_default_admin(session)
+
+    # 初始化内置技能（docx / xlsx / pdf / ppt / web-search）
+    async for session in get_session():
+        await ensure_builtin_skills(session)
 
     logger.info("AI Hubs v4.0 启动完成")
     yield

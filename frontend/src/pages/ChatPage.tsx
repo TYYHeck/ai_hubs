@@ -41,7 +41,7 @@ export default function ChatPage() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [completers, setCompleters] = useState<Completer>({ agents: [], skills: [] })
-  const [completion, setCompletion] = useState<{ items: string[]; active: number; start: number; kind: 'agent' | 'skill' } | null>(null)
+  const [completion, setCompletion] = useState<{ items: string[]; active: number; start: number; kind: 'agent' | 'skill' | 'command' } | null>(null)
 
   // Agent 选择（下拉框 + 输入匹配 + 默认全局默认 Agent）
   const [agents, setAgents] = useState<Agent[]>([])
@@ -158,13 +158,17 @@ export default function ChatPage() {
     }
   }
 
-  // 输入变化时触发自动补全（@ / #）
+  // 输入变化时触发自动补全（@Agent / #技能 / /命令）
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setInput(val)
     const caret = e.target.selectionStart ?? val.length
     const before = val.slice(0, caret)
-    const m = before.match(/(^|\s)([@#])(\w*)$/)
+
+    // 匹配 @Agent 或 #技能 或 /命令
+    const m = before.match(/(^|\s)([@#])(\w*)$/)  // @ 和 #
+    const mCmd = before.match(/(^|\s)(\/)([\w\u4e00-\u9fff-]*)$/)  // /命令（支持中文）
+
     if (m) {
       const trigger = m[2]
       const frag = m[3].toLowerCase()
@@ -172,6 +176,18 @@ export default function ChatPage() {
       const items = pool.filter(n => n.toLowerCase().includes(frag)).slice(0, 8)
       if (items.length) {
         setCompletion({ items, active: 0, start: caret - frag.length - 1, kind: trigger === '@' ? 'agent' : 'skill' })
+        return
+      }
+    } else if (mCmd) {
+      const frag = mCmd[3].toLowerCase()
+      const pool = [
+        '/search', '/搜索', '/docx', '/word', '/xlsx', '/excel', '/表格',
+        '/pdf', '/ppt', '/幻灯片', '/run', '/python', '/js', '/node',
+        '/bash', '/终端', '/code',
+      ]
+      const items = pool.filter(n => n.toLowerCase().includes(frag)).slice(0, 8)
+      if (items.length) {
+        setCompletion({ items, active: 0, start: caret - frag.length - 1, kind: 'command' })
         return
       }
     }
@@ -448,7 +464,7 @@ export default function ChatPage() {
               <div key={item} onClick={() => applyCompletion(item)}
                 className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
                   i === completion.active ? 'bg-accent/15 text-accent' : 'text-neutral-300 hover:bg-bg-tertiary'}`}>
-                {completion.kind === 'agent' ? <Bot size={12} /> : <Sparkles size={12} />}
+                {completion.kind === 'agent' ? <Bot size={12} /> : completion.kind === 'skill' ? <Sparkles size={12} /> : <Terminal size={12} />}
                 {item}
               </div>
             ))}
@@ -479,7 +495,7 @@ export default function ChatPage() {
                 value={input}
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
-                placeholder={streaming ? "AI 生成中…输入后点「排队发送」可插入下一条" : "输入消息… @Agent #技能 自动补全 · Enter 发送 · ↑ 回溯历史 · 拖入文件插入占位符"}
+                placeholder={streaming ? "AI 生成中…输入后点「排队发送」可插入下一条" : "输入消息… @Agent #技能 /命令 自动补全 · Enter 发送 · ↑ 回溯历史 · 拖入文件插入占位符"}
                 rows={1}
                 className="input flex-1 resize-none min-h-[40px] max-h-32"
                 style={{ height: 'auto' }}
