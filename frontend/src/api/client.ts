@@ -136,6 +136,19 @@ export const systemApi = {
     request<{ status: string; version: string; database: string; db_available: boolean }>('/health'),
 }
 
+// ── 仪表盘 API ──
+
+export interface DashboardStats {
+  agents: number
+  running_tasks: number
+  memory_entries: number
+  datasets: number
+}
+
+export const dashboardApi = {
+  stats: () => request<DashboardStats>('/dashboard'),
+}
+
 // ── 通用 API 封装 ──
 
 export const api = {

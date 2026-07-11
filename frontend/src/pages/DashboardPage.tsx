@@ -1,7 +1,7 @@
 // AI Hubs — 仪表盘
 
 import { useEffect, useState } from 'react'
-import { systemApi } from '../api/client'
+import { systemApi, dashboardApi } from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import { Bot, ListTodo, Brain, BookOpen, Activity, Database } from 'lucide-react'
 
@@ -12,19 +12,28 @@ interface HealthInfo {
   db_available: boolean
 }
 
+interface StatsInfo {
+  agents: number
+  running_tasks: number
+  memory_entries: number
+  datasets: number
+}
+
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const [health, setHealth] = useState<HealthInfo | null>(null)
+  const [stats, setStats] = useState<StatsInfo | null>(null)
 
   useEffect(() => {
     systemApi.health().then(setHealth).catch(() => {})
+    dashboardApi.stats().then(setStats).catch(() => {})
   }, [])
 
-  const stats = [
-    { label: 'Agent 数', value: '—', icon: Bot, color: 'text-blue-400' },
-    { label: '运行中任务', value: '—', icon: ListTodo, color: 'text-green-400' },
-    { label: '记忆条目', value: '—', icon: Brain, color: 'text-purple-400' },
-    { label: '知识库', value: '—', icon: BookOpen, color: 'text-orange-400' },
+  const statItems = [
+    { label: 'Agent 数', value: stats?.agents ?? '—', icon: Bot, color: 'text-blue-400' },
+    { label: '运行中任务', value: stats?.running_tasks ?? '—', icon: ListTodo, color: 'text-green-400' },
+    { label: '记忆条目', value: stats?.memory_entries ?? '—', icon: Brain, color: 'text-purple-400' },
+    { label: '知识库', value: stats?.datasets ?? '—', icon: BookOpen, color: 'text-orange-400' },
   ]
 
   return (
@@ -36,12 +45,14 @@ export default function DashboardPage() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {stats.map((s) => (
+        {statItems.map((s) => (
           <div key={s.label} className="card p-4">
             <div className="flex items-center justify-between mb-2">
               <s.icon size={18} className={s.color} />
             </div>
-            <div className="text-2xl font-bold text-neutral-100">{s.value}</div>
+            <div className="text-2xl font-bold text-neutral-100">
+              {s.value}
+            </div>
             <div className="text-xs text-neutral-500 mt-1">{s.label}</div>
           </div>
         ))}
@@ -81,13 +92,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 开发进度提示 */}
+      {/* 提示 */}
       <div className="card p-5 mt-4 border-dashed">
         <p className="text-sm text-neutral-400">
-          v4.0 重构进行中。当前已完成：基础设施 + 认证系统。
+          v4.0 持续迭代中。更多功能即将推出。
         </p>
         <p className="text-xs text-neutral-600 mt-1">
-          下一步：对话核心 → Agent管理 → 任务编排 → 记忆系统 → 技能市场 → IDE → 多端
+          对话核心 · Agent管理 · 任务编排 · 记忆系统 · 技能市场 · IDE · 多端
         </p>
       </div>
     </div>
