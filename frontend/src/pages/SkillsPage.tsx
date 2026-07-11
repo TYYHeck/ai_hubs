@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Package, Github, Plus, Search, Download, Trash2, Edit3, Check, X, Code2 } from 'lucide-react'
 import { skillApi, type Skill, type GithubSkill } from '../api/client'
+import { onAIMutation } from '../stores/chatStore'
 
 const SOURCE_LABEL: Record<string, string> = {
   builtin: '内置',
@@ -53,6 +54,13 @@ export default function SkillsPage() {
 
   useEffect(() => {
     if (tab === 'mine') loadSkills()
+  }, [tab, loadSkills])
+
+  // 监听 AI 触发的资源变更 → 自动刷新技能列表
+  useEffect(() => {
+    return onAIMutation((detail) => {
+      if (detail.resource === 'skills' && tab === 'mine') loadSkills()
+    })
   }, [tab, loadSkills])
 
   const openCreate = () => {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Brain, GitBranch, RotateCcw, Archive, Search, History, Database, Globe, ChevronDown, Bot } from 'lucide-react'
 import { api, type Agent } from '../api/client'
+import { onAIMutation } from '../stores/chatStore'
 
 interface CommitItem {
   commit_hash: string
@@ -86,6 +87,12 @@ export default function MemoryPage() {
   }, [agent])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+  // 监听 AI 触发的资源变更 → 自动刷新记忆
+  useEffect(() => {
+    return onAIMutation((detail) => {
+      if (detail.resource === 'memory') fetchAll()
+    })
+  }, [fetchAll])
 
   const handleRollback = async (hash: string) => {
     if (!confirm(`确认回退到提交 ${hash}？之后的提交将被移除。`)) return

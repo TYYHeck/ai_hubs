@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Bot, Plus, Trash2, Edit3, Zap, Tag, Code, Save, X, Sparkles, Globe, User as UserIcon, Star, Loader2, Search } from 'lucide-react'
 import { agentApi, skillApi, type Agent, type Skill } from '../api/client'
+import { onAIMutation } from '../stores/chatStore'
 
 interface FormState {
   id?: number
@@ -62,6 +63,14 @@ export default function AgentsPage() {
   }
 
   useEffect(() => { fetchAgents(); fetchSkills() }, [])
+
+  // 监听 AI 触发的资源变更 → 自动刷新（避免 AI 改了数据库后页面不更新的 bug）
+  useEffect(() => {
+    return onAIMutation((detail) => {
+      if (detail.resource === 'agents') fetchAgents()
+      if (detail.resource === 'skills') fetchSkills()
+    })
+  }, [])
 
   const resetForm = () => {
     setForm(defaultForm)

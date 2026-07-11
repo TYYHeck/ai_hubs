@@ -477,9 +477,10 @@ async def chat_stream(
                             "name": event.get("name", ""),
                             "result": event.get("result", ""),
                         })
-                        # 工具结果也追加到 full_response（作为对话上下文展示）
-                        tool_label = f"\n[工具: {event.get('name', '')}]\n{event.get('result', '')}\n"
-                        full_response.append(tool_label)
+                        # 工具结果不再追加到 full_response（避免把 API 响应的 JSON 暴露给用户/污染历史消息）
+                        # 工具结果已通过 SSE 独立推送给前端用于渲染 tool 消息气泡
+                        # 但需要把工具调用信息注入到 LLM 的下一轮上下文中（如果 chat 框架支持 tool_call 就不需要，这里我们手动追加）
+                        # 实际上 LLM 已经在内部看到 tool_result 了，所以这里只需要转发 SSE，不再写入数据库文本
                     elif etype == "interactive":
                         # 用户交互事件：转发给前端渲染
                         yield _sse({

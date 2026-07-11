@@ -6,32 +6,95 @@ import { uploadApi, chatContextApi, authApi, type Attachment } from '../api/clie
 import { useThemeStore } from './themeStore'
 import { useAuthStore } from './authStore'
 
-/** AI 通过 call_internal_api 修改了用户偏好（主题/字体）后，重新拉取并应用 */
-async function refreshPreferencesAfterAIMutation() {
+/* ═══════════════════════════════════════════════════════════
+   AI 通过 call_internal_api 触发的副作用（前端同步）
+   
+   思路：AI 修改了数据库资源后，前端其他页面（Agents/Tasks/Skills/...）
+   不会自动重新拉取，导致"假完成" bug。
+   
+   方案：使用浏览器 CustomEvent 'ai-hubs:resource-changed' 作为事件总线，
+   任何关心资源变更的组件（如 AgentsPage 监听 'agents'）可订阅并自动重新加载。
+   
+   这样所有资源的"AI 触发刷新"逻辑统一在一处，避免每加一个写操作都要改一遍前端。
+   ═══════════════════════════════════════════════════════════ */
+
+export const AI_MUTATION_EVENT = 'ai-hubs:resource-changed'
+
+interface AIMutationDetail {
+  /** 资源类型，如 'agents' / 'tasks' / 'skills' / 'memory' / 'datasets' / 'llm-config' / 'auth' */
+  resource: string
+  /** 操作类型 */
+  method: string
+  /** API 路径 */
+  path: string
+}
+
+/** 派发 AI 资源变更事件 */
+function dispatchAIMutation(detail: AIMutationDetail) {
   try {
-    const res = await authApi.me()
-    if (res?.ok && res.user?.preferences) {
-      useThemeStore.getState().initFromPreferences(res.user.preferences)
-    }
-    // 同步 authStore 里的 user（确保用户名/邮箱等也一致）
-    if (res?.ok && res.user) {
-      useAuthStore.setState({ user: res.user })
-    }
+    window.dispatchEvent(new CustomEvent(AI_MUTATION_EVENT, { detail }))
   } catch (e) {
-    // 静默失败——本地状态可能仍可工作
-    console.warn('[chat] failed to refresh preferences after AI mutation:', e)
+    console.warn('[chat] failed to dispatch ai mutation event:', e)
   }
 }
 
-/** AI 通过 call_internal_api 修改了用户基本信息（用户名/邮箱）后，重新拉取 */
-async function refreshAuthUserAfterAIMutation() {
+/** 监听 AI 资源变更事件的 hook（在 useEffect 里用） */
+export function onAIMutation(handler: (detail: AIMutationDetail) => void): () => void {
+  const wrapped = (e: Event) => handler((e as CustomEvent<AIMutationDetail>).detail)
+  window.addEventListener(AI_MUTATION_EVENT, wrapped)
+  return () => window.removeEventListener(AI_MUTATION_EVENT, wrapped)
+}
+
+interface MutationRule {
+  /** 匹配 path 的正则（无 /api/v1 前缀也行，规则内兼容） */
+  pattern: RegExp
+  /** 哪些 HTTP 方法触发 */
+  methods: string[]
+  /** 资源类型名（用于事件） */
+  resource: string
+}
+
+const MUTATION_RULES: MutationRule[] = [
+  // 用户偏好 / 用户基本信息 → 'auth'
+  { pattern: /\/auth\/me(\/|\?|$)/, methods: ['PUT', 'POST', 'PATCH', 'DELETE'], resource: 'auth' },
+  // LLM 配置 → 'llm-config'
+  { pattern: /\/llm\/config(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'llm-config' },
+  // Agent CRUD
+  { pattern: /\/agents(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'agents' },
+  // 任务 CRUD + 执行/暂停/恢复
+  { pattern: /\/tasks(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'tasks' },
+  // 技能 CRUD + 安装/卸载
+  { pattern: /\/skills(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'skills' },
+  // 记忆提交/回滚
+  { pattern: /\/memory\/(commit|rollback|clear|forget)/, methods: ['POST'], resource: 'memory' },
+  // 数据集 CRUD
+  { pattern: /\/datasets(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'datasets' },
+  // 对话管理
+  { pattern: /\/conversations(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'conversations' },
+]
+
+/** 检测 call_internal_api 影响的资源类型 */
+function detectMutatedResources(path: string, method: string): string[] {
+  const m = method.toUpperCase()
+  const normalized = path.replace(/^\/api\/v1/, '')
+  const matched = MUTATION_RULES
+    .filter((rule) => rule.methods.includes(m) && rule.pattern.test(normalized))
+    .map((rule) => rule.resource)
+  return Array.from(new Set(matched))
+}
+
+/** 监听 AI 修改后：刷新 auth user + 主题（特殊处理，因为 themeStore/authStore 不订阅事件） */
+async function reloadAuthUserOnMutation() {
   try {
     const res = await authApi.me()
     if (res?.ok && res.user) {
       useAuthStore.setState({ user: res.user })
+      if (res.user.preferences) {
+        useThemeStore.getState().initFromPreferences(res.user.preferences)
+      }
     }
   } catch (e) {
-    console.warn('[chat] failed to refresh user after AI mutation:', e)
+    console.warn('[chat] reload auth user failed:', e)
   }
 }
 
@@ -229,8 +292,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             break
           case 'tool_result':
             // 更新最后一个 tool 消息的结果
-            let needsPreferencesRefresh = false
-            let needsAuthMeRefresh = false
+            const mutatedResources = new Set<string>()
+            let mutatedPath = ''
+            let mutatedMethod = ''
             set((state) => {
               const msgs = [...state.messages]
               // 从后往前找最后一个 pending 的 tool 消息
@@ -249,19 +313,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     resultDisplay = evt.result?.slice(0, 500) || ''
                   }
 
-                  // ── 副作用：检测 AI 是否通过 call_internal_api 修改了用户偏好或用户信息 ──
+                  // ── 副作用：检测 AI 是否通过 call_internal_api 修改了资源 → 派发全局事件 ──
                   if (msgs[i].tool_name === 'call_internal_api' && parsed?.ok === true) {
                     const args = msgs[i].tool_args || {}
                     const method = String(args.method || '').toUpperCase()
                     const path = String(args.path || '')
-                    const body = (args.body || {}) as Record<string, unknown>
-                    const isAuthMe = /\/auth\/me(\/|\?|$)/.test(path) || path.endsWith('/auth/me')
-                    if (isAuthMe && (method === 'PUT' || method === 'POST' || method === 'DELETE')) {
-                      if (body.preferences && typeof body.preferences === 'object') {
-                        needsPreferencesRefresh = true
-                      } else {
-                        // 用户名/邮箱变化也算刷新（保证 authStore user 同步）
-                        needsAuthMeRefresh = true
+                    if (method && path) {
+                      const resources = detectMutatedResources(path, method)
+                      if (resources.length > 0) {
+                        mutatedPath = path
+                        mutatedMethod = method
+                        resources.forEach((r) => mutatedResources.add(r))
                       }
                     }
                   }
@@ -270,18 +332,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     ...msgs[i],
                     tool_pending: false,
                     tool_result: resultDisplay,
-                    content: `[${evt.name}] ${resultDisplay}`,
+                    // 不再把 "[工具: name] result" 拼到 content —— 避免 API 响应 JSON 污染消息文本
+                    // ChatPage 渲染时直接用 tool_result 字段展示
+                    content: resultDisplay,
                   }
                   return { messages: msgs }
                 }
               }
               return { messages: msgs }
             })
-            // 异步副作用：刷新主题 / 用户信息
-            if (needsPreferencesRefresh) {
-              refreshPreferencesAfterAIMutation()
-            } else if (needsAuthMeRefresh) {
-              refreshAuthUserAfterAIMutation()
+            // 异步副作用：派发全局事件 + auth/llm 特殊处理
+            if (mutatedResources.size > 0) {
+              console.log(`[chat] AI mutation: ${mutatedMethod} ${mutatedPath} → resources:`, Array.from(mutatedResources))
+              mutatedResources.forEach((resource) => {
+                dispatchAIMutation({ resource, method: mutatedMethod, path: mutatedPath })
+              })
+              // auth 资源特殊处理：直接刷新 authStore + themeStore（其他资源由页面订阅事件刷新）
+              if (mutatedResources.has('auth')) {
+                reloadAuthUserOnMutation()
+              }
             }
             break
           case 'interactive':

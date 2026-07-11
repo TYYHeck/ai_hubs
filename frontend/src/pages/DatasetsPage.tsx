@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Database, Plus, Trash2, Upload, Download, X, FileJson, FileSpreadsheet, Table2 } from 'lucide-react'
 import { datasetApi, type Dataset, type DatasetRecord } from '../api/client'
+import { onAIMutation } from '../stores/chatStore'
 
 export default function DatasetsPage() {
   const [datasets, setDatasets] = useState<Dataset[]>([])
@@ -31,6 +32,12 @@ export default function DatasetsPage() {
     setLoading(false)
   }, [])
   useEffect(() => { load() }, [load])
+  // 监听 AI 触发的资源变更 → 自动刷新数据集列表
+  useEffect(() => {
+    return onAIMutation((detail) => {
+      if (detail.resource === 'datasets') load()
+    })
+  }, [load])
 
   const loadRecords = useCallback(async (id: number) => {
     setRecLoading(true)

@@ -1,8 +1,9 @@
 // AI Hubs — 设置页（LLM 配置 + 界面偏好）
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { llmApi } from '../api/chat'
 import { useThemeStore, type ThemeMode, type FontSize } from '../stores/themeStore'
+import { onAIMutation } from '../stores/chatStore'
 import { Loader2, Check, AlertCircle, Sun, Moon, Monitor, Type } from 'lucide-react'
 
 interface ProviderInfo {
@@ -26,7 +27,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
+  const loadConfig = useCallback(() => {
     Promise.all([llmApi.getProviders(), llmApi.getConfig()]).then(([pRes, cRes]) => {
       setProviders(pRes.providers || {})
       if (cRes.config) {
@@ -42,6 +43,17 @@ export default function SettingsPage() {
       }
     })
   }, [])
+
+  useEffect(() => {
+    loadConfig()
+  }, [loadConfig])
+
+  // 监听 AI 触发的资源变更 → 重新拉取 LLM 配置
+  useEffect(() => {
+    return onAIMutation((detail) => {
+      if (detail.resource === 'llm-config') loadConfig()
+    })
+  }, [loadConfig])
 
   const handleProviderChange = (provider: string) => {
     const preset = providers[provider]

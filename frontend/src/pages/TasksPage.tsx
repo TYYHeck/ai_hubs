@@ -3,6 +3,7 @@ import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../api/client'
+import { onAIMutation } from '../stores/chatStore'
 
 interface TaskData {
   id: string; title: string; description: string; status: string
@@ -62,6 +63,12 @@ export default function TasksPage() {
   useEffect(() => {
     const iv = setInterval(fetchData, 5000)
     return () => clearInterval(iv)
+  }, [])
+  // 监听 AI 触发的资源变更 → 立即刷新
+  useEffect(() => {
+    return onAIMutation((detail) => {
+      if (detail.resource === 'tasks') fetchData()
+    })
   }, [])
 
   const resetForm = () => {
