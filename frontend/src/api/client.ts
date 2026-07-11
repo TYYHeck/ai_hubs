@@ -1,6 +1,8 @@
 // AI Hubs — API 客户端
 // 基础请求封装 + 自动携带 JWT + 错误处理
 
+import type { User } from '../types'
+
 const BASE = ''
 
 class ApiError extends Error {
@@ -209,6 +211,58 @@ export const datasetApi = {
     api.post<{ inserted: number; skipped: number; total_records: number }>(`/datasets/${id}/import`, { format, content }),
   exportRecords: (id: number, format: 'json' | 'csv' = 'json') =>
     api.get<{ dataset_id: number; name: string; format: string; content: string }>(`/datasets/${id}/export?format=${format}`),
+}
+
+// ── 后台管理 API（仅管理员） ──
+
+export interface AdminDashboard {
+  users: { total: number; active: number; admins: number; recent_7d: number }
+  agents: { total: number }
+  skills: { total: number; by_source: Record<string, number> }
+  datasets: { total: number }
+  tasks: { total: number }
+  conversations: { total: number }
+  messages: { total: number }
+  latest_users: User[]
+}
+
+export interface AdminUser {
+  id: number
+  username: string
+  email: string
+  role: string
+  is_active: boolean
+  preferences: Record<string, unknown>
+  created_at: string | null
+  last_login_at: string | null
+}
+
+export interface AdminUserList {
+  items: AdminUser[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface AdminUserUpdate {
+  email?: string
+  role?: 'admin' | 'user'
+  is_active?: boolean
+}
+
+export const adminApi = {
+  dashboard: () => api.get<AdminDashboard>('/admin/dashboard'),
+  listUsers: (params?: { page?: number; page_size?: number; search?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.page_size) qs.set('page_size', String(params.page_size))
+    if (params?.search) qs.set('search', params.search)
+    const q = qs.toString()
+    return api.get<AdminUserList>(`/admin/users${q ? `?${q}` : ''}`)
+  },
+  getUser: (id: number) => api.get<AdminUser>(`/admin/users/${id}`),
+  updateUser: (id: number, data: AdminUserUpdate) => api.put<AdminUser>(`/admin/users/${id}`, data),
+  deleteUser: (id: number) => api.delete(`/admin/users/${id}`),
 }
 
 // ── IDE API ──

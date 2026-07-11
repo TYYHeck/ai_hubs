@@ -1,0 +1,30 @@
+{
+  "name": "ai-hubs-desktop",
+  "version": "1.0.0",
+  "description": "AI Hubs 桌面客户端（Electron 壳，内嵌 v4 后端 + Web 前端）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "author": "AI Hubs Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.aihubs.desktop",
+    "productName": "AI Hubs",
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

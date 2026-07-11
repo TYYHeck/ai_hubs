@@ -12,6 +12,9 @@ const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
 
 const REPO_URL = 'https://github.com/TYYHeck/ai_hubs';
 
+// v4 后端入口（backend/app/main.py 提供 Web + API 一体的 FastAPI 服务）
+const BACKEND_ENTRY = path.join(__dirname, '..', 'backend', 'app', 'main.py');
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -87,7 +90,7 @@ function showAbout() {
   dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: '关于 AI Hubs',
-    message: 'AI Hubs v3.0',
+    message: 'AI Hubs v4.0',
     detail: '新一代智能 Agent 平台\n\n多端支持 · 技能市场 · 智能记忆 · 内置IDE',
   });
 }
@@ -95,9 +98,8 @@ function showAbout() {
 // 使用 spawn 启动 Python 后端（fork 仅适用于 Node.js 模块，不能用于 python）
 // 跨平台：Windows 上命令是 python，linux/mac 上通常是 python3
 function startBackend() {
-  const pythonScript = path.join(__dirname, '..', 'main.py');
   const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-  backendProcess = spawn(pythonCmd, [pythonScript, '--web', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
+  backendProcess = spawn(pythonCmd, [BACKEND_ENTRY, '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
     env: { ...process.env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
