@@ -136,15 +136,15 @@ export default function SkillsPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-3 mb-1">
         <Package className="text-accent" size={24} />
-        <h1 className="text-xl font-semibold text-neutral-100">技能市场</h1>
+        <h1 className="text-xl font-semibold text-text-primary">技能市场</h1>
       </div>
-      <p className="text-sm text-neutral-500 mb-4">检索 GitHub 技能、一键安装、分类管理与自建技能。</p>
+      <p className="text-sm text-text-muted mb-4">检索 GitHub 技能、一键安装、分类管理与自建技能。</p>
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-border">
         {([['mine', '我的技能'], ['market', 'GitHub 市场']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${tab === k ? 'border-accent text-accent' : 'border-transparent text-neutral-400 hover:text-neutral-200'}`}>
+            className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${tab === k ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-primary'}`}>
             {label}
           </button>
         ))}
@@ -157,12 +157,12 @@ export default function SkillsPage() {
         <>
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <div className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-1.5 flex-1 min-w-[220px]">
-              <Search size={14} className="text-neutral-500" />
+              <Search size={14} className="text-text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索技能名/描述"
-                className="bg-transparent outline-none text-sm text-neutral-200 flex-1" />
+                className="bg-transparent outline-none text-sm text-text-primary flex-1" />
             </div>
             <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}
-              className="bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-300">
+              className="bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-secondary">
               <option value="">全部来源</option>
               <option value="builtin">内置</option>
               <option value="github">GitHub</option>
@@ -173,29 +173,29 @@ export default function SkillsPage() {
             </button>
           </div>
 
-          {loading ? <div className="text-sm text-neutral-600">加载中…</div> :
-            skills.length === 0 ? <div className="text-sm text-neutral-600 py-8 text-center">暂无技能。点击「新建技能」创建，或从 GitHub 市场安装。</div> :
+          {loading ? <div className="text-sm text-text-dim">加载中…</div> :
+            skills.length === 0 ? <div className="text-sm text-text-dim py-8 text-center">暂无技能。点击「新建技能」创建，或从 GitHub 市场安装。</div> :
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {skills.map((s) => (
                 <div key={s.id} className="bg-bg-secondary border border-border rounded-lg p-4 flex flex-col">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <Code2 size={16} className="text-accent flex-shrink-0" />
-                      <span className="text-sm font-medium text-neutral-100 truncate">{s.name}</span>
+                      <span className="text-sm font-medium text-text-primary truncate">{s.name}</span>
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded ${SOURCE_COLOR[s.source] || 'text-neutral-400'}`}>{SOURCE_LABEL[s.source]}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${SOURCE_COLOR[s.source] || 'text-text-muted'}`}>{SOURCE_LABEL[s.source]}</span>
                   </div>
-                  <p className="text-xs text-neutral-500 line-clamp-2 mb-3 flex-1">{s.description || '（无描述）'}</p>
+                  <p className="text-xs text-text-muted line-clamp-2 mb-3 flex-1">{s.description || '（无描述）'}</p>
                   <div className="flex items-center justify-between gap-2">
                     <button onClick={() => toggleInstall(s)}
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${s.is_installed ? 'border-green-500/40 text-green-400' : 'border-border text-neutral-400 hover:text-neutral-200'}`}>
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${s.is_installed ? 'border-green-500/40 text-green-400' : 'border-border text-text-muted hover:text-text-primary'}`}>
                       {s.is_installed ? <><Check size={12} /> 已安装</> : <><Download size={12} /> 安装</>}
                     </button>
                     {s.source === 'custom' && (
                       <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(s)} className="p-1.5 rounded border border-border text-neutral-400 hover:text-neutral-200" title="编辑">
+                        <button onClick={() => openEdit(s)} className="p-1.5 rounded border border-border text-text-muted hover:text-text-primary" title="编辑">
                           <Edit3 size={12} /></button>
-                        <button onClick={() => remove(s)} className="p-1.5 rounded border border-border text-neutral-400 hover:text-red-400" title="删除">
+                        <button onClick={() => remove(s)} className="p-1.5 rounded border border-border text-text-muted hover:text-red-400" title="删除">
                           <Trash2 size={12} /></button>
                       </div>
                     )}
@@ -210,32 +210,32 @@ export default function SkillsPage() {
         <>
           <div className="flex items-center gap-2 mb-4">
             <div className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-1.5 flex-1">
-              <Github size={14} className="text-neutral-500" />
+              <Github size={14} className="text-text-muted" />
               <input value={ghQuery} onChange={(e) => setGhQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && searchMarket()}
                 placeholder="搜索 GitHub 仓库（如 ai agent, langchain tool）"
-                className="bg-transparent outline-none text-sm text-neutral-200 flex-1" />
+                className="bg-transparent outline-none text-sm text-text-primary flex-1" />
             </div>
             <button onClick={searchMarket} className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-sm">
               <Search size={14} /> 检索
             </button>
           </div>
           {ghError && <div className="mb-3 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2">{ghError}（可直接创建本地技能）</div>}
-          {ghLoading ? <div className="text-sm text-neutral-600">检索中…</div> :
-            ghItems.length === 0 ? <div className="text-sm text-neutral-600 py-8 text-center">暂无结果。尝试更换关键词。</div> :
+          {ghLoading ? <div className="text-sm text-text-dim">检索中…</div> :
+            ghItems.length === 0 ? <div className="text-sm text-text-dim py-8 text-center">暂无结果。尝试更换关键词。</div> :
             <>
-              <div className="text-xs text-neutral-600 mb-2">共 {ghTotal} 个仓库</div>
+              <div className="text-xs text-text-dim mb-2">共 {ghTotal} 个仓库</div>
               <div className="space-y-2">
                 {ghItems.map((g) => (
                   <div key={g.full_name} className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3">
-                    <Github size={18} className="text-neutral-400 flex-shrink-0" />
+                    <Github size={18} className="text-text-muted flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-neutral-100 truncate">{g.full_name}</div>
-                      <div className="text-xs text-neutral-500 truncate">{g.description}</div>
-                      <div className="text-[10px] text-neutral-600 mt-0.5">★ {g.stars} · {g.language || '—'}</div>
+                      <div className="text-sm text-text-primary truncate">{g.full_name}</div>
+                      <div className="text-xs text-text-muted truncate">{g.description}</div>
+                      <div className="text-[10px] text-text-dim mt-0.5">★ {g.stars} · {g.language || '—'}</div>
                     </div>
                     <button onClick={() => installFromGithub(g)} disabled={installingFns.has(g.full_name)}
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${installingFns.has(g.full_name) ? 'border-border text-neutral-600 cursor-not-allowed' : 'border-accent/40 text-accent hover:bg-accent/10'}`}>
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${installingFns.has(g.full_name) ? 'border-border text-text-dim cursor-not-allowed' : 'border-accent/40 text-accent hover:bg-accent/10'}`}>
                       {installingFns.has(g.full_name) ? '安装中…' : <><Download size={12} /> 安装</>}
                     </button>
                   </div>
@@ -250,40 +250,40 @@ export default function SkillsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
           <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-              <h3 className="text-sm font-medium text-neutral-100">{editing ? '编辑技能' : '新建技能'}</h3>
-              <button onClick={() => setShowModal(false)} className="text-neutral-500 hover:text-neutral-300"><X size={16} /></button>
+              <h3 className="text-sm font-medium text-text-primary">{editing ? '编辑技能' : '新建技能'}</h3>
+              <button onClick={() => setShowModal(false)} className="text-text-muted hover:text-text-secondary"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-neutral-500">名称</label>
+                  <label className="text-xs text-text-muted">名称</label>
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200" />
+                    className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary" />
                 </div>
                 <div>
-                  <label className="text-xs text-neutral-500">分类</label>
+                  <label className="text-xs text-text-muted">分类</label>
                   <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200" />
+                    className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary" />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-neutral-500">描述</label>
+                <label className="text-xs text-text-muted">描述</label>
                 <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200" />
+                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary" />
               </div>
               <div>
-                <label className="text-xs text-neutral-500">入口文件名</label>
+                <label className="text-xs text-text-muted">入口文件名</label>
                 <input value={form.entry} onChange={(e) => setForm({ ...form, entry: e.target.value })}
-                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200" />
+                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary" />
               </div>
               <div>
-                <label className="text-xs text-neutral-500">技能代码</label>
+                <label className="text-xs text-text-muted">技能代码</label>
                 <textarea value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} rows={10}
-                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 font-mono" placeholder="在此编写技能实现代码…" />
+                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-text-primary font-mono" placeholder="在此编写技能实现代码…" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <button onClick={() => setShowModal(false)} className="px-3 py-1.5 rounded border border-border text-sm text-neutral-400 hover:text-neutral-200">取消</button>
+              <button onClick={() => setShowModal(false)} className="px-3 py-1.5 rounded border border-border text-sm text-text-muted hover:text-text-primary">取消</button>
               <button onClick={saveForm} className="px-3 py-1.5 rounded bg-accent text-white text-sm">保存</button>
             </div>
           </div>

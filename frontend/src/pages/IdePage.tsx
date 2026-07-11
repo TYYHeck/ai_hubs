@@ -68,12 +68,12 @@ function TreeNode({ node, depth, onOpen, activePath, onDelete }: TreeNodeProps) 
     return (
       <div>
         <div className="flex items-center gap-1 py-1 pr-2 hover:bg-bg-tertiary rounded cursor-pointer group" style={pad}>
-          <button onClick={() => setOpen((v) => !v)} className="text-neutral-500">
+          <button onClick={() => setOpen((v) => !v)} className="text-text-muted">
             {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
           {open ? <FolderOpen size={14} className="text-accent/80" /> : <Folder size={14} className="text-accent/80" />}
-          <span className="text-sm text-neutral-300 flex-1 truncate">{node.name || 'workspace'}</span>
-          {node.truncated && <span className="text-[10px] text-neutral-600">…</span>}
+          <span className="text-sm text-text-secondary flex-1 truncate">{node.name || 'workspace'}</span>
+          {node.truncated && <span className="text-[10px] text-text-dim">…</span>}
         </div>
         {open && node.children?.map((c) => (
           <TreeNode key={c.path} node={c} depth={depth + 1} onOpen={onOpen} activePath={activePath} onDelete={onDelete} />
@@ -83,15 +83,15 @@ function TreeNode({ node, depth, onOpen, activePath, onDelete }: TreeNodeProps) 
   }
   return (
     <div
-      className={`flex items-center gap-1 py-1 pr-2 rounded cursor-pointer group ${activePath === node.path ? 'bg-accent/10 text-accent' : 'hover:bg-bg-tertiary text-neutral-300'}`}
+      className={`flex items-center gap-1 py-1 pr-2 rounded cursor-pointer group ${activePath === node.path ? 'bg-accent/10 text-accent' : 'hover:bg-bg-tertiary text-text-secondary'}`}
       style={pad}
       onClick={() => onOpen(node)}
     >
       <span className="w-[14px]" />
-      <FileCode size={14} className="text-neutral-500 flex-shrink-0" />
+      <FileCode size={14} className="text-text-muted flex-shrink-0" />
       <span className="text-sm flex-1 truncate">{node.name}</span>
       <button onClick={(e) => { e.stopPropagation(); onDelete(node) }}
-        className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400" title="删除">
+        className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400" title="删除">
         <Trash2 size={12} /></button>
     </div>
   )
@@ -253,40 +253,40 @@ export default function IdePage() {
               onClick={() => hasLocalIde && setMode('local')}
               disabled={!hasLocalIde}
               title={hasLocalIde ? '本地电脑文件夹' : '仅桌面客户端可用'}
-              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs ${mode === 'local' ? 'bg-accent text-white' : 'text-neutral-400'} ${!hasLocalIde ? 'opacity-40 cursor-not-allowed' : ''}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs ${mode === 'local' ? 'bg-accent text-white' : 'text-text-muted'} ${!hasLocalIde ? 'opacity-40 cursor-not-allowed' : ''}`}
             >
               <Monitor size={12} /> 本地
             </button>
             <button
               onClick={() => setMode('remote')}
               title="服务器远程工作区（远程训练代码）"
-              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs ${mode === 'remote' ? 'bg-accent text-white' : 'text-neutral-400'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs ${mode === 'remote' ? 'bg-accent text-white' : 'text-text-muted'}`}
             >
               <Cloud size={12} /> 远程
             </button>
           </div>
           {isLocal && (
             <button onClick={pickFolder}
-              className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded bg-bg-tertiary text-xs text-neutral-300 hover:text-neutral-100">
+              className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded bg-bg-tertiary text-xs text-text-secondary hover:text-text-primary">
               <FolderOpenIcon size={12} /> {rootPath ? '切换文件夹' : '打开文件夹'}
             </button>
           )}
           {isLocal && rootPath && (
-            <div className="mt-1 text-[10px] text-neutral-600 truncate" title={rootPath}>{rootPath}</div>
+            <div className="mt-1 text-[10px] text-text-dim truncate" title={rootPath}>{rootPath}</div>
           )}
         </div>
 
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-          <span className="text-xs text-neutral-400">资源管理器</span>
+          <span className="text-xs text-text-muted">资源管理器</span>
           <div className="flex items-center gap-1">
-            <button onClick={newFile} className="p-1 rounded text-neutral-400 hover:text-neutral-200" title="新建文件"><Plus size={14} /></button>
-            <button onClick={newFolder} className="p-1 rounded text-neutral-400 hover:text-neutral-200" title="新建文件夹"><Folder size={14} /></button>
-            <button onClick={loadTree} className="p-1 rounded text-neutral-400 hover:text-neutral-200" title="刷新"><RefreshCw size={14} /></button>
+            <button onClick={newFile} className="p-1 rounded text-text-muted hover:text-text-primary" title="新建文件"><Plus size={14} /></button>
+            <button onClick={newFolder} className="p-1 rounded text-text-muted hover:text-text-primary" title="新建文件夹"><Folder size={14} /></button>
+            <button onClick={loadTree} className="p-1 rounded text-text-muted hover:text-text-primary" title="刷新"><RefreshCw size={14} /></button>
           </div>
         </div>
         {!isLocal && usage && (
           <div className="px-3 py-2 border-b border-border">
-            <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1">
+            <div className="flex items-center justify-between text-[10px] text-text-muted mb-1">
               <span>工作区空间</span>
               <span>{(usage.used / (1024 * 1024)).toFixed(1)} / {(usage.quota / (1024 * 1024)).toFixed(0)} MB</span>
             </div>
@@ -299,10 +299,10 @@ export default function IdePage() {
           </div>
         )}
         <div className="flex-1 overflow-y-auto py-1">
-          {loading ? <div className="text-xs text-neutral-600 p-3">加载中…</div> :
-            isLocal && !rootPath ? <div className="text-xs text-neutral-600 p-3">点击上方「打开文件夹」选择本地工作目录</div> :
+          {loading ? <div className="text-xs text-text-dim p-3">加载中…</div> :
+            isLocal && !rootPath ? <div className="text-xs text-text-dim p-3">点击上方「打开文件夹」选择本地工作目录</div> :
             tree ? <TreeNode node={tree} depth={0} onOpen={openFile} activePath={currentPath} onDelete={removeNode} /> :
-            <div className="text-xs text-neutral-600 p-3">
+            <div className="text-xs text-text-dim p-3">
               {error ? `加载失败：${error}` : '空工作区'}
               {!isLocal && !loading && (
                 <button
@@ -317,7 +317,7 @@ export default function IdePage() {
                       await loadTree()
                     } catch (e) { setError((e as Error)?.message || '创建失败') }
                   }}
-                  className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded bg-bg-tertiary text-xs text-neutral-300 hover:text-neutral-100"
+                  className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded bg-bg-tertiary text-xs text-text-secondary hover:text-text-primary"
                 >
                   <Plus size={12} /> 创建示例文件
                 </button>
@@ -334,7 +334,7 @@ export default function IdePage() {
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-secondary">
           <div className="flex items-center gap-2 min-w-0">
             <Code2 size={16} className="text-accent flex-shrink-0" />
-            <span className="text-sm text-neutral-200 truncate">
+            <span className="text-sm text-text-primary truncate">
               {currentPath || '未打开文件'}
               {dirty && <span className="text-amber-400 ml-1">●</span>}
             </span>
@@ -366,7 +366,7 @@ export default function IdePage() {
               className="h-full text-sm"
             />
           ) : (
-            <div className="h-full flex items-center justify-center text-neutral-600 text-sm">
+            <div className="h-full flex items-center justify-center text-text-dim text-sm">
               {isLocal && !rootPath
                 ? '先在左侧「打开文件夹」，即可编辑本地电脑上的代码并在本地运行'
                 : '从左侧选择文件，或点击「+」新建文件开始编辑'}
@@ -377,17 +377,17 @@ export default function IdePage() {
         {/* 运行输出 */}
         {runResult && (
           <div className="h-48 flex-shrink-0 border-t border-border bg-bg-secondary flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border text-xs text-neutral-400">
+            <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border text-xs text-text-muted">
               <Terminal size={14} /> 输出（{isLocal ? '本地电脑' : '远程服务器'}）
               <span className={`ml-2 px-2 py-0.5 rounded ${runResult.timed_out ? 'bg-red-500/15 text-red-400' : runResult.exit_code === 0 ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400'}`}>
                 exit {runResult.exit_code}{runResult.timed_out ? ' (timeout)' : ''}
               </span>
-              <span className="text-neutral-600 ml-2 truncate">{runResult.command}</span>
+              <span className="text-text-dim ml-2 truncate">{runResult.command}</span>
             </div>
-            <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-neutral-300 whitespace-pre-wrap">
+            <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-text-secondary whitespace-pre-wrap">
               {runResult.stdout}
               {runResult.stderr && <span className="text-red-400">{runResult.stderr}</span>}
-              {!runResult.stdout && !runResult.stderr && <span className="text-neutral-600">（无输出）</span>}
+              {!runResult.stdout && !runResult.stderr && <span className="text-text-dim">（无输出）</span>}
             </pre>
           </div>
         )}

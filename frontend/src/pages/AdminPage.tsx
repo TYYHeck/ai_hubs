@@ -36,8 +36,8 @@ export default function AdminPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-xl font-semibold text-neutral-100 mb-1">后台管理</h1>
-      <p className="text-sm text-neutral-500 mb-6">系统概览 · 用户 · Agent · 技能</p>
+      <h1 className="text-xl font-semibold text-text-primary mb-1">后台管理</h1>
+      <p className="text-sm text-text-muted mb-6">系统概览 · 用户 · Agent · 技能</p>
 
       {/* Tab 切换 */}
       <div className="flex items-center gap-1 mb-6 p-1 bg-bg-tertiary rounded-xl w-fit">
@@ -48,7 +48,7 @@ export default function AdminPage() {
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm transition-colors ${
               tab === t.key
                 ? 'bg-accent text-white shadow-sm'
-                : 'text-neutral-400 hover:text-neutral-200'
+                : 'text-text-muted hover:text-text-primary'
             }`}
           >
             <t.icon size={15} />
@@ -75,7 +75,7 @@ export default function AdminPage() {
 
 function DashboardTab({ dash, loading }: { dash: AdminDashboard | null; loading: boolean }) {
   if (loading || !dash) {
-    return <div className="card p-12 text-center text-neutral-500 text-sm">加载中…</div>
+    return <div className="card p-12 text-center text-text-muted text-sm">加载中…</div>
   }
 
   const statCards = [
@@ -95,18 +95,18 @@ function DashboardTab({ dash, loading }: { dash: AdminDashboard | null; loading:
         {statCards.map((s) => (
           <div key={s.label} className="card p-4">
             <s.icon size={18} className={s.color} />
-            <div className="text-2xl font-bold text-neutral-100 mt-2">{s.value}</div>
-            <div className="text-xs text-neutral-500 mt-1">{s.label}</div>
+            <div className="text-2xl font-bold text-text-primary mt-2">{s.value}</div>
+            <div className="text-xs text-text-muted mt-1">{s.label}</div>
           </div>
         ))}
       </div>
 
       {Object.keys(dash.skills.by_source).length > 0 && (
         <div className="card p-5">
-          <h2 className="text-sm font-medium text-neutral-200 mb-3">技能来源分布</h2>
+          <h2 className="text-sm font-medium text-text-primary mb-3">技能来源分布</h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(dash.skills.by_source).map(([src, cnt]) => (
-              <span key={src} className="px-3 py-1 rounded-full bg-bg-tertiary text-xs text-neutral-300">
+              <span key={src} className="px-3 py-1 rounded-full bg-bg-tertiary text-xs text-text-secondary">
                 {src}: {cnt}
               </span>
             ))}
@@ -154,7 +154,13 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
 
   const openEdit = (u: AdminUser) => {
     setEditUser(u)
-    setEditForm({ email: u.email, role: u.role as 'admin' | 'user', is_active: u.is_active, token_quota: u.token_quota ?? undefined })
+    // 过滤掉 null/undefined 值，避免发送无效数据到后端
+    const form: AdminUserUpdate = {}
+    if (u.email != null) form.email = u.email
+    if (u.role) form.role = u.role as 'admin' | 'user'
+    if (u.is_active != null) form.is_active = u.is_active
+    if (u.token_quota != null) form.token_quota = u.token_quota
+    setEditForm(form)
   }
 
   const saveEdit = async () => {
@@ -201,14 +207,14 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
   return (
     <div className="card p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-neutral-200">用户管理（{total}）</h2>
+        <h2 className="text-sm font-medium text-text-primary">用户管理（{total}）</h2>
         <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-2.5 text-neutral-500" />
+          <Search size={14} className="absolute left-2.5 top-2.5 text-text-muted" />
           <input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             placeholder="搜索用户名/邮箱"
-            className="bg-bg-tertiary border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-neutral-200 w-56 focus:outline-none focus:border-accent"
+            className="bg-bg-tertiary border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-text-primary w-56 focus:outline-none focus:border-accent"
           />
         </div>
       </div>
@@ -216,7 +222,7 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-neutral-500 border-b border-border">
+            <tr className="text-left text-xs text-text-muted border-b border-border">
               <th className="py-2 px-2 font-medium">ID</th>
               <th className="py-2 px-2 font-medium">用户名</th>
               <th className="py-2 px-2 font-medium">邮箱</th>
@@ -234,12 +240,12 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
               const pct = quota && quota > 0 ? Math.min(100, Math.round((used / quota) * 100)) : 0
               return (
                 <tr key={u.id} className="border-b border-border/50 hover:bg-bg-tertiary/40">
-                  <td className="py-2 px-2 text-neutral-500">{u.id}</td>
-                  <td className="py-2 px-2 text-neutral-200">{u.username}</td>
-                  <td className="py-2 px-2 text-neutral-400 max-w-[140px] truncate" title={u.email}>{u.email || '—'}</td>
+                  <td className="py-2 px-2 text-text-muted">{u.id}</td>
+                  <td className="py-2 px-2 text-text-primary">{u.username}</td>
+                  <td className="py-2 px-2 text-text-muted max-w-[140px] truncate" title={u.email}>{u.email || '—'}</td>
                   <td className="py-2 px-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      u.role === 'admin' ? 'bg-amber-500/15 text-amber-300' : 'bg-bg-tertiary text-neutral-400'
+                      u.role === 'admin' ? 'bg-amber-500/15 text-amber-300' : 'bg-bg-tertiary text-text-muted'
                     }`}>
                       {u.role}
                     </span>
@@ -255,8 +261,8 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
                     <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-[80px]">
                         <div className="flex items-center justify-between text-xs mb-0.5">
-                          <span className="text-neutral-300">{formatNumber(used)}</span>
-                          <span className="text-neutral-600">
+                          <span className="text-text-secondary">{formatNumber(used)}</span>
+                          <span className="text-text-dim">
                             / {quota === 0 ? '不限' : quota == null ? formatNumber(10000) : formatNumber(quota)}
                           </span>
                         </div>
@@ -271,19 +277,19 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
                       </div>
                       <button
                         onClick={() => resetUsage(u)}
-                        className="text-neutral-500 hover:text-accent p-1 rounded transition-colors"
+                        className="text-text-muted hover:text-accent p-1 rounded transition-colors"
                         title="重置用量"
                       >
                         <RotateCw size={12} />
                       </button>
                     </div>
                   </td>
-                  <td className="py-2 px-2 text-neutral-500 text-xs">{u.created_at?.slice(0, 10) || '—'}</td>
+                  <td className="py-2 px-2 text-text-muted text-xs">{u.created_at?.slice(0, 10) || '—'}</td>
                   <td className="py-2 px-2 text-right whitespace-nowrap">
-                    <button onClick={() => openEdit(u)} className="text-neutral-400 hover:text-accent p-1.5 rounded" title="编辑">
+                    <button onClick={() => openEdit(u)} className="text-text-muted hover:text-accent p-1.5 rounded" title="编辑">
                       <Pencil size={15} />
                     </button>
-                    <button onClick={() => setDeleteUser(u)} className="text-neutral-400 hover:text-red-400 p-1.5 rounded" title="删除">
+                    <button onClick={() => setDeleteUser(u)} className="text-text-muted hover:text-red-400 p-1.5 rounded" title="删除">
                       <Trash2 size={15} />
                     </button>
                   </td>
@@ -291,7 +297,7 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
               )
             })}
             {users.length === 0 && !loading && (
-              <tr><td colSpan={8} className="py-8 text-center text-neutral-500 text-sm">无用户</td></tr>
+              <tr><td colSpan={8} className="py-8 text-center text-text-muted text-sm">无用户</td></tr>
             )}
           </tbody>
         </table>
@@ -299,14 +305,14 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4 text-sm">
-          <span className="text-neutral-500">第 {page} / {totalPages} 页</span>
+          <span className="text-text-muted">第 {page} / {totalPages} 页</span>
           <div className="flex gap-1">
             <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="p-1.5 rounded bg-bg-tertiary text-neutral-300 disabled:opacity-30 hover:bg-bg-tertiary/70">
+              className="p-1.5 rounded bg-bg-tertiary text-text-secondary disabled:opacity-30 hover:bg-bg-tertiary/70">
               <ChevronLeft size={16} />
             </button>
             <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="p-1.5 rounded bg-bg-tertiary text-neutral-300 disabled:opacity-30 hover:bg-bg-tertiary/70">
+              className="p-1.5 rounded bg-bg-tertiary text-text-secondary disabled:opacity-30 hover:bg-bg-tertiary/70">
               <ChevronRight size={16} />
             </button>
           </div>
@@ -316,7 +322,7 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       {/* 编辑弹窗 */}
       {editUser && (
         <Modal onClose={() => { setEditUser(null); setEditForm({}) }}>
-          <h3 className="text-base font-medium text-neutral-100 mb-4">编辑用户：{editUser.username}</h3>
+          <h3 className="text-base font-medium text-text-primary mb-4">编辑用户：{editUser.username}</h3>
           <div className="space-y-4">
             <Field label="邮箱">
               <input value={editForm.email ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
@@ -338,12 +344,12 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
               <input type="checkbox" id="is_active" checked={editForm.is_active ?? false}
                 onChange={(e) => setEditForm((f) => ({ ...f, is_active: e.target.checked }))}
                 className="accent-accent" />
-              <label htmlFor="is_active" className="text-sm text-neutral-300">账号启用</label>
+              <label htmlFor="is_active" className="text-sm text-text-secondary">账号启用</label>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-6">
             <button onClick={() => { setEditUser(null); setEditForm({}) }}
-              className="px-4 py-2 rounded-lg text-sm text-neutral-300 hover:bg-bg-tertiary">取消</button>
+              className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary">取消</button>
             <button onClick={saveEdit} disabled={saving}
               className="px-4 py-2 rounded-lg text-sm bg-accent text-white hover:opacity-90 disabled:opacity-50">
               {saving ? '保存中…' : '保存'}
@@ -357,14 +363,14 @@ function UsersTab({ errorHandler }: { errorHandler: (e: string) => void }) {
         <Modal onClose={() => setDeleteUser(null)} small>
           <div className="flex items-center gap-2 mb-3">
             <UserX size={18} className="text-red-400" />
-            <h3 className="text-base font-medium text-neutral-100">删除用户</h3>
+            <h3 className="text-base font-medium text-text-primary">删除用户</h3>
           </div>
-          <p className="text-sm text-neutral-400 mb-6">
-            确定删除用户 <span className="text-neutral-200">{deleteUser.username}</span> 吗？此操作不可恢复。
+          <p className="text-sm text-text-muted mb-6">
+            确定删除用户 <span className="text-text-primary">{deleteUser.username}</span> 吗？此操作不可恢复。
           </p>
           <div className="flex justify-end gap-2">
             <button onClick={() => setDeleteUser(null)}
-              className="px-4 py-2 rounded-lg text-sm text-neutral-300 hover:bg-bg-tertiary">取消</button>
+              className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary">取消</button>
             <button onClick={confirmDelete} disabled={deleting}
               className="px-4 py-2 rounded-lg text-sm bg-red-500 text-white hover:bg-red-600 disabled:opacity-50">
               {deleting ? '删除中…' : '删除'}
@@ -445,9 +451,9 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
   return (
     <div className="card p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-neutral-200">Agent 管理（{total}）</h2>
+        <h2 className="text-sm font-medium text-text-primary">Agent 管理（{total}）</h2>
         <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-2.5 text-neutral-500" />
+          <Search size={14} className="absolute left-2.5 top-2.5 text-text-muted" />
           <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             placeholder="搜索 Agent 名称/描述" className="admin-search-input" />
         </div>
@@ -456,7 +462,7 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-neutral-500 border-b border-border">
+            <tr className="text-left text-xs text-text-muted border-b border-border">
               <th className="py-2 px-2 font-medium">名称</th>
               <th className="py-2 px-2 font-medium">所有者</th>
               <th className="py-2 px-2 font-medium">模型</th>
@@ -471,37 +477,37 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
             {items.map((a) => (
               <tr key={a.id} className="border-b border-border/50 hover:bg-bg-tertiary/40">
                 <td className="py-2 px-2">
-                  <div className="text-neutral-200 font-medium">{a.name}</div>
-                  <div className="text-neutral-500 text-xs truncate max-w-[180px]">{a.description || '—'}</div>
+                  <div className="text-text-primary font-medium">{a.name}</div>
+                  <div className="text-text-muted text-xs truncate max-w-[180px]">{a.description || '—'}</div>
                 </td>
-                <td className="py-2 px-2 text-neutral-400">{a.owner_username}</td>
-                <td className="py-2 px-2 text-neutral-500 text-xs">{a.model}</td>
+                <td className="py-2 px-2 text-text-muted">{a.owner_username}</td>
+                <td className="py-2 px-2 text-text-muted text-xs">{a.model}</td>
                 <td className="py-2 px-2">
-                  <span className="px-2 py-0.5 rounded-full text-xs bg-bg-tertiary text-neutral-400">{a.category}</span>
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-bg-tertiary text-text-muted">{a.category}</span>
                 </td>
                 <td className="py-2 px-2">
-                  {a.is_default ? <span className="text-green-400 text-xs">✓ 默认</span> : <span className="text-neutral-600">—</span>}
+                  {a.is_default ? <span className="text-green-400 text-xs">✓ 默认</span> : <span className="text-text-dim">—</span>}
                 </td>
                 <td className="py-2 px-2">
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
-                    a.status === 'active' ? 'bg-green-500/15 text-green-300' : 'bg-bg-tertiary text-neutral-400'
+                    a.status === 'active' ? 'bg-green-500/15 text-green-300' : 'bg-bg-tertiary text-text-muted'
                   }`}>{a.status}</span>
                 </td>
-                <td className="py-2 px-2 text-neutral-500 text-xs">{a.created_at?.slice(0, 10) || '—'}</td>
+                <td className="py-2 px-2 text-text-muted text-xs">{a.created_at?.slice(0, 10) || '—'}</td>
                 <td className="py-2 px-2 text-right whitespace-nowrap">
                   <button onClick={() => { setCopyTarget(a); setCopyName(a.name) }}
-                    className="text-neutral-400 hover:text-accent p-1.5 rounded" title="复制到其他用户">
+                    className="text-text-muted hover:text-accent p-1.5 rounded" title="复制到其他用户">
                     <Copy size={14} />
                   </button>
                   <button onClick={() => setDeleteTarget(a)}
-                    className="text-neutral-400 hover:text-red-400 p-1.5 rounded" title="删除">
+                    className="text-text-muted hover:text-red-400 p-1.5 rounded" title="删除">
                     <Trash2 size={14} />
                   </button>
                 </td>
               </tr>
             ))}
             {items.length === 0 && !loading && (
-              <tr><td colSpan={8} className="py-8 text-center text-neutral-500 text-sm">无 Agent</td></tr>
+              <tr><td colSpan={8} className="py-8 text-center text-text-muted text-sm">无 Agent</td></tr>
             )}
           </tbody>
         </table>
@@ -514,7 +520,7 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       {/* 复制弹窗 */}
       {copyTarget && (
         <Modal onClose={() => { setCopyTarget(null); setCopyUserId(''); setCopyName('') }}>
-          <h3 className="text-base font-medium text-neutral-100 mb-4">复制 Agent：{copyTarget.name}</h3>
+          <h3 className="text-base font-medium text-text-primary mb-4">复制 Agent：{copyTarget.name}</h3>
           <div className="space-y-4">
             <Field label="目标用户 ID">
               <input type="number" min={1} value={copyUserId}
@@ -528,7 +534,7 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
           </div>
           <div className="flex justify-end gap-2 mt-6">
             <button onClick={() => { setCopyTarget(null); setCopyUserId(''); setCopyName('') }}
-              className="px-4 py-2 rounded-lg text-sm text-neutral-300 hover:bg-bg-tertiary">取消</button>
+              className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary">取消</button>
             <button onClick={doCopy} disabled={copying || !copyUserId}
               className="px-4 py-2 rounded-lg text-sm bg-accent text-white hover:opacity-90 disabled:opacity-50">
               {copying ? '复制中…' : '复制'}
@@ -542,14 +548,14 @@ function AgentsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
         <Modal onClose={() => setDeleteTarget(null)} small>
           <div className="flex items-center gap-2 mb-3">
             <UserX size={18} className="text-red-400" />
-            <h3 className="text-base font-medium text-neutral-100">删除 Agent</h3>
+            <h3 className="text-base font-medium text-text-primary">删除 Agent</h3>
           </div>
-          <p className="text-sm text-neutral-400 mb-6">
-            确定删除 Agent <span className="text-neutral-200">{deleteTarget.name}</span>（所有者: {deleteTarget.owner_username}）吗？
+          <p className="text-sm text-text-muted mb-6">
+            确定删除 Agent <span className="text-text-primary">{deleteTarget.name}</span>（所有者: {deleteTarget.owner_username}）吗？
           </p>
           <div className="flex justify-end gap-2">
             <button onClick={() => setDeleteTarget(null)}
-              className="px-4 py-2 rounded-lg text-sm text-neutral-300 hover:bg-bg-tertiary">取消</button>
+              className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary">取消</button>
             <button onClick={doDelete}
               className="px-4 py-2 rounded-lg text-sm bg-red-500 text-white hover:bg-red-600">删除</button>
           </div>
@@ -663,19 +669,19 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
   return (
     <div className="card p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-neutral-200">技能管理（{total}）</h2>
+        <h2 className="text-sm font-medium text-text-primary">技能管理（{total}）</h2>
         <div className="flex items-center gap-2">
           <button onClick={doBatchSync} disabled={syncing}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-bg-tertiary text-neutral-300 hover:text-neutral-100 disabled:opacity-50">
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-50">
             <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
             批量同步
           </button>
           <select value={source} onChange={(e) => { setSource(e.target.value); setPage(1) }}
-            className="bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-neutral-300 focus:outline-none focus:border-accent">
+            className="bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-secondary focus:outline-none focus:border-accent">
             {srcOptions.map((s) => <option key={s} value={s}>{srcLabels[s]}</option>)}
           </select>
           <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-2.5 text-neutral-500" />
+            <Search size={14} className="absolute left-2.5 top-2.5 text-text-muted" />
             <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               placeholder="搜索技能" className="admin-search-input pl-8" />
           </div>
@@ -689,7 +695,7 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-neutral-500 border-b border-border">
+            <tr className="text-left text-xs text-text-muted border-b border-border">
               <th className="py-2 px-2 font-medium">名称</th>
               <th className="py-2 px-2 font-medium">分类</th>
               <th className="py-2 px-2 font-medium">来源</th>
@@ -702,39 +708,39 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
             {items.map((s) => (
               <tr key={s.id} className="border-b border-border/50 hover:bg-bg-tertiary/40">
                 <td className="py-2 px-2">
-                  <div className="text-neutral-200 font-medium">{s.name}</div>
-                  <div className="text-neutral-500 text-xs truncate max-w-[220px]">{s.description || '—'}</div>
+                  <div className="text-text-primary font-medium">{s.name}</div>
+                  <div className="text-text-muted text-xs truncate max-w-[220px]">{s.description || '—'}</div>
                 </td>
                 <td className="py-2 px-2">
-                  <span className="px-2 py-0.5 rounded-full text-xs bg-bg-tertiary text-neutral-400">{s.category}</span>
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-bg-tertiary text-text-muted">{s.category}</span>
                 </td>
                 <td className="py-2 px-2">
                   <SourceBadge source={s.source} />
                 </td>
-                <td className="py-2 px-2 text-neutral-500 text-xs">{s.version}</td>
+                <td className="py-2 px-2 text-text-muted text-xs">{s.version}</td>
                 <td className="py-2 px-2">
                   {s.is_installed
                     ? <span className="text-green-400 text-xs">✓ 已安装</span>
-                    : <span className="text-neutral-600 text-xs">—</span>}
+                    : <span className="text-text-dim text-xs">—</span>}
                 </td>
                 <td className="py-2 px-2 whitespace-nowrap">
                   <button onClick={() => setEditSkill({ ...s })}
-                    className="text-neutral-400 hover:text-accent p-1.5 rounded" title="编辑">
+                    className="text-text-muted hover:text-accent p-1.5 rounded" title="编辑">
                     <Pencil size={14} />
                   </button>
                   <button onClick={() => doSync(s)}
-                    className="text-neutral-400 hover:text-blue-400 p-1.5 rounded" title="同步">
+                    className="text-text-muted hover:text-blue-400 p-1.5 rounded" title="同步">
                     <RefreshCw size={14} />
                   </button>
                   <button onClick={() => setDeleteTarget(s)}
-                    className="text-neutral-400 hover:text-red-400 p-1.5 rounded" title="删除">
+                    className="text-text-muted hover:text-red-400 p-1.5 rounded" title="删除">
                     <Trash2 size={14} />
                   </button>
                 </td>
               </tr>
             ))}
             {items.length === 0 && !loading && (
-              <tr><td colSpan={6} className="py-8 text-center text-neutral-500 text-sm">无技能</td></tr>
+              <tr><td colSpan={6} className="py-8 text-center text-text-muted text-sm">无技能</td></tr>
             )}
           </tbody>
         </table>
@@ -747,7 +753,7 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
       {/* 编辑弹窗 */}
       {editSkill && (
         <Modal onClose={() => setEditSkill(null)}>
-          <h3 className="text-base font-medium text-neutral-100 mb-4">
+          <h3 className="text-base font-medium text-text-primary mb-4">
             {editSkill.id ? `编辑技能：${editSkill.name}` : '新建技能'}
           </h3>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto">
@@ -783,12 +789,12 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
               <input type="checkbox" id="skill_installed" checked={editSkill.is_installed ?? false}
                 onChange={(e) => setEditSkill((f) => ({ ...f, is_installed: e.target.checked }))}
                 className="accent-accent" />
-              <label htmlFor="skill_installed" className="text-sm text-neutral-300">已安装</label>
+              <label htmlFor="skill_installed" className="text-sm text-text-secondary">已安装</label>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-6">
             <button onClick={() => setEditSkill(null)}
-              className="px-4 py-2 rounded-lg text-sm text-neutral-300 hover:bg-bg-tertiary">取消</button>
+              className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary">取消</button>
             <button onClick={doSave} disabled={saving}
               className="px-4 py-2 rounded-lg text-sm bg-accent text-white hover:opacity-90 disabled:opacity-50">
               {saving ? '保存中…' : '保存'}
@@ -802,14 +808,14 @@ function SkillsTab({ errorHandler }: { errorHandler: (e: string) => void }) {
         <Modal onClose={() => setDeleteTarget(null)} small>
           <div className="flex items-center gap-2 mb-3">
             <UserX size={18} className="text-red-400" />
-            <h3 className="text-base font-medium text-neutral-100">删除技能</h3>
+            <h3 className="text-base font-medium text-text-primary">删除技能</h3>
           </div>
-          <p className="text-sm text-neutral-400 mb-6">
-            确定删除技能 <span className="text-neutral-200">{deleteTarget.name}</span> 吗？
+          <p className="text-sm text-text-muted mb-6">
+            确定删除技能 <span className="text-text-primary">{deleteTarget.name}</span> 吗？
           </p>
           <div className="flex justify-end gap-2">
             <button onClick={() => setDeleteTarget(null)}
-              className="px-4 py-2 rounded-lg text-sm text-neutral-300 hover:bg-bg-tertiary">取消</button>
+              className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary">取消</button>
             <button onClick={doDelete}
               className="px-4 py-2 rounded-lg text-sm bg-red-500 text-white hover:bg-red-600">删除</button>
           </div>
@@ -836,7 +842,7 @@ function Modal({ children, onClose, small }: { children: React.ReactNode; onClos
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-xs text-neutral-500 mb-1 block">{label}</label>
+      <label className="text-xs text-text-muted mb-1 block">{label}</label>
       {children}
     </div>
   )
@@ -845,14 +851,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
   return (
     <div className="flex items-center justify-between mt-4 text-sm">
-      <span className="text-neutral-500">第 {page} / {totalPages} 页</span>
+      <span className="text-text-muted">第 {page} / {totalPages} 页</span>
       <div className="flex gap-1">
         <button disabled={page <= 1} onClick={() => onPage(Math.max(1, page - 1))}
-          className="p-1.5 rounded bg-bg-tertiary text-neutral-300 disabled:opacity-30 hover:bg-bg-tertiary/70">
+          className="p-1.5 rounded bg-bg-tertiary text-text-secondary disabled:opacity-30 hover:bg-bg-tertiary/70">
           <ChevronLeft size={16} />
         </button>
         <button disabled={page >= totalPages} onClick={() => onPage(Math.min(totalPages, page + 1))}
-          className="p-1.5 rounded bg-bg-tertiary text-neutral-300 disabled:opacity-30 hover:bg-bg-tertiary/70">
+          className="p-1.5 rounded bg-bg-tertiary text-text-secondary disabled:opacity-30 hover:bg-bg-tertiary/70">
           <ChevronRight size={16} />
         </button>
       </div>
@@ -866,6 +872,6 @@ function SourceBadge({ source }: { source: string }) {
     github: { label: 'GitHub', cls: 'bg-purple-500/15 text-purple-300' },
     custom: { label: '自定义', cls: 'bg-amber-500/15 text-amber-300' },
   }
-  const s = map[source] ?? { label: source, cls: 'bg-bg-tertiary text-neutral-400' }
+  const s = map[source] ?? { label: source, cls: 'bg-bg-tertiary text-text-muted' }
   return <span className={`px-2 py-0.5 rounded-full text-xs ${s.cls}`}>{s.label}</span>
 }

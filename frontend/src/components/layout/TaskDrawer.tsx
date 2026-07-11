@@ -134,9 +134,9 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <ListTodo size={18} className="text-purple-400" />
-          <span className="text-sm font-medium text-neutral-100">任务流程</span>
+          <span className="text-sm font-medium text-text-primary">任务流程</span>
         </div>
-        <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300"><X size={16} /></button>
+        <button onClick={onClose} className="text-text-muted hover:text-text-secondary"><X size={16} /></button>
       </div>
 
       {/* 正在工作的 Agent */}
@@ -152,9 +152,9 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       {/* 任务列表 */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
         {loading ? (
-          <div className="text-sm text-neutral-600 text-center py-8">加载中…</div>
+          <div className="text-sm text-text-dim text-center py-8">加载中…</div>
         ) : tasks.length === 0 ? (
-          <div className="text-sm text-neutral-600 text-center py-8">
+          <div className="text-sm text-text-dim text-center py-8">
             <ListTodo size={32} className="mx-auto mb-2 opacity-30" />
             暂无任务
           </div>
@@ -162,21 +162,21 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           tasks.map((t) => (
             <div key={t.id} className="bg-bg-tertiary border border-border rounded-lg p-3">
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColors[t.status] || 'text-neutral-400'}`}>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColors[t.status] || 'text-text-muted'}`}>
                   {statusLabel[t.status] || t.status}
                 </span>
-                <span className="text-sm text-neutral-100 font-medium truncate flex-1">{t.title}</span>
+                <span className="text-sm text-text-primary font-medium truncate flex-1">{t.title}</span>
                 <button onClick={() => setActiveTaskId(activeTaskId === t.id ? null : t.id)}
-                  className="text-neutral-500 hover:text-neutral-300"><ChevronRight size={14}
+                  className="text-text-muted hover:text-text-secondary"><ChevronRight size={14}
                     style={{ transform: activeTaskId === t.id ? 'rotate(90deg)' : '' }} /></button>
               </div>
               {t.assigned_agent && (
-                <div className="text-[11px] text-neutral-500 mb-1 flex items-center gap-1">
+                <div className="text-[11px] text-text-muted mb-1 flex items-center gap-1">
                   <Bot size={11} /> {t.assigned_agent}
                 </div>
               )}
               {t.result && (
-                <div className="text-xs text-neutral-400 line-clamp-3 bg-black/20 rounded p-2 mt-1 prose prose-invert prose-xs max-w-none">
+                <div className="text-xs text-text-muted line-clamp-3 bg-black/20 rounded p-2 mt-1 prose prose-invert prose-xs max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {t.result}
                   </ReactMarkdown>
@@ -192,24 +192,24 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                   <button onClick={() => handleExecute(t.id)} className="p-1 text-green-400 hover:bg-green-500/10 rounded" title="执行">
                     <Play size={13} /></button>
                 )}
-                <button onClick={() => handleDelete(t.id)} className="p-1 text-neutral-500 hover:text-red-400 rounded ml-auto" title="删除">
+                <button onClick={() => handleDelete(t.id)} className="p-1 text-text-muted hover:text-red-400 rounded ml-auto" title="删除">
                   <Trash2 size={13} /></button>
               </div>
 
               {/* 展开的事件流 */}
               {activeTaskId === t.id && (
                 <div className="mt-2 border-t border-border pt-2 space-y-1 max-h-48 overflow-y-auto">
-                  <div className="text-[10px] text-neutral-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <div className="text-[10px] text-text-dim uppercase tracking-wider mb-1 flex items-center gap-1">
                     <Activity size={10} /> 执行流程
                   </div>
                   {events.length === 0 ? (
-                    <div className="text-[11px] text-neutral-600">暂无事件</div>
+                    <div className="text-[11px] text-text-dim">暂无事件</div>
                   ) : (
                     events.map((ev, i) => (
-                      <div key={i} className="text-[11px] font-mono text-neutral-500 flex gap-2">
-                        <span className="text-neutral-700">{ev.time?.slice(11, 19)}</span>
+                      <div key={i} className="text-[11px] font-mono text-text-muted flex gap-2">
+                        <span className="text-text-dim">{ev.time?.slice(11, 19)}</span>
                         <span className="text-accent/80">{ev.event}</span>
-                        <span className="text-neutral-400 truncate flex-1">
+                        <span className="text-text-muted truncate flex-1">
                           {ev.data?.agent && `→ ${ev.data.agent}`}
                           {ev.data?.error && `✗ ${ev.data.error}`}
                         </span>

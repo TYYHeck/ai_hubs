@@ -145,21 +145,21 @@ export default function MemoryPage() {
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center gap-3 mb-1">
         <Brain className="text-accent" size={24} />
-        <h1 className="text-xl font-semibold text-neutral-100">记忆管理</h1>
+        <h1 className="text-xl font-semibold text-text-primary">记忆管理</h1>
       </div>
-      <p className="text-sm text-neutral-500 mb-4">
+      <p className="text-sm text-text-muted mb-4">
         git 式版本控制 · 关键词记忆图谱 · 高无损压缩 · RAG 检索。防幻觉的多层记忆保障。
       </p>
 
       {/* Agent 选择器 —— 搜索下拉 */}
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-sm text-neutral-400">记忆库</span>
+        <span className="text-sm text-text-muted">记忆库</span>
         <div ref={agentDropdownRef} className="relative">
           <button
             onClick={() => { setShowAgentDropdown(!showAgentDropdown); setAgentSearch('') }}
-            className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200 min-w-[180px] hover:border-accent/50 transition-colors"
+            className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary min-w-[180px] hover:border-accent/50 transition-colors"
           >
-            {isAll ? <Database size={14} className="text-accent" /> : isGlobal ? <Globe size={14} className="text-accent" /> : <Bot size={14} className="text-neutral-400" />}
+            {isAll ? <Database size={14} className="text-accent" /> : isGlobal ? <Globe size={14} className="text-accent" /> : <Bot size={14} className="text-text-muted" />}
             <span className="flex-1 text-left">{selectedLabel}</span>
             {selectedAgent && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedAgent.config_mode === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
@@ -171,7 +171,7 @@ export default function MemoryPage() {
                 {stats ? stats.total_entries + ' 条' : ''}
               </span>
             )}
-            <ChevronDown size={14} className="text-neutral-500" />
+            <ChevronDown size={14} className="text-text-muted" />
           </button>
           {showAgentDropdown && (
             <div className="absolute top-full left-0 mt-1 w-64 bg-bg-tertiary border border-border rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
@@ -181,36 +181,36 @@ export default function MemoryPage() {
                   autoFocus
                   value={agentSearch}
                   onChange={(e) => setAgentSearch(e.target.value)}
-                  className="w-full bg-bg-secondary border border-border rounded px-2 py-1 text-sm text-neutral-200 placeholder:text-neutral-600"
+                  className="w-full bg-bg-secondary border border-border rounded px-2 py-1 text-sm text-text-primary placeholder:text-text-dim"
                   placeholder="搜索 Agent…"
                 />
               </div>
               {/* 全部记忆选项 */}
               <button
                 onClick={() => { setAgent('__all__'); setShowAgentDropdown(false); setAgentSearch('') }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${isAll ? 'bg-accent/10 text-accent' : 'text-neutral-300'}`}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${isAll ? 'bg-accent/10 text-accent' : 'text-text-secondary'}`}
               >
                 <Database size={14} className="text-accent" />
                 <span>全部记忆</span>
-                <span className="ml-auto text-[10px] text-neutral-500">汇总所有</span>
+                <span className="ml-auto text-[10px] text-text-muted">汇总所有</span>
               </button>
               {/* 全局记忆选项 */}
               <button
                 onClick={() => { setAgent('__global__'); setShowAgentDropdown(false); setAgentSearch('') }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${agent === '__global__' ? 'bg-accent/10 text-accent' : 'text-neutral-300'}`}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${agent === '__global__' ? 'bg-accent/10 text-accent' : 'text-text-secondary'}`}
               >
                 <Globe size={14} className="text-accent" />
                 <span>全局记忆</span>
-                <span className="ml-auto text-[10px] text-neutral-500">所有 Agent 共享</span>
+                <span className="ml-auto text-[10px] text-text-muted">所有 Agent 共享</span>
               </button>
               {/* Agent 列表 */
               filteredAgents.map(a => (
                 <button
                   key={a.id ?? a.name}
                   onClick={() => { setAgent(a.name); setShowAgentDropdown(false); setAgentSearch('') }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${agent === a.name ? 'bg-accent/10 text-accent' : 'text-neutral-300'}`}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-secondary transition-colors ${agent === a.name ? 'bg-accent/10 text-accent' : 'text-text-secondary'}`}
                 >
-                  <Bot size={14} className="text-neutral-400" />
+                  <Bot size={14} className="text-text-muted" />
                   <span>{a.name}</span>
                   <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${a.config_mode === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
                     {a.config_mode === 'global' ? '全局配置' : '单独配置'}
@@ -218,19 +218,19 @@ export default function MemoryPage() {
                 </button>
               ))}
               {agentSearch && filteredAgents.length === 0 && (
-                <div className="px-3 py-2 text-xs text-neutral-600">无匹配的 Agent</div>
+                <div className="px-3 py-2 text-xs text-text-dim">无匹配的 Agent</div>
               )}
             </div>
           )}
         </div>
         <button onClick={handleCompress} disabled={needsAgent}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm transition-colors ${needsAgent ? 'text-neutral-700 cursor-not-allowed' : 'text-neutral-300 hover:text-neutral-100'}`}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm transition-colors ${needsAgent ? 'text-text-dim cursor-not-allowed' : 'text-text-secondary hover:text-text-primary'}`}
           title={needsAgent ? '请先选择特定 Agent' : '压缩记忆'}
         >
           <Archive size={14} /> 压缩记忆
         </button>
         <button onClick={handleContext} disabled={needsAgent}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm transition-colors ${needsAgent ? 'text-neutral-700 cursor-not-allowed' : 'text-neutral-300 hover:text-neutral-100'}`}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded bg-bg-tertiary border border-border text-sm transition-colors ${needsAgent ? 'text-text-dim cursor-not-allowed' : 'text-text-secondary hover:text-text-primary'}`}
           title={needsAgent ? '请先选择特定 Agent' : '预览上下文'}
         >
           <History size={14} /> 预览上下文
@@ -244,16 +244,16 @@ export default function MemoryPage() {
       {stats && (
         <div className="grid grid-cols-3 gap-3 mb-5">
           <div className="bg-bg-secondary border border-border rounded-lg p-4">
-            <div className="text-2xl font-bold text-neutral-100">{stats.total_entries}</div>
-            <div className="text-xs text-neutral-500 mt-1">记忆条目</div>
+            <div className="text-2xl font-bold text-text-primary">{stats.total_entries}</div>
+            <div className="text-xs text-text-muted mt-1">记忆条目</div>
           </div>
           <div className="bg-bg-secondary border border-border rounded-lg p-4">
             <div className="text-2xl font-bold text-purple-400">{stats.compressed_entries}</div>
-            <div className="text-xs text-neutral-500 mt-1">已压缩归档</div>
+            <div className="text-xs text-text-muted mt-1">已压缩归档</div>
           </div>
           <div className="bg-bg-secondary border border-border rounded-lg p-4">
-            <div className="text-xs text-neutral-500">当前 HEAD</div>
-            <div className="text-sm font-mono text-neutral-300 mt-1 truncate">{stats.head_hash || '—'}</div>
+            <div className="text-xs text-text-muted">当前 HEAD</div>
+            <div className="text-sm font-mono text-text-secondary mt-1 truncate">{stats.head_hash || '—'}</div>
           </div>
         </div>
       )}
@@ -261,28 +261,28 @@ export default function MemoryPage() {
       {/* 提交历史 */}
       <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-5">
         <div className="flex items-center gap-2 mb-3">
-          <GitBranch size={16} className="text-neutral-400" />
-          <h2 className="text-sm font-medium text-neutral-200">提交历史（git 式）</h2>
-          {loading && <span className="text-xs text-neutral-600">加载中…</span>}
+          <GitBranch size={16} className="text-text-muted" />
+          <h2 className="text-sm font-medium text-text-primary">提交历史（git 式）</h2>
+          {loading && <span className="text-xs text-text-dim">加载中…</span>}
         </div>
         {commits.length === 0 ? (
-          <div className="text-sm text-neutral-600 py-4 text-center">暂无记忆提交。运行任务或对话后自动生成。</div>
+          <div className="text-sm text-text-dim py-4 text-center">暂无记忆提交。运行任务或对话后自动生成。</div>
         ) : (
           <div className="space-y-2">
             {commits.map((c) => (
               <div key={c.commit_hash} className="flex items-center gap-3 bg-bg-tertiary rounded px-3 py-2">
-                <span className={`text-xs font-mono px-2 py-0.5 rounded bg-bg-secondary ${typeColor[c.commit_type] || 'text-neutral-400'}`}>
+                <span className={`text-xs font-mono px-2 py-0.5 rounded bg-bg-secondary ${typeColor[c.commit_type] || 'text-text-muted'}`}>
                   {c.commit_type}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-neutral-200 truncate">{c.message}</div>
-                  <div className="text-xs text-neutral-600 font-mono">{c.commit_hash}</div>
+                  <div className="text-sm text-text-primary truncate">{c.message}</div>
+                  <div className="text-xs text-text-dim font-mono">{c.commit_hash}</div>
                 </div>
-                <span className="text-xs text-neutral-600">{c.message_count} 条</span>
+                <span className="text-xs text-text-dim">{c.message_count} 条</span>
                 <button
                   onClick={() => handleRollback(c.commit_hash)}
                   disabled={needsAgent}
-                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${needsAgent ? 'border-border/30 text-neutral-700 cursor-not-allowed' : 'border-border text-neutral-400 hover:text-amber-400 hover:border-amber-400/40'}`}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${needsAgent ? 'border-border/30 text-text-dim cursor-not-allowed' : 'border-border text-text-muted hover:text-amber-400 hover:border-amber-400/40'}`}
                   title={needsAgent ? '请先选择特定 Agent' : '回退到此提交'}
                 >
                   <RotateCcw size={12} /> 回退
@@ -296,16 +296,16 @@ export default function MemoryPage() {
       {/* 上下文预览 */}
       {showContext && (
         <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-5">
-          <h2 className="text-sm font-medium text-neutral-200 mb-2">当前上下文（注入 LLM）</h2>
+          <h2 className="text-sm font-medium text-text-primary mb-2">当前上下文（注入 LLM）</h2>
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {context.length === 0 ? (
-              <div className="text-sm text-neutral-600">空（运行任务后产生记忆）</div>
+              <div className="text-sm text-text-dim">空（运行任务后产生记忆）</div>
             ) : context.map((m, i) => (
               <div key={i} className="text-sm">
                 <span className={`font-mono text-xs mr-2 ${m.role === 'system' ? 'text-purple-400' : m.role === 'user' ? 'text-blue-400' : 'text-green-400'}`}>
                   [{m.role}]
                 </span>
-                <span className="text-neutral-300">{m.content}</span>
+                <span className="text-text-secondary">{m.content}</span>
               </div>
             ))}
           </div>
@@ -315,15 +315,15 @@ export default function MemoryPage() {
       {/* RAG 检索 */}
       <div className="bg-bg-secondary border border-border rounded-lg p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Database size={16} className="text-neutral-400" />
-          <h2 className="text-sm font-medium text-neutral-200">RAG 检索（基于数据集）</h2>
+          <Database size={16} className="text-text-muted" />
+          <h2 className="text-sm font-medium text-text-primary">RAG 检索（基于数据集）</h2>
         </div>
         <div className="flex gap-2 mb-3">
           <input
             value={ragQuery}
             onChange={(e) => setRagQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleRag()}
-            className="flex-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200"
+            className="flex-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary"
             placeholder="输入查询，从你的数据集检索相关文档…"
           />
           <button onClick={handleRag} className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-sm">
@@ -332,14 +332,14 @@ export default function MemoryPage() {
         </div>
         <div className="space-y-2">
           {ragHits.length === 0 ? (
-            <div className="text-sm text-neutral-600">暂无检索结果。请先在「数据集」中上传数据。</div>
+            <div className="text-sm text-text-dim">暂无检索结果。请先在「数据集」中上传数据。</div>
           ) : ragHits.map((h, i) => (
             <div key={i} className="bg-bg-tertiary rounded px-3 py-2">
-              <div className="flex justify-between text-xs text-neutral-500 mb-1">
+              <div className="flex justify-between text-xs text-text-muted mb-1">
                 <span>{h.dataset_name}</span>
                 <span>score {h.score}</span>
               </div>
-              <div className="text-sm text-neutral-300">{h.text}</div>
+              <div className="text-sm text-text-secondary">{h.text}</div>
             </div>
           ))}
         </div>

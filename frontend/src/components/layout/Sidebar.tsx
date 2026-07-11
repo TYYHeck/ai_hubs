@@ -107,7 +107,7 @@ export function Sidebar() {
         </div>
         {user?.token_quota != null && (
           <div className="mt-2">
-            <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1">
+            <div className="flex items-center justify-between text-[10px] text-text-muted mb-1">
               <span>对话 token 配额</span>
               <span>{(user.token_used || 0).toLocaleString()} / {user.token_quota.toLocaleString()}</span>
             </div>

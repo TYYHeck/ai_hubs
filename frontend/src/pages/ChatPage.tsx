@@ -259,15 +259,15 @@ export default function ChatPage() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 ? (
-            <div className="p-4 text-center text-xs text-neutral-600">暂无对话</div>
+            <div className="p-4 text-center text-xs text-text-dim">暂无对话</div>
           ) : conversations.map((conv) => (
             <div key={conv.id}
               onClick={() => selectConversation(conv.id)}
               className={`group flex items-center gap-2 px-3 py-2.5 cursor-pointer text-sm transition-colors ${
-                currentConvId === conv.id ? 'bg-accent/10 text-accent' : 'text-neutral-400 hover:bg-bg-tertiary'}`}>
+                currentConvId === conv.id ? 'bg-accent/10 text-accent' : 'text-text-muted hover:bg-bg-tertiary'}`}>
               <span className="flex-1 truncate">{conv.title || '新对话'}</span>
               <button onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id) }}
-                className="opacity-0 group-hover:opacity-100 text-neutral-600 hover:text-red-400 transition-opacity">
+                className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red-400 transition-opacity">
                 <Trash2 size={14} /></button>
             </div>
           ))}
@@ -285,7 +285,7 @@ export default function ChatPage() {
           {/* 选择 Agent（下拉框 + 输入匹配） */}
           <div className="relative">
             <button onClick={() => setAgentOpen(o => !o)}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors">
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:border-accent/40 hover:text-accent transition-colors">
               <Bot size={14} />
               {activeAgentId ? (agents.find(a => a.id === activeAgentId)?.name ?? '选择 Agent') : '选择 Agent'}
               <ChevronDown size={12} />
@@ -293,17 +293,17 @@ export default function ChatPage() {
             {agentOpen && (
               <div className="absolute z-30 mt-1 w-64 bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden">
                 <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-                  <Search size={13} className="text-neutral-500" />
+                  <Search size={13} className="text-text-muted" />
                   <input autoFocus value={agentQuery} onChange={e => setAgentQuery(e.target.value)}
                     placeholder="搜索 Agent…"
-                    className="flex-1 bg-transparent outline-none text-sm text-neutral-200" />
+                    className="flex-1 bg-transparent outline-none text-sm text-text-primary" />
                 </div>
                 <div className="max-h-56 overflow-auto">
                   {agents.filter(a => a.name.toLowerCase().includes(agentQuery.toLowerCase())).length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-neutral-500">无匹配 Agent</div>
+                    <div className="px-3 py-2 text-xs text-text-muted">无匹配 Agent</div>
                   ) : agents.filter(a => a.name.toLowerCase().includes(agentQuery.toLowerCase())).map(a => (
                     <div key={a.id} onClick={() => { setActiveAgentId(a.id); setAgentOpen(false); setAgentQuery('') }}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-bg-tertiary cursor-pointer">
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary cursor-pointer">
                       {a.is_default && <Star size={11} className="text-amber-300" />}
                       <span className="flex-1 truncate">{a.name}</span>
                       {activeAgentId === a.id && <Check size={13} className="text-accent" />}
@@ -315,18 +315,18 @@ export default function ChatPage() {
           </div>
 
           <button onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors">
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:border-accent/40 hover:text-accent transition-colors">
             <Paperclip size={14} /> 上传文档
           </button>
           <button onClick={() => navigate('/agents')}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors">
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:border-accent/40 hover:text-accent transition-colors">
             <Bot size={14} /> 管理 Agent
           </button>
 
           {/* 选择模型 */}
           <div className="relative">
             <button onClick={() => setModelOpen(o => !o)}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors">
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:border-accent/40 hover:text-accent transition-colors">
               <Cpu size={14} />
               {activeModel || llmConfig.model || '选择模型'}
               <ChevronDown size={12} />
@@ -334,18 +334,18 @@ export default function ChatPage() {
             {modelOpen && (
               <div className="absolute z-30 mt-1 w-64 bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden">
                 <div className="px-3 py-2 border-b border-border">
-                  <span className="text-[11px] text-neutral-500">
+                  <span className="text-[11px] text-text-muted">
                     提供商：{providers[llmConfig.provider]?.name || llmConfig.provider}
                   </span>
                 </div>
                 <div className="max-h-56 overflow-auto">
                   {(providers[llmConfig.provider]?.models || []).length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-neutral-500">
+                    <div className="px-3 py-2 text-xs text-text-muted">
                       无可用模型，请先在<button onClick={() => { setModelOpen(false); navigate('/settings') }} className="text-accent hover:underline">设置</button>中配置
                     </div>
                   ) : (providers[llmConfig.provider]?.models || []).map(m => (
                     <div key={m} onClick={() => { setActiveModel(m); setModelOpen(false) }}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-bg-tertiary cursor-pointer">
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary cursor-pointer">
                       <Cpu size={12} className="text-blue-400" />
                       <span className="flex-1 truncate">{m}</span>
                       {activeModel === m && <Check size={13} className="text-accent" />}
@@ -359,7 +359,7 @@ export default function ChatPage() {
           {/* 选择技能（从已安装技能搜索添加） */}
           <div className="relative">
             <button onClick={() => setSkillOpen(o => !o)}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors">
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:border-accent/40 hover:text-accent transition-colors">
               <Sparkles size={14} /> 选择技能
               {selectedSkills.length > 0 && (
                 <span className="ml-0.5 px-1 rounded-full bg-accent/20 text-accent text-[10px]">{selectedSkills.length}</span>
@@ -368,17 +368,17 @@ export default function ChatPage() {
             {skillOpen && (
               <div className="absolute z-30 mt-1 w-64 bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden">
                 <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-                  <Search size={13} className="text-neutral-500" />
+                  <Search size={13} className="text-text-muted" />
                   <input autoFocus value={skillSearch} onChange={e => setSkillSearch(e.target.value)}
                     placeholder="搜索已安装技能…"
-                    className="flex-1 bg-transparent outline-none text-sm text-neutral-200" />
+                    className="flex-1 bg-transparent outline-none text-sm text-text-primary" />
                 </div>
                 <div className="max-h-56 overflow-auto">
                   {installedSkills.filter(s => s.name.toLowerCase().includes(skillSearch.toLowerCase())).length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-neutral-500">无匹配技能</div>
+                    <div className="px-3 py-2 text-xs text-text-muted">无匹配技能</div>
                   ) : installedSkills.filter(s => s.name.toLowerCase().includes(skillSearch.toLowerCase())).map(s => (
                     <div key={s.id} onClick={() => toggleSkill(s.name)}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-bg-tertiary cursor-pointer">
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary cursor-pointer">
                       <Code size={12} className="text-green-400" />
                       <span className="flex-1 truncate">{s.name}</span>
                       {selectedSkills.includes(s.name) && <Check size={13} className="text-accent" />}
@@ -390,16 +390,16 @@ export default function ChatPage() {
           </div>
 
           <button onClick={() => setShowShortcuts(s => !s)}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:text-accent transition-colors" title="快捷键">
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:text-accent transition-colors" title="快捷键">
             <Keyboard size={14} /> 快捷键
           </button>
           <div className="flex-1" />
           <button onClick={() => navigate('/settings')}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:border-accent/40 hover:text-accent transition-colors" title="LLM 设置">
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:border-accent/40 hover:text-accent transition-colors" title="LLM 设置">
             <Settings size={14} /> 设置
           </button>
           <button onClick={() => setShowSearch(s => !s)}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-neutral-300 hover:text-accent transition-colors" title="搜索 (Ctrl+F)">
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:text-accent transition-colors" title="搜索 (Ctrl+F)">
             <Search size={14} /> 搜索
           </button>
           <button onClick={() => setTaskOpen(true)}
@@ -413,27 +413,27 @@ export default function ChatPage() {
         {/* 已选技能条 */}
         {selectedSkills.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border bg-bg-tertiary/50 flex-wrap">
-            <span className="text-[11px] text-neutral-500">本次对话技能：</span>
+            <span className="text-[11px] text-text-muted">本次对话技能：</span>
             {selectedSkills.map(s => (
               <span key={s} className="text-[11px] px-2 py-0.5 rounded bg-green-500/10 text-green-400 flex items-center gap-1">
                 <Sparkles size={9} />{s}
                 <button onClick={() => toggleSkill(s)} className="hover:text-red-400"><X size={9} /></button>
               </span>
             ))}
-            <button onClick={clearSkills} className="text-[11px] text-neutral-500 hover:text-neutral-300 ml-1">清空</button>
+            <button onClick={clearSkills} className="text-[11px] text-text-muted hover:text-text-secondary ml-1">清空</button>
           </div>
         )}
 
         {/* 搜索栏 */}
         {showSearch && (
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-bg-tertiary">
-            <Search size={14} className="text-neutral-500" />
+            <Search size={14} className="text-text-muted" />
             <input ref={searchInputRef} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="搜索对话内容…（Esc 退出）"
               onKeyDown={(e) => e.key === 'Escape' && setShowSearch(false)}
-              className="flex-1 bg-transparent outline-none text-sm text-neutral-200" />
-            <span className="text-xs text-neutral-600">{filteredMessages.length} 条</span>
-            <button onClick={() => setShowSearch(false)} className="text-neutral-500 hover:text-neutral-300"><X size={14} /></button>
+              className="flex-1 bg-transparent outline-none text-sm text-text-primary" />
+            <span className="text-xs text-text-dim">{filteredMessages.length} 条</span>
+            <button onClick={() => setShowSearch(false)} className="text-text-muted hover:text-text-secondary"><X size={14} /></button>
           </div>
         )}
 
@@ -441,12 +441,12 @@ export default function ChatPage() {
         {showShortcuts && (
           <div className="px-4 py-2 border-b border-border bg-bg-tertiary grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1">
             {CHAT_SHORTCUTS.map(s => (
-              <div key={s.keys} className="text-[11px] text-neutral-500 flex items-center gap-2">
-                <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border text-neutral-400 font-mono">{s.keys}</kbd>
+              <div key={s.keys} className="text-[11px] text-text-muted flex items-center gap-2">
+                <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border text-text-muted font-mono">{s.keys}</kbd>
                 {s.desc}
               </div>
             ))}
-            <button onClick={() => setShowShortcuts(false)} className="text-neutral-500 hover:text-neutral-300 col-span-full text-right"><X size={14} /></button>
+            <button onClick={() => setShowShortcuts(false)} className="text-text-muted hover:text-text-secondary col-span-full text-right"><X size={14} /></button>
           </div>
         )}
 
@@ -455,7 +455,7 @@ export default function ChatPage() {
           <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
             <AlertCircle size={14} className="flex-shrink-0" />
             <span className="flex-1 truncate">{error}</span>
-            <button onClick={clearError} className="text-neutral-500 hover:text-neutral-300">×</button>
+            <button onClick={clearError} className="text-text-muted hover:text-text-secondary">×</button>
           </div>
         )}
 
@@ -471,7 +471,7 @@ export default function ChatPage() {
         {/* 消息区 */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-neutral-600">
+            <div className="flex flex-col items-center justify-center h-full text-text-dim">
               <Bot size={48} className="mb-3" />
               <p className="text-sm">开始一个新对话</p>
               <p className="text-xs mt-1">输入消息，按 Enter 发送；拖入图片/文件将自动插入占位符</p>
@@ -503,9 +503,9 @@ export default function ChatPage() {
               <div key={a.id} className="flex items-center gap-1.5 text-xs bg-bg-tertiary border border-border rounded px-2 py-1">
                 {a.kind === 'image' ? <ImageIcon size={12} className="text-green-400" />
                   : a.kind === 'doc' ? <FileText size={12} className="text-blue-400" />
-                  : <Paperclip size={12} className="text-neutral-400" />}
-                <span className="text-neutral-300 max-w-[140px] truncate">{a.filename}</span>
-                <button onClick={() => removeAttachment(a.id)} className="text-neutral-600 hover:text-red-400"><X size={11} /></button>
+                  : <Paperclip size={12} className="text-text-muted" />}
+                <span className="text-text-secondary max-w-[140px] truncate">{a.filename}</span>
+                <button onClick={() => removeAttachment(a.id)} className="text-text-dim hover:text-red-400"><X size={11} /></button>
               </div>
             ))}
           </div>
@@ -517,7 +517,7 @@ export default function ChatPage() {
             {completion.items.map((item, i) => (
               <div key={item} onClick={() => applyCompletion(item)}
                 className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
-                  i === completion.active ? 'bg-accent/15 text-accent' : 'text-neutral-300 hover:bg-bg-tertiary'}`}>
+                  i === completion.active ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:bg-bg-tertiary'}`}>
                 {completion.kind === 'agent' ? <Bot size={12} /> : completion.kind === 'skill' ? <Sparkles size={12} /> : <Terminal size={12} />}
                 {item}
               </div>
@@ -531,15 +531,15 @@ export default function ChatPage() {
             {/* 对话队列：流式期间排队，本轮结束后自动发送下一条 */}
             {sendQueue.length > 0 && (
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="text-[11px] text-neutral-500">待发送队列 {sendQueue.length}</span>
+                <span className="text-[11px] text-text-muted">待发送队列 {sendQueue.length}</span>
                 {sendQueue.map((q, i) => (
-                  <span key={i} className="text-[11px] px-2 py-0.5 rounded bg-bg-tertiary border border-border text-neutral-300 flex items-center gap-1 max-w-[220px]">
+                  <span key={i} className="text-[11px] px-2 py-0.5 rounded bg-bg-tertiary border border-border text-text-secondary flex items-center gap-1 max-w-[220px]">
                     <ListTodo size={10} className="text-accent flex-shrink-0" />
                     <span className="truncate">{q.text}</span>
                     <button onClick={() => removeQueued(i)} className="hover:text-red-400"><X size={9} /></button>
                   </span>
                 ))}
-                <button onClick={clearQueue} className="text-[11px] text-neutral-500 hover:text-neutral-300">清空</button>
+                <button onClick={clearQueue} className="text-[11px] text-text-muted hover:text-text-secondary">清空</button>
               </div>
             )}
 
@@ -577,7 +577,7 @@ export default function ChatPage() {
             </div>
 
             {/* 状态栏 */}
-            <div className="flex items-center gap-4 mt-2 text-[11px] text-neutral-500">
+            <div className="flex items-center gap-4 mt-2 text-[11px] text-text-muted">
               <span className="flex items-center gap-1.5"><Cpu size={12} />
                 模型 {context?.model || activeModel || llmConfig.model || '—'}</span>
               <span className="flex items-center gap-1.5 flex-1 max-w-[260px]">
@@ -588,8 +588,8 @@ export default function ChatPage() {
                 </span>
                 {context ? `${contextPct}% (${(context.used_tokens / 1000).toFixed(1)}k/${context.context_window / 1000}k)` : ''}
               </span>
-              <span className="text-neutral-600">{messages.length} 条消息</span>
-              <span className="text-neutral-700">Ctrl+K 聚焦 · Ctrl+F 搜索 · Ctrl+L 清屏</span>
+              <span className="text-text-dim">{messages.length} 条消息</span>
+              <span className="text-text-dim">Ctrl+K 聚焦 · Ctrl+F 搜索 · Ctrl+L 清屏</span>
             </div>
           </div>
         </div>
@@ -616,15 +616,15 @@ function InteractiveWidget({ interactive, onRespond }: {
   if (interaction_type === 'confirm') {
     return (
       <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
-        <div className="font-medium text-neutral-100 mb-1">{title}</div>
-        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="font-medium text-text-primary mb-1">{title}</div>
+        <div className="text-text-muted text-xs mb-3">{message}</div>
         <div className="flex gap-2">
           <button onClick={() => onRespond('确认')}
             className="px-4 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent/80 transition-colors">
             {confirm_text}
           </button>
           <button onClick={() => onRespond('取消')}
-            className="px-4 py-1.5 rounded text-xs font-medium border border-border text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 transition-colors">
+            className="px-4 py-1.5 rounded text-xs font-medium border border-border text-text-muted hover:text-text-primary hover:border-neutral-500 transition-colors">
             {cancel_text}
           </button>
         </div>
@@ -635,14 +635,14 @@ function InteractiveWidget({ interactive, onRespond }: {
   if (interaction_type === 'select' && options) {
     return (
       <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
-        <div className="font-medium text-neutral-100 mb-1">{title}</div>
-        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="font-medium text-text-primary mb-1">{title}</div>
+        <div className="text-text-muted text-xs mb-3">{message}</div>
         <div className="flex flex-col gap-1.5 mb-3">
           {options.map((opt) => (
             <button key={opt.value} onClick={() => onRespond(opt.value)}
-              className="text-left px-3 py-2 rounded text-xs border border-border text-neutral-300 hover:border-accent/50 hover:text-accent hover:bg-accent/5 transition-colors">
+              className="text-left px-3 py-2 rounded text-xs border border-border text-text-secondary hover:border-accent/50 hover:text-accent hover:bg-accent/5 transition-colors">
               <span className="font-medium">{opt.label}</span>
-              {opt.description && <span className="text-neutral-500 ml-2">{opt.description}</span>}
+              {opt.description && <span className="text-text-muted ml-2">{opt.description}</span>}
             </button>
           ))}
         </div>
@@ -658,15 +658,15 @@ function InteractiveWidget({ interactive, onRespond }: {
     }
     return (
       <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
-        <div className="font-medium text-neutral-100 mb-1">{title}</div>
-        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="font-medium text-text-primary mb-1">{title}</div>
+        <div className="text-text-muted text-xs mb-3">{message}</div>
         <div className="flex flex-col gap-1.5 mb-3">
           {options.map((opt) => (
             <label key={opt.value}
               className={`flex items-center gap-2 px-3 py-2 rounded text-xs border cursor-pointer transition-colors ${
                 selectedOptions.includes(opt.value)
                   ? 'border-accent/50 text-accent bg-accent/5'
-                  : 'border-border text-neutral-400 hover:border-neutral-500'
+                  : 'border-border text-text-muted hover:border-neutral-500'
               }`}>
               <input type="checkbox" checked={selectedOptions.includes(opt.value)}
                 onChange={() => toggleOption(opt.value)} className="sr-only" />
@@ -695,22 +695,22 @@ function InteractiveWidget({ interactive, onRespond }: {
     }
     return (
       <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
-        <div className="font-medium text-neutral-100 mb-1">{title}</div>
-        <div className="text-neutral-400 text-xs mb-3">{message}</div>
+        <div className="font-medium text-text-primary mb-1">{title}</div>
+        <div className="text-text-muted text-xs mb-3">{message}</div>
         <div className="flex flex-col gap-2 mb-3">
           {fields.map((field) => (
             <div key={field.name}>
-              <label className="block text-xs text-neutral-400 mb-1">{field.label}{field.required ? ' *' : ''}</label>
+              <label className="block text-xs text-text-muted mb-1">{field.label}{field.required ? ' *' : ''}</label>
               {field.type === 'textarea' ? (
                 <textarea value={formValues[field.name] || ''}
                   onChange={e => setFormValues(prev => ({ ...prev, [field.name]: e.target.value }))}
                   placeholder={field.placeholder}
                   rows={3}
-                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 outline-none focus:border-accent/50 resize-none" />
+                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50 resize-none" />
               ) : field.type === 'select' && field.options ? (
                 <select value={formValues[field.name] || field.default || ''}
                   onChange={e => setFormValues(prev => ({ ...prev, [field.name]: e.target.value }))}
-                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 outline-none focus:border-accent/50">
+                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50">
                   <option value="">请选择…</option>
                   {field.options.map(o => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -721,7 +721,7 @@ function InteractiveWidget({ interactive, onRespond }: {
                   value={formValues[field.name] || field.default || ''}
                   onChange={e => setFormValues(prev => ({ ...prev, [field.name]: e.target.value }))}
                   placeholder={field.placeholder}
-                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 outline-none focus:border-accent/50" />
+                  className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50" />
               )}
             </div>
           ))}
@@ -737,8 +737,8 @@ function InteractiveWidget({ interactive, onRespond }: {
   // 未知类型
   return (
     <div className="max-w-[85%] px-4 py-3 rounded-lg bg-accent/5 border border-accent/20 text-sm">
-      <div className="font-medium text-neutral-100">{title}</div>
-      <div className="text-neutral-400 text-xs">{message}</div>
+      <div className="font-medium text-text-primary">{title}</div>
+      <div className="text-text-muted text-xs">{message}</div>
     </div>
   )
 }
@@ -789,8 +789,8 @@ function MessageBubble({ msg, highlight, streaming, msgIndex }: {
           <Terminal size={12} className="text-purple-400" />
         </div>
         <div className="flex flex-col gap-1 max-w-[85%]">
-          <div className="px-3 py-2 rounded-lg text-xs bg-purple-500/5 border border-purple-500/20 text-neutral-300">
-            <div className="flex items-center gap-1.5 text-neutral-400 mb-1">
+          <div className="px-3 py-2 rounded-lg text-xs bg-purple-500/5 border border-purple-500/20 text-text-secondary">
+            <div className="flex items-center gap-1.5 text-text-muted mb-1">
               {msg.tool_pending ? (
                 <Loader2 size={11} className="animate-spin text-purple-400" />
               ) : (
@@ -799,9 +799,9 @@ function MessageBubble({ msg, highlight, streaming, msgIndex }: {
               <span className="font-medium">{msg.tool_summary || `执行 ${msg.tool_name || '工具'}`}</span>
             </div>
             {msg.tool_pending ? (
-              <span className="text-neutral-500 italic">执行中…</span>
+              <span className="text-text-muted italic">执行中…</span>
             ) : msg.tool_result ? (
-              <pre className="mt-1 text-[11px] text-neutral-400 bg-black/20 p-2 rounded overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap break-all">
+              <pre className="mt-1 text-[11px] text-text-muted bg-black/20 p-2 rounded overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap break-all">
                 {msg.tool_result}
               </pre>
             ) : null}
@@ -814,7 +814,7 @@ function MessageBubble({ msg, highlight, streaming, msgIndex }: {
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
-        isUser ? 'bg-accent text-white' : 'bg-bg-tertiary text-neutral-300'}`}>
+        isUser ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-secondary'}`}>
         {isUser ? <User size={16} className="text-white" /> : (msg.agent_name || 'AI').slice(0, 1).toUpperCase()}
       </div>
       <div className={`flex flex-col gap-1 max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
@@ -823,9 +823,9 @@ function MessageBubble({ msg, highlight, streaming, msgIndex }: {
         )}
         <div className={`px-4 py-2.5 rounded-lg text-sm leading-relaxed ${
           isUser ? 'bg-accent text-white rounded-tr-sm'
-                 : 'bg-bg-secondary border border-border text-neutral-200 rounded-tl-sm'}`}>
+                 : 'bg-bg-secondary border border-border text-text-primary rounded-tl-sm'}`}>
           {msg.content ? <ContentWithRefs text={msg.content} highlight={highlight} isUser={isUser} /> :
-            (streaming ? <span className="animate-pulse text-neutral-500">思考中...</span> : '')}
+            (streaming ? <span className="animate-pulse text-text-muted">思考中...</span> : '')}
           {streaming && msg.content && <span className="inline-block w-0.5 h-4 bg-accent ml-0.5 animate-pulse" />}
         </div>
         {/* 交互式提问表单 */}
@@ -850,7 +850,7 @@ function ContentWithRefs({ text, highlight, isUser }: { text: string; highlight?
           const kind = p.startsWith('[image') || p.startsWith('[Image') ? 'image' : p.startsWith('[doc') || p.startsWith('[Doc') ? 'doc' : 'file'
           const Icon = kind === 'image' ? ImageIcon : kind === 'doc' ? FileText : Paperclip
           const color = kind === 'image' ? 'text-green-400 border-green-500/40'
-            : kind === 'doc' ? 'text-blue-400 border-blue-500/40' : 'text-neutral-400 border-border'
+            : kind === 'doc' ? 'text-blue-400 border-blue-500/40' : 'text-text-muted border-border'
           return (
             <span key={i} className={`inline-flex items-center gap-1 mx-0.5 px-1.5 py-0.5 rounded border text-[11px] ${color} bg-black/20 align-middle`}>
               <Icon size={10} />{p}
@@ -920,13 +920,13 @@ function AskForm({ questions, onSubmit }: {
 
   return (
     <div className="mt-2 w-full max-w-[440px] bg-bg-tertiary border border-border rounded-lg p-4 space-y-3">
-      <div className="flex items-center gap-2 text-xs text-neutral-400 mb-2">
+      <div className="flex items-center gap-2 text-xs text-text-muted mb-2">
         <Sparkles size={12} className="text-amber-400" />
         请选择或填写以下问题
       </div>
       {questions.map((q) => (
         <div key={q.id} className="space-y-1.5">
-          <label className="text-xs font-medium text-neutral-200 block">{q.title}</label>
+          <label className="text-xs font-medium text-text-primary block">{q.title}</label>
           {q.type === 'text' && (
             <input
               type="text"
@@ -951,10 +951,10 @@ function AskForm({ questions, onSubmit }: {
                 q.type === 'multiselect'
                   ? (multiselectVals[q.id]?.has(opt)
                     ? 'border-accent bg-accent/10 text-accent'
-                    : 'border-border text-neutral-400 hover:border-accent/40 hover:text-neutral-200')
+                    : 'border-border text-text-muted hover:border-accent/40 hover:text-text-primary')
                   : (answers[q.id] === opt
                     ? 'border-accent bg-accent/10 text-accent'
-                    : 'border-border text-neutral-400 hover:border-accent/40 hover:text-neutral-200')
+                    : 'border-border text-text-muted hover:border-accent/40 hover:text-text-primary')
               }`}
             >
               {q.type === 'multiselect' && (
@@ -970,7 +970,7 @@ function AskForm({ questions, onSubmit }: {
                 className={`flex-1 text-sm px-4 py-2 rounded border transition-colors ${
                   answers[q.id] === 'yes'
                     ? 'border-green-500 bg-green-500/10 text-green-400'
-                    : 'border-border text-neutral-400 hover:border-green-500/40 hover:text-green-300'
+                    : 'border-border text-text-muted hover:border-green-500/40 hover:text-green-300'
                 }`}
               >
                 {q.yes || '确认'}
@@ -980,7 +980,7 @@ function AskForm({ questions, onSubmit }: {
                 className={`flex-1 text-sm px-4 py-2 rounded border transition-colors ${
                   answers[q.id] === 'no'
                     ? 'border-red-500 bg-red-500/10 text-red-400'
-                    : 'border-border text-neutral-400 hover:border-red-500/40 hover:text-red-300'
+                    : 'border-border text-text-muted hover:border-red-500/40 hover:text-red-300'
                 }`}
               >
                 {q.no || '取消'}
@@ -995,7 +995,7 @@ function AskForm({ questions, onSubmit }: {
         className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
           canSubmit
             ? 'bg-accent text-white hover:bg-accent/90'
-            : 'bg-bg-secondary text-neutral-600 cursor-not-allowed'
+            : 'bg-bg-secondary text-text-dim cursor-not-allowed'
         }`}
       >
         提交回答

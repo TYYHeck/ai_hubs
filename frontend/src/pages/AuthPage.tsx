@@ -121,8 +121,8 @@ export default function AuthPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-accent text-white font-bold text-2xl mb-3">
             AH
           </div>
-          <h1 className="text-2xl font-semibold text-neutral-100">AI Hubs</h1>
-          <p className="text-sm text-neutral-500 mt-1">新一代智能 Agent 平台</p>
+          <h1 className="text-2xl font-semibold text-text-primary">AI Hubs</h1>
+          <p className="text-sm text-text-muted mt-1">新一代智能 Agent 平台</p>
         </div>
 
         {/* 顶部错误提示 */}
@@ -140,7 +140,7 @@ export default function AuthPage() {
             <button
               onClick={() => { setTab('login'); setTopError('') }}
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                tab === 'login' ? 'bg-bg-tertiary text-neutral-100' : 'text-neutral-500'
+                tab === 'login' ? 'bg-bg-tertiary text-text-primary' : 'text-text-muted'
               }`}
             >
               登录
@@ -148,7 +148,7 @@ export default function AuthPage() {
             <button
               onClick={() => { setTab('register'); setTopError('') }}
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                tab === 'register' ? 'bg-bg-tertiary text-neutral-100' : 'text-neutral-500'
+                tab === 'register' ? 'bg-bg-tertiary text-text-primary' : 'text-text-muted'
               }`}
             >
               注册
@@ -159,7 +159,7 @@ export default function AuthPage() {
           {tab === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">用户名</label>
+                <label className="block text-xs text-text-muted mb-1.5">用户名</label>
                 <input
                   className="input"
                   value={loginForm.username}
@@ -169,7 +169,7 @@ export default function AuthPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">密码</label>
+                <label className="block text-xs text-text-muted mb-1.5">密码</label>
                 <input
                   type="password"
                   className="input"
@@ -188,7 +188,7 @@ export default function AuthPage() {
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-3.5">
               <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">用户名</label>
+                <label className="block text-xs text-text-muted mb-1.5">用户名</label>
                 <input
                   className="input"
                   value={regForm.username}
@@ -197,7 +197,7 @@ export default function AuthPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">邮箱</label>
+                <label className="block text-xs text-text-muted mb-1.5">邮箱</label>
                 <input
                   className="input"
                   value={regForm.email}
@@ -206,7 +206,7 @@ export default function AuthPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">验证码</label>
+                <label className="block text-xs text-text-muted mb-1.5">验证码</label>
                 <div className="flex gap-2">
                   <input
                     className="input flex-1"
@@ -226,7 +226,7 @@ export default function AuthPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">密码</label>
+                <label className="block text-xs text-text-muted mb-1.5">密码</label>
                 <input
                   type="password"
                   className="input"
@@ -236,7 +236,7 @@ export default function AuthPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">确认密码</label>
+                <label className="block text-xs text-text-muted mb-1.5">确认密码</label>
                 <input
                   type="password"
                   className="input"
@@ -252,7 +252,7 @@ export default function AuthPage() {
           )}
         </div>
 
-        <p className="text-center text-xs text-neutral-600 mt-6">
+        <p className="text-center text-xs text-text-dim mt-6">
           默认管理员: admin / admin123
         </p>
       </div>

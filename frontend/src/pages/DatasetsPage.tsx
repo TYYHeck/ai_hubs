@@ -128,9 +128,9 @@ export default function DatasetsPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-3 mb-1">
         <Database className="text-accent" size={24} />
-        <h1 className="text-xl font-semibold text-neutral-100">数据集</h1>
+        <h1 className="text-xl font-semibold text-text-primary">数据集</h1>
       </div>
-      <p className="text-sm text-neutral-500 mb-4">数据集分类管理、记录 CRUD、导入(CSV/JSON)与导出，供 RAG 检索使用。</p>
+      <p className="text-sm text-text-muted mb-4">数据集分类管理、记录 CRUD、导入(CSV/JSON)与导出，供 RAG 检索使用。</p>
 
       {error && <div className="mb-3 text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">{error}</div>}
       {msg && <div className="mb-3 text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">{msg}</div>}
@@ -142,21 +142,21 @@ export default function DatasetsPage() {
               <Plus size={14} /> 新建数据集
             </button>
           </div>
-          {loading ? <div className="text-sm text-neutral-600">加载中…</div> :
-            datasets.length === 0 ? <div className="text-sm text-neutral-600 py-8 text-center">暂无数据集。点击「新建数据集」开始。</div> :
+          {loading ? <div className="text-sm text-text-dim">加载中…</div> :
+            datasets.length === 0 ? <div className="text-sm text-text-dim py-8 text-center">暂无数据集。点击「新建数据集」开始。</div> :
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {datasets.map((d) => (
                 <div key={d.id} className="bg-bg-secondary border border-border rounded-lg p-4 flex flex-col cursor-pointer hover:border-accent/40 transition-colors"
                   onClick={() => openDataset(d)}>
                   <div className="flex items-start justify-between mb-2">
-                    <span className="text-sm font-medium text-neutral-100 truncate">{d.name}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-bg-tertiary text-neutral-400">{d.category}</span>
+                    <span className="text-sm font-medium text-text-primary truncate">{d.name}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-bg-tertiary text-text-muted">{d.category}</span>
                   </div>
-                  <p className="text-xs text-neutral-500 line-clamp-2 mb-3 flex-1">{d.description || '（无描述）'}</p>
+                  <p className="text-xs text-text-muted line-clamp-2 mb-3 flex-1">{d.description || '（无描述）'}</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-neutral-600">{d.record_count} 条记录</span>
+                    <span className="text-xs text-text-dim">{d.record_count} 条记录</span>
                     <button onClick={(e) => { e.stopPropagation(); remove(d) }}
-                      className="p-1.5 rounded border border-border text-neutral-400 hover:text-red-400" title="删除">
+                      className="p-1.5 rounded border border-border text-text-muted hover:text-red-400" title="删除">
                       <Trash2 size={12} /></button>
                   </div>
                 </div>
@@ -166,34 +166,34 @@ export default function DatasetsPage() {
       ) : (
         <div>
           <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <button onClick={() => setActive(null)} className="text-sm text-neutral-400 hover:text-neutral-200">← 返回列表</button>
-            <span className="text-neutral-600">/</span>
-            <span className="text-sm text-neutral-100">{active.name}</span>
-            <span className="text-xs text-neutral-600">（{active.record_count} 条记录）</span>
+            <button onClick={() => setActive(null)} className="text-sm text-text-muted hover:text-text-primary">← 返回列表</button>
+            <span className="text-text-dim">/</span>
+            <span className="text-sm text-text-primary">{active.name}</span>
+            <span className="text-xs text-text-dim">（{active.record_count} 条记录）</span>
             <div className="flex-1" />
-            <button onClick={() => setShowAddRec(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-neutral-300 hover:text-neutral-100">
+            <button onClick={() => setShowAddRec(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-text-secondary hover:text-text-primary">
               <Plus size={12} /> 新增记录
             </button>
-            <button onClick={() => setShowImport(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-neutral-300 hover:text-neutral-100">
+            <button onClick={() => setShowImport(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-text-secondary hover:text-text-primary">
               <Upload size={12} /> 导入
             </button>
-            <button onClick={() => doExport('json')} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-neutral-300 hover:text-neutral-100">
+            <button onClick={() => doExport('json')} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-text-secondary hover:text-text-primary">
               <FileJson size={12} /> JSON
             </button>
-            <button onClick={() => doExport('csv')} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-neutral-300 hover:text-neutral-100">
+            <button onClick={() => doExport('csv')} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-xs text-text-secondary hover:text-text-primary">
               <FileSpreadsheet size={12} /> CSV
             </button>
           </div>
 
-          {recLoading ? <div className="text-sm text-neutral-600">加载中…</div> :
-            records.length === 0 ? <div className="text-sm text-neutral-600 py-8 text-center">暂无记录。点击「新增记录」或「导入」。</div> :
+          {recLoading ? <div className="text-sm text-text-dim">加载中…</div> :
+            records.length === 0 ? <div className="text-sm text-text-dim py-8 text-center">暂无记录。点击「新增记录」或「导入」。</div> :
             <div className="bg-bg-secondary border border-border rounded-lg overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs text-neutral-500">
+              <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs text-text-muted">
                 <Table2 size={14} /> 记录预览（最多 200 条）
               </div>
               <div className="max-h-[60vh] overflow-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-bg-tertiary text-neutral-400">
+                  <thead className="sticky top-0 bg-bg-tertiary text-text-muted">
                     <tr>
                       <th className="text-left px-3 py-2 font-medium">#</th>
                       {Array.from(new Set(records.flatMap((r) => Object.keys(r.data)))).map((k) => (
@@ -205,14 +205,14 @@ export default function DatasetsPage() {
                   <tbody>
                     {records.map((r) => (
                       <tr key={r.id} className="border-t border-border hover:bg-bg-tertiary">
-                        <td className="px-3 py-2 text-neutral-600">{r.id}</td>
+                        <td className="px-3 py-2 text-text-dim">{r.id}</td>
                         {Array.from(new Set(records.flatMap((x) => Object.keys(x.data)))).map((k) => (
-                          <td key={k} className="px-3 py-2 text-neutral-300 max-w-[240px] truncate" title={String(r.data[k] ?? '')}>
+                          <td key={k} className="px-3 py-2 text-text-secondary max-w-[240px] truncate" title={String(r.data[k] ?? '')}>
                             {String(r.data[k] ?? '')}
                           </td>
                         ))}
                         <td className="px-3 py-2 text-right">
-                          <button onClick={() => removeRecord(r.id)} className="text-neutral-500 hover:text-red-400" title="删除">
+                          <button onClick={() => removeRecord(r.id)} className="text-text-muted hover:text-red-400" title="删除">
                             <Trash2 size={12} /></button>
                         </td>
                       </tr>
@@ -229,28 +229,28 @@ export default function DatasetsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
           <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-              <h3 className="text-sm font-medium text-neutral-100">新建数据集</h3>
-              <button onClick={() => setShowCreate(false)} className="text-neutral-500 hover:text-neutral-300"><X size={16} /></button>
+              <h3 className="text-sm font-medium text-text-primary">新建数据集</h3>
+              <button onClick={() => setShowCreate(false)} className="text-text-muted hover:text-text-secondary"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-3">
               <div>
-                <label className="text-xs text-neutral-500">名称</label>
+                <label className="text-xs text-text-muted">名称</label>
                 <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200" />
+                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary" />
               </div>
               <div>
-                <label className="text-xs text-neutral-500">分类</label>
+                <label className="text-xs text-text-muted">分类</label>
                 <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200" />
+                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary" />
               </div>
               <div>
-                <label className="text-xs text-neutral-500">描述</label>
+                <label className="text-xs text-text-muted">描述</label>
                 <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-neutral-200" />
+                  className="w-full mt-1 bg-bg-tertiary border border-border rounded px-3 py-1.5 text-sm text-text-primary" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 rounded border border-border text-sm text-neutral-400 hover:text-neutral-200">取消</button>
+              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 rounded border border-border text-sm text-text-muted hover:text-text-primary">取消</button>
               <button onClick={create} className="px-3 py-1.5 rounded bg-accent text-white text-sm">创建</button>
             </div>
           </div>
@@ -262,15 +262,15 @@ export default function DatasetsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowAddRec(false)}>
           <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-              <h3 className="text-sm font-medium text-neutral-100">新增记录（JSON 对象）</h3>
-              <button onClick={() => setShowAddRec(false)} className="text-neutral-500 hover:text-neutral-300"><X size={16} /></button>
+              <h3 className="text-sm font-medium text-text-primary">新增记录（JSON 对象）</h3>
+              <button onClick={() => setShowAddRec(false)} className="text-text-muted hover:text-text-secondary"><X size={16} /></button>
             </div>
             <div className="p-5">
               <textarea value={recJson} onChange={(e) => setRecJson(e.target.value)} rows={8}
-                className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 font-mono" />
+                className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-text-primary font-mono" />
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <button onClick={() => setShowAddRec(false)} className="px-3 py-1.5 rounded border border-border text-sm text-neutral-400 hover:text-neutral-200">取消</button>
+              <button onClick={() => setShowAddRec(false)} className="px-3 py-1.5 rounded border border-border text-sm text-text-muted hover:text-text-primary">取消</button>
               <button onClick={addRecord} className="px-3 py-1.5 rounded bg-accent text-white text-sm">添加</button>
             </div>
           </div>
@@ -282,26 +282,26 @@ export default function DatasetsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowImport(false)}>
           <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-              <h3 className="text-sm font-medium text-neutral-100">导入记录</h3>
-              <button onClick={() => setShowImport(false)} className="text-neutral-500 hover:text-neutral-300"><X size={16} /></button>
+              <h3 className="text-sm font-medium text-text-primary">导入记录</h3>
+              <button onClick={() => setShowImport(false)} className="text-text-muted hover:text-text-secondary"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-3">
               <div className="flex gap-2">
                 {(['json', 'csv'] as const).map((f) => (
                   <button key={f} onClick={() => setImportFmt(f)}
-                    className={`px-3 py-1.5 rounded text-xs border ${importFmt === f ? 'border-accent text-accent' : 'border-border text-neutral-400'}`}>
+                    className={`px-3 py-1.5 rounded text-xs border ${importFmt === f ? 'border-accent text-accent' : 'border-border text-text-muted'}`}>
                     {f.toUpperCase()}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-neutral-500">
+              <p className="text-xs text-text-muted">
                 {importFmt === 'json' ? '粘贴 JSON 数组，每个元素为一条记录（对象）。' : '粘贴 CSV，首行为表头。'}
               </p>
               <textarea value={importText} onChange={(e) => setImportText(e.target.value)} rows={10}
-                className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-neutral-200 font-mono" placeholder={importFmt === 'json' ? '[{"name":"示例","value":1}]' : 'name,value\n示例,1'} />
+                className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-text-primary font-mono" placeholder={importFmt === 'json' ? '[{"name":"示例","value":1}]' : 'name,value\n示例,1'} />
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <button onClick={() => setShowImport(false)} className="px-3 py-1.5 rounded border border-border text-sm text-neutral-400 hover:text-neutral-200">取消</button>
+              <button onClick={() => setShowImport(false)} className="px-3 py-1.5 rounded border border-border text-sm text-text-muted hover:text-text-primary">取消</button>
               <button onClick={doImport} className="px-3 py-1.5 rounded bg-accent text-white text-sm">导入</button>
             </div>
           </div>
