@@ -215,6 +215,21 @@ async def chat_stream(
     
             # ── 构建系统级 System Prompt（角色 + 技能清单 + 命令列表）──
             base_prompt = req.system_prompt or ""
+
+            # 若前端未传 system_prompt，根据 agent_name 从数据库查询 Agent 的 system_prompt
+            if not base_prompt and req.agent_name:
+                from ...models.agent import Agent as AgentModel
+                agent_result = await session.execute(
+                    select(AgentModel).where(
+                        AgentModel.user_id == current_user.id,
+                        AgentModel.name == req.agent_name,
+                    )
+                )
+                agent_row = agent_result.scalar_one_or_none()
+                if agent_row and agent_row.system_prompt:
+                    base_prompt = agent_row.system_prompt
+
+            # 若仍未获取到，使用平台默认 system prompt
             if not base_prompt:
                 base_prompt = _build_default_system_prompt(req.skills or [])
     

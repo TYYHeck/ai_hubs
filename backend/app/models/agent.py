@@ -39,7 +39,7 @@ class Agent(Base):
     # 配置
     max_iterations: Mapped[int] = mapped_column(Integer, default=15)
     memory_strength: Mapped[float] = mapped_column(Float, default=3.0)  # 0-5 记忆强度
-    setup_mode: Mapped[str] = mapped_column(String(16), default="detailed")  # quick | detailed
+    setup_mode: Mapped[str] = mapped_column(String(16), default="quick")  # quick | detailed
 
     # 关联配置
     skills: Mapped[list] = mapped_column(JSON, default=list)      # 技能名列表
