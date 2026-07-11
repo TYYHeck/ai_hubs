@@ -4,26 +4,26 @@ import { useEffect } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
+import { useLocalProxyStore } from './stores/localProxyStore'
 import { AppRouter } from './router'
 
 export default function App() {
   const checkAuth = useAuthStore((s) => s.checkAuth)
   const user = useAuthStore((s) => s.user)
   const initFromPreferences = useThemeStore((s) => s.initFromPreferences)
+  const connectProxy = useLocalProxyStore((s) => s.connect)
 
-  useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+  useEffect(() => { checkAuth() }, [checkAuth])
 
-  // 用户加载完成后初始化主题
+  // 用户加载完成后初始化主题 + 启动本地代理（桌面客户端）
   useEffect(() => {
     if (user?.preferences) {
       initFromPreferences(user.preferences)
     } else if (user !== null) {
-      // 用户存在但无偏好（刚注册），默认暗色主题
       initFromPreferences({ theme: 'dark', font_size: 'md' })
     }
-  }, [user, initFromPreferences])
+    if (user) connectProxy()
+  }, [user, initFromPreferences, connectProxy])
 
   // checkAuth 未完成时不渲染（避免闪烁）
   if (user === null && localStorage.getItem('ai_hubs_token')) {

@@ -14,6 +14,7 @@ from .ide import router as ide_router
 from .admin import router as admin_router
 from .uploads import router as uploads_router
 from .dashboard import router as dashboard_router
+from .ws import router as ws_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -27,6 +28,7 @@ api_router.include_router(ide_router)
 api_router.include_router(admin_router)
 api_router.include_router(uploads_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(ws_router)
 
 __all__ = [
     "api_router", "auth_router", "chat_router", "agents_router", "tasks_router",

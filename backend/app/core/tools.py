@@ -331,6 +331,19 @@ async def execute_tool(
         if tool_name == "create_task":
             return await _execute_create_task(tool_args, user_id, session)
 
+        # ── 桌面客户端本地代理：优先转发给本地执行 ──
+        _LOCAL_TOOLS = {"run_code", "run_terminal", "read_file", "write_file", "list_files"}
+        if tool_name in _LOCAL_TOOLS:
+            from .local_proxy import is_connected, call_local_tool
+            if is_connected(user_id):
+                try:
+                    result = await call_local_tool(user_id, tool_name, tool_args)
+                    logger.info(f"Tool [{tool_name}] executed locally for user {user_id}")
+                    return json.dumps(result, ensure_ascii=False)
+                except Exception as e:
+                    logger.warning(f"Local tool fallback to server ({e})")
+                    # 本地执行失败则 fall-through 到服务端执行
+
         fn = _TOOL_MAP[tool_name]
 
         # run_code / run_terminal 执行前先快照工作区，用于检测新增文件
