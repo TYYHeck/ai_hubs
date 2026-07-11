@@ -639,9 +639,9 @@ function MessageBubble({ msg, highlight, streaming }: {
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-        isUser ? 'bg-accent' : 'bg-bg-tertiary'}`}>
-        {isUser ? <User size={16} className="text-white" /> : <Bot size={16} className="text-neutral-400" />}
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+        isUser ? 'bg-accent text-white' : 'bg-bg-tertiary text-neutral-300'}`}>
+        {isUser ? <User size={16} className="text-white" /> : (msg.agent_name || 'AI').slice(0, 1).toUpperCase()}
       </div>
       <div className={`flex flex-col gap-1 max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
         {!isUser && msg.agent_name && (
