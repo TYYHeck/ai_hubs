@@ -2,7 +2,38 @@
 
 import { create } from 'zustand'
 import { conversationApi, streamChat, type Conversation, type ChatMessage, type SSEEvent, type AskQuestion } from '../api/chat'
-import { uploadApi, chatContextApi, type Attachment } from '../api/client'
+import { uploadApi, chatContextApi, authApi, type Attachment } from '../api/client'
+import { useThemeStore } from './themeStore'
+import { useAuthStore } from './authStore'
+
+/** AI 通过 call_internal_api 修改了用户偏好（主题/字体）后，重新拉取并应用 */
+async function refreshPreferencesAfterAIMutation() {
+  try {
+    const res = await authApi.me()
+    if (res?.ok && res.user?.preferences) {
+      useThemeStore.getState().initFromPreferences(res.user.preferences)
+    }
+    // 同步 authStore 里的 user（确保用户名/邮箱等也一致）
+    if (res?.ok && res.user) {
+      useAuthStore.setState({ user: res.user })
+    }
+  } catch (e) {
+    // 静默失败——本地状态可能仍可工作
+    console.warn('[chat] failed to refresh preferences after AI mutation:', e)
+  }
+}
+
+/** AI 通过 call_internal_api 修改了用户基本信息（用户名/邮箱）后，重新拉取 */
+async function refreshAuthUserAfterAIMutation() {
+  try {
+    const res = await authApi.me()
+    if (res?.ok && res.user) {
+      useAuthStore.setState({ user: res.user })
+    }
+  } catch (e) {
+    console.warn('[chat] failed to refresh user after AI mutation:', e)
+  }
+}
 
 /** 从消息文本中提取 <ask>...</ask> 标签内容 */
 function parseAskData(content: string): AskQuestion[] | undefined {
@@ -192,27 +223,49 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 tool_name: evt.name,
                 tool_summary: evt.summary,
                 tool_pending: true,
+                tool_args: evt.args,  // 保存参数，供 tool_result 后副作用处理使用
               }],
             }))
             break
           case 'tool_result':
             // 更新最后一个 tool 消息的结果
+            let needsPreferencesRefresh = false
+            let needsAuthMeRefresh = false
             set((state) => {
               const msgs = [...state.messages]
               // 从后往前找最后一个 pending 的 tool 消息
               for (let i = msgs.length - 1; i >= 0; i--) {
                 if (msgs[i].role === 'tool' && msgs[i].tool_pending) {
                   let resultDisplay = ''
+                  let parsed: any = null
                   try {
-                    const r = JSON.parse(evt.result || '{}')
-                    if (r.stdout) resultDisplay = r.stdout.slice(0, 1000)
-                    else if (r.ok !== undefined) resultDisplay = r.ok ? `✅ ${evt.name} 完成` : `❌ ${r.error || '失败'}`
-                    else if (r.error) resultDisplay = `❌ ${r.error}`
-                    else if (r.message) resultDisplay = r.message
+                    parsed = JSON.parse(evt.result || '{}')
+                    if (parsed.stdout) resultDisplay = parsed.stdout.slice(0, 1000)
+                    else if (parsed.ok !== undefined) resultDisplay = parsed.ok ? `✅ ${evt.name} 完成` : `❌ ${parsed.error || '失败'}`
+                    else if (parsed.error) resultDisplay = `❌ ${parsed.error}`
+                    else if (parsed.message) resultDisplay = parsed.message
                     else resultDisplay = evt.result?.slice(0, 500) || ''
                   } catch {
                     resultDisplay = evt.result?.slice(0, 500) || ''
                   }
+
+                  // ── 副作用：检测 AI 是否通过 call_internal_api 修改了用户偏好或用户信息 ──
+                  if (msgs[i].tool_name === 'call_internal_api' && parsed?.ok === true) {
+                    const args = msgs[i].tool_args || {}
+                    const method = String(args.method || '').toUpperCase()
+                    const path = String(args.path || '')
+                    const body = (args.body || {}) as Record<string, unknown>
+                    const isAuthMe = /\/auth\/me(\/|\?|$)/.test(path) || path.endsWith('/auth/me')
+                    if (isAuthMe && (method === 'PUT' || method === 'POST' || method === 'DELETE')) {
+                      if (body.preferences && typeof body.preferences === 'object') {
+                        needsPreferencesRefresh = true
+                      } else {
+                        // 用户名/邮箱变化也算刷新（保证 authStore user 同步）
+                        needsAuthMeRefresh = true
+                      }
+                    }
+                  }
+
                   msgs[i] = {
                     ...msgs[i],
                     tool_pending: false,
@@ -224,6 +277,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
               }
               return { messages: msgs }
             })
+            // 异步副作用：刷新主题 / 用户信息
+            if (needsPreferencesRefresh) {
+              refreshPreferencesAfterAIMutation()
+            } else if (needsAuthMeRefresh) {
+              refreshAuthUserAfterAIMutation()
+            }
             break
           case 'interactive':
             // 插入交互式组件消息

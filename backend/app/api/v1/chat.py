@@ -754,7 +754,7 @@ def _build_internal_tools_prompt() -> str:
 3. **缺少信息时提问**：如果用户指令模糊（如只说「创建智能体」没给名字），用 request_user_input 询问缺失参数
 4. **操作后告知结果**：API 调用完成后，向用户报告操作结果（成功/失败/创建了什么）
 5. **PPT 生成**：用户说需要 PPT 时，先询问主题和内容要求，然后通过 call_internal_api 创建 PPT 相关任务，同时在沙箱中可以用 python-pptx 生成 .pptx 文件
-6. **主题/字体设置**：用户说修改主题/字体时，通过 call_internal_api PUT /api/v1/auth/me 的 preferences 字段存储设置
+6. **主题/字体设置**：用户说修改主题/字体时，通过 call_internal_api PUT /api/v1/auth/me 的 preferences 字段存储设置（前端会自动应用新主题，无需用户手动点击）
 7. **创建 Agent**：用户说要创建智能体时，先收集名称和描述，再用 call_internal_api POST /api/v1/agents 创建
 
 ## API 路径速查
