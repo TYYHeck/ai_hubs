@@ -233,7 +233,7 @@ async def chat_stream(
             if not base_prompt:
                 base_prompt = _build_default_system_prompt(req.skills or [])
     
-            # 注入技能上下文（已安装技能的详细实现代码）
+            # 注入技能上下文
             skill_ctx = ""
             if req.skills:
                 from ...models.skill import Skill as SkillModel
@@ -243,21 +243,34 @@ async def chat_stream(
                 )
                 skills_rows = (await session.execute(sk_stmt)).scalars().all()
                 if skills_rows:
-                    skill_blocks = []
+                    # 行为模式注入：所有技能都有角色描述，让 LLM 据此调整行为
+                    desc_parts = []
                     for sk in skills_rows:
-                        cfg = sk.config or {}
-                        entry = cfg.get("entry") or "skill.py"
-                        code = cfg.get("code") or ""
-                        code_view = (code[:2000] + "…") if len(code) > 2000 else code
-                        skill_blocks.append(
-                            f"【技能：{sk.name}】\n描述：{sk.description or '无'}\n"
-                            f"入口文件：{entry}\n参考实现：\n```\n{code_view}\n```"
-                        )
+                        desc_parts.append(f"- **{sk.name}**：{sk.description or '无描述'}")
                     skill_ctx = (
-                        "\n\n# 可用技能实现\n以下是本次对话选用的技能详细实现代码，"
-                        "请用 run_terminal 先安装对应依赖，再在适用场景下调用：\n\n"
-                        + "\n\n".join(skill_blocks)
+                        "\n\n# 当前激活的技能\n"
+                        "你已激活以下技能。请将每个技能的描述作为你的行为准则，"
+                        "调整你的回复风格和能力以匹配该技能的定义：\n\n"
+                        + "\n".join(desc_parts)
                     )
+
+                    # 代码工具注入：仅对包含代码的技能追加可执行实现
+                    code_skills = [sk for sk in skills_rows if (sk.config or {}).get("code")]
+                    if code_skills:
+                        code_blocks = []
+                        for sk in code_skills:
+                            cfg = sk.config or {}
+                            code = cfg.get("code") or ""
+                            entry = cfg.get("entry") or "skill.py"
+                            code_view = (code[:2000] + "…") if len(code) > 2000 else code
+                            code_blocks.append(
+                                f"【{sk.name}】入口：{entry}\n```\n{code_view}\n```"
+                            )
+                        skill_ctx += (
+                            "\n\n# 技能可执行代码\n以下技能提供了可执行代码，"
+                            "请用 run_terminal 在适用场景下调用：\n\n"
+                            + "\n\n".join(code_blocks)
+                        )
     
             # 组装第一条 system message：基础 prompt + 技能上下文
             full_system = base_prompt
