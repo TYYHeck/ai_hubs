@@ -14,7 +14,9 @@ SSE 事件格式:
 from __future__ import annotations
 
 import json
+import re
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -32,6 +34,19 @@ from ...core.memory import _estimate_tokens
 from ...core.tools import (
     TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT, should_enable_tools, execute_tool,
 )
+from ...config import DATA_DIR
+
+# 可直接读取注入到消息中的文本文件扩展名
+_TEXT_READABLE_EXT = {
+    ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml",
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".scss",
+    ".log", ".cfg", ".ini", ".toml", ".sh", ".bat", ".ps1",
+    ".c", ".cpp", ".h", ".hpp", ".java", ".go", ".rs", ".rb",
+    ".php", ".swift", ".kt", ".r", ".sql", ".graphql", ".proto",
+}
+
+_MAX_READ_BYTES = 50 * 1024  # 文本文件最多读取 50KB
+_MAX_INJECT_CHARS = 6000     # 注入到消息中的最大字符数
 
 router = APIRouter(prefix="", tags=["对话"])
 
@@ -119,6 +134,101 @@ async def get_messages(
     )
     messages = result.scalars().all()
     return {"ok": True, "messages": [m.to_dict() for m in messages]}
+
+
+# ============================================================
+# 附件占位符解析
+# ============================================================
+
+async def _resolve_attachments(
+    message: str,
+    attachment_ids: list[int],
+    user_id: int,
+    session: AsyncSession,
+) -> str:
+    """将消息中的 [doc#N] / [image#N] / [file#N] 占位符替换为实际文件内容。
+    
+    文本文件直接读取内容注入；二进制/图片文件注入文件元信息。
+    """
+    if not attachment_ids:
+        return message
+
+    from ...models.attachment import Attachment as AttModel
+
+    result = await session.execute(
+        select(AttModel).where(
+            AttModel.id.in_(attachment_ids),
+            AttModel.user_id == user_id,
+        )
+    )
+    attachments = {a.id: a for a in result.scalars().all()}
+    if not attachments:
+        return message
+
+    upload_root = DATA_DIR / "uploads"
+
+    def _read_content(att: AttModel) -> str:
+        """读取附件内容文本"""
+        disk_path = upload_root / att.storage_path
+        if not disk_path.exists():
+            return f"[文件已丢失: {att.filename}]"
+
+        ext = Path(att.filename).suffix.lower() if att.filename else ""
+
+        # 文本文件：直接读取注入
+        if ext in _TEXT_READABLE_EXT:
+            try:
+                raw = disk_path.read_bytes()
+                if len(raw) > _MAX_READ_BYTES:
+                    raw = raw[:_MAX_READ_BYTES]
+                # 尝试 UTF-8 解码
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    try:
+                        text = raw.decode("gbk")
+                    except UnicodeDecodeError:
+                        text = raw.decode("latin-1")
+                if len(text) > _MAX_INJECT_CHARS:
+                    text = text[:_MAX_INJECT_CHARS] + "\n…（文件过长，仅展示前部分内容）"
+                return f"\n\n【附件：{att.filename}】\n```{ext.lstrip('.')}\n{text}\n```\n"
+            except Exception as e:
+                return f"\n\n【附件：{att.filename}】读取失败: {e}\n"
+
+        # 图片文件：告知 LLM 用户上传了图片
+        if att.kind == "image":
+            return (
+                f"\n\n【图片附件：{att.filename}】"
+                f"（{att.size / 1024:.1f}KB，格式 {att.mime_type or 'unknown'}）\n"
+                f"用户上传了这张图片。你可以根据文件名和上下文推断图片内容。\n"
+            )
+
+        # 其他二进制文件（PDF/DOCX/XLSX/PPT 等）：提供元信息
+        return (
+            f"\n\n【文档附件：{att.filename}】"
+            f"（{att.size / 1024:.1f}KB，格式 {att.mime_type or ext}）\n"
+            f"用户上传了此文件。若需读取内容，请使用 run_terminal "
+            f"调用对应的 Python 库解析（如 PyPDF2、python-docx、openpyxl、python-pptx）。\n"
+        )
+
+    # 构建 placeholder → content 的映射
+    placeholder_map: dict[str, str] = {}
+    for att in attachments.values():
+        content = _read_content(att)
+        # 匹配 [doc#N]、[image#N]、[file#N]（不区分大小写）
+        pattern = re.compile(
+            rf"\[{re.escape(att.kind)}#{att.ref_index}\]",
+            re.IGNORECASE,
+        )
+        placeholder_map[pattern] = content
+
+    # 替换消息中的占位符
+    resolved = message
+    for pattern, content in placeholder_map.items():
+        resolved = pattern.sub(content, resolved)
+    
+    # 清理未匹配的占位符（可能附件 ID 列表和消息占位符不一致）
+    return resolved
 
 
 # ============================================================
@@ -287,7 +397,11 @@ async def chat_stream(
     
             for m in history:
                 messages.append({"role": m.role, "content": m.content})
-            messages.append({"role": "user", "content": req.message})
+            # 解析附件占位符，替换为实际文件内容
+            resolved_message = await _resolve_attachments(
+                req.message, req.attachment_ids, current_user.id, session,
+            )
+            messages.append({"role": "user", "content": resolved_message})
     
             # 3.1 判断是否启用 Agent 工具调用（基于用户选用的技能）
             tools_enabled = should_enable_tools(req.skills or [])
@@ -602,6 +716,42 @@ def _build_default_system_prompt(skills: list[str]) -> str:
         "- **PPT (.pptx)**：用 python-pptx 库创建/编辑，先 `pip install python-pptx`",
         "- **网页搜索**：用 requests + beautifulsoup4 抓取，先 `pip install requests beautifulsoup4`",
         "",
+        "## 交互式提问（<ask> 标签）",
+        "",
+        "当你需要向用户收集结构化信息时（选项明确、需要用户确认、需要填写参数），",
+        "使用 <ask> 标签输出交互式提问表单。用户将看到可视化的选择器/输入框，",
+        "填写后答案会自动发回给你。",
+        "",
+        "支持的问题类型及格式：",
+        "",
+        "**单选 choice**：",
+        "<ask>",
+        '{"id":"q1","type":"choice","title":"你希望后端用什么语言？","options":["Python","Go","Java","Node.js"]}',
+        "</ask>",
+        "",
+        "**多选 multiselect**：",
+        "<ask>",
+        '{"id":"q2","type":"multiselect","title":"需要哪些功能？（可多选）","options":["用户认证","支付","文件上传","实时通知","管理后台"]}',
+        "</ask>",
+        "",
+        "**填空 text**：",
+        "<ask>",
+        '{"id":"q3","type":"text","title":"项目名称是什么？","placeholder":"如：my-project","default":"my-app"}',
+        "</ask>",
+        "",
+        "**确认 confirm**：",
+        "<ask>",
+        '{"id":"q4","type":"confirm","title":"确认开始部署到生产环境吗？","yes":"立即部署","no":"再检查一下"}',
+        "</ask>",
+        "",
+        "使用规则：",
+        "1. 每次最多输出 4 个问题",
+        "2. id 必须唯一（q1、q2、q3、q4）",
+        "3. choice/multiselect 的 options 数组不超过 6 个选项",
+        "4. <ask> 标签放在消息末尾，前面可以先解释为什么要问这些问题",
+        "5. 仅在需要用户做结构化选择时使用，不要滥用",
+        "6. 简单是非问题可直接文字询问，不需要 <ask>",
+        "",
         "## 回复策略",
         "",
         "根据任务类型选择回复模式：",
@@ -614,6 +764,8 @@ def _build_default_system_prompt(skills: list[str]) -> str:
         "**模式 B — 设计/咨询类任务**（方案设计、技术选型、架构规划、需求分析）：",
         "1. 复述你的理解，确认方向正确",
         "2. **提 2-3 个关键问题**收集缺失信息（不要跳过这一步）",
+        "   - 如果问题有明确的选项范围，使用 <ask> 标签输出交互式选择",
+        "   - 开放式问题可直接用文字询问",
         "3. 根据回答给出具体建议和方案",
         "4. 询问是否需要进一步细化",
     ])

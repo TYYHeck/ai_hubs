@@ -478,6 +478,7 @@ export default function ChatPage() {
             <div className="max-w-3xl mx-auto space-y-4">
               {filteredMessages.map((msg, i) => (
                 <MessageBubble key={i} msg={msg}
+                  msgIndex={messages.indexOf(msg)}
                   highlight={searchTerm}
                   streaming={streaming && i === messages.length - 1 && !searchTerm} />
               ))}
@@ -600,12 +601,13 @@ export default function ChatPage() {
   )
 }
 
-// ── 消息气泡（支持 agent 前缀 + 搜索高亮 + 占位符渲染 + 工具消息）──
-function MessageBubble({ msg, highlight, streaming }: {
-  msg: import('../api/chat').ChatMessage; highlight?: string; streaming: boolean
+// ── 消息气泡（支持 agent 前缀 + 搜索高亮 + 占位符渲染 + 工具消息 + 交互提问）──
+function MessageBubble({ msg, highlight, streaming, msgIndex }: {
+  msg: import('../api/chat').ChatMessage; highlight?: string; streaming: boolean; msgIndex?: number
 }) {
   const isUser = msg.role === 'user'
   const isTool = msg.role === 'tool'
+  const submitAskAnswer = useChatStore((s) => s.submitAskAnswer)
 
   // 工具消息：独立的紧凑渲染
   if (isTool) {
@@ -654,6 +656,10 @@ function MessageBubble({ msg, highlight, streaming }: {
             (streaming ? <span className="animate-pulse text-neutral-500">思考中...</span> : '')}
           {streaming && msg.content && <span className="inline-block w-0.5 h-4 bg-accent ml-0.5 animate-pulse" />}
         </div>
+        {/* 交互式提问表单 */}
+        {!isUser && msg.ask_data && msg.ask_data.length > 0 && !msg.ask_answered && msgIndex != null && (
+          <AskForm questions={msg.ask_data} onSubmit={(answers) => submitAskAnswer(msgIndex, answers)} />
+        )}
       </div>
     </div>
   )
@@ -664,12 +670,12 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 function ContentWithRefs({ text, highlight, isUser }: { text: string; highlight?: string; isUser?: boolean }) {
-  const parts = text.split(/(\[(?:image|Doc|file)#\d+\])/g)
+  const parts = text.split(/(\[(?:image|doc|Doc|file)#\d+\])/g)
   return (
     <>
       {parts.map((p, i) => {
-        if (/^\[(?:image|Doc|file)#\d+\]$/.test(p)) {
-          const kind = p.startsWith('[image') ? 'image' : p.startsWith('[Doc') ? 'doc' : 'file'
+        if (/^\[(?:image|doc|Doc|file)#\d+\]$/.test(p)) {
+          const kind = p.startsWith('[image') || p.startsWith('[Image') ? 'image' : p.startsWith('[doc') || p.startsWith('[Doc') ? 'doc' : 'file'
           const Icon = kind === 'image' ? ImageIcon : kind === 'doc' ? FileText : Paperclip
           const color = kind === 'image' ? 'text-green-400 border-green-500/40'
             : kind === 'doc' ? 'text-blue-400 border-blue-500/40' : 'text-neutral-400 border-border'
@@ -697,6 +703,132 @@ function ContentWithRefs({ text, highlight, isUser }: { text: string; highlight?
         return <span key={i}>{p}</span>
       })}
     </>
+  )
+}
+
+// ── 交互式提问表单组件 ──
+import type { AskQuestion } from '../api/chat'
+
+function AskForm({ questions, onSubmit }: {
+  questions: AskQuestion[]; onSubmit: (answers: Record<string, string>) => void
+}) {
+  const [answers, setAnswers] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    for (const q of questions) {
+      if (q.default) initial[q.id] = q.default
+    }
+    return initial
+  })
+  const [multiselectVals, setMultiselectVals] = useState<Record<string, Set<string>>>({})
+
+  const handleSubmit = () => {
+    // 将 multiselect values 合并到 answers 中
+    const final: Record<string, string> = { ...answers }
+    for (const [id, vals] of Object.entries(multiselectVals)) {
+      if (vals.size > 0) final[id] = [...vals].join('、')
+    }
+    onSubmit(final)
+  }
+
+  const toggleMulti = (qId: string, opt: string) => {
+    setMultiselectVals((prev) => {
+      const cur = new Set(prev[qId] || [])
+      if (cur.has(opt)) cur.delete(opt)
+      else cur.add(opt)
+      return { ...prev, [qId]: cur }
+    })
+  }
+
+  const canSubmit = questions.every((q) => {
+    if (q.type === 'confirm') return true
+    const msVals = multiselectVals[q.id]
+    if (q.type === 'multiselect') return msVals && msVals.size > 0
+    return !!answers[q.id]
+  })
+
+  return (
+    <div className="mt-2 w-full max-w-[440px] bg-bg-tertiary border border-border rounded-lg p-4 space-y-3">
+      <div className="flex items-center gap-2 text-xs text-neutral-400 mb-2">
+        <Sparkles size={12} className="text-amber-400" />
+        请选择或填写以下问题
+      </div>
+      {questions.map((q) => (
+        <div key={q.id} className="space-y-1.5">
+          <label className="text-xs font-medium text-neutral-200 block">{q.title}</label>
+          {q.type === 'text' && (
+            <input
+              type="text"
+              className="input text-sm w-full"
+              placeholder={q.placeholder}
+              value={answers[q.id] || ''}
+              onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+              onKeyDown={(e) => e.key === 'Enter' && canSubmit && handleSubmit()}
+            />
+          )}
+          {(q.type === 'choice' || q.type === 'multiselect') && (q.options || []).map((opt) => (
+            <button
+              key={opt}
+              onClick={() => {
+                if (q.type === 'multiselect') {
+                  toggleMulti(q.id, opt)
+                } else {
+                  setAnswers((a) => ({ ...a, [q.id]: opt }))
+                }
+              }}
+              className={`w-full text-left text-sm px-3 py-2 rounded border transition-colors ${
+                q.type === 'multiselect'
+                  ? (multiselectVals[q.id]?.has(opt)
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border text-neutral-400 hover:border-accent/40 hover:text-neutral-200')
+                  : (answers[q.id] === opt
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border text-neutral-400 hover:border-accent/40 hover:text-neutral-200')
+              }`}
+            >
+              {q.type === 'multiselect' && (
+                <span className="mr-2">{multiselectVals[q.id]?.has(opt) ? '☑' : '☐'}</span>
+              )}
+              {opt}
+            </button>
+          ))}
+          {q.type === 'confirm' && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setAnswers((a) => ({ ...a, [q.id]: 'yes' })); }}
+                className={`flex-1 text-sm px-4 py-2 rounded border transition-colors ${
+                  answers[q.id] === 'yes'
+                    ? 'border-green-500 bg-green-500/10 text-green-400'
+                    : 'border-border text-neutral-400 hover:border-green-500/40 hover:text-green-300'
+                }`}
+              >
+                {q.yes || '确认'}
+              </button>
+              <button
+                onClick={() => { setAnswers((a) => ({ ...a, [q.id]: 'no' })); }}
+                className={`flex-1 text-sm px-4 py-2 rounded border transition-colors ${
+                  answers[q.id] === 'no'
+                    ? 'border-red-500 bg-red-500/10 text-red-400'
+                    : 'border-border text-neutral-400 hover:border-red-500/40 hover:text-red-300'
+                }`}
+              >
+                {q.no || '取消'}
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+        className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+          canSubmit
+            ? 'bg-accent text-white hover:bg-accent/90'
+            : 'bg-bg-secondary text-neutral-600 cursor-not-allowed'
+        }`}
+      >
+        提交回答
+      </button>
+    </div>
   )
 }
 

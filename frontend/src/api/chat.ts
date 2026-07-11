@@ -2,6 +2,17 @@
 
 import { getToken } from './client'
 
+export interface AskQuestion {
+  id: string
+  type: 'choice' | 'multiselect' | 'text' | 'confirm'
+  title: string
+  options?: string[]         // choice / multiselect
+  placeholder?: string       // text
+  default?: string           // text 默认值
+  yes?: string               // confirm 确认按钮文字
+  no?: string                // confirm 取消按钮文字
+}
+
 export interface ChatMessage {
   id?: number
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -14,6 +25,9 @@ export interface ChatMessage {
   tool_summary?: string
   tool_result?: string
   tool_pending?: boolean  // 工具正在执行
+  // 交互式提问
+  ask_data?: AskQuestion[]     // 从 <ask> 标签中解析出的问题
+  ask_answered?: boolean       // 用户是否已回答
 }
 
 export interface Conversation {

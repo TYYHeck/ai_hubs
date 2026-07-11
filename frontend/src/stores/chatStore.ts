@@ -1,8 +1,24 @@
 // AI Hubs — 对话状态管理
 
 import { create } from 'zustand'
-import { conversationApi, streamChat, type Conversation, type ChatMessage, type SSEEvent } from '../api/chat'
+import { conversationApi, streamChat, type Conversation, type ChatMessage, type SSEEvent, type AskQuestion } from '../api/chat'
 import { uploadApi, chatContextApi, type Attachment } from '../api/client'
+
+/** 从消息文本中提取 <ask>...</ask> 标签内容 */
+function parseAskData(content: string): AskQuestion[] | undefined {
+  const re = /<ask>\s*([\s\S]*?)\s*<\/ask>/gi
+  const questions: AskQuestion[] = []
+  let match: RegExpExecArray | null
+  while ((match = re.exec(content)) !== null) {
+    try {
+      const q = JSON.parse(match[1])
+      if (q && q.type && q.title) {
+        questions.push(q as AskQuestion)
+      }
+    } catch { /* invalid JSON block — skip */ }
+  }
+  return questions.length > 0 ? questions : undefined
+}
 
 interface ContextUsage {
   model: string
@@ -58,6 +74,9 @@ interface ChatState {
 
   // 暂停生成（中断 AI 思考，保留当前对话与已生成内容）
   pauseGeneration: () => void
+
+  // 交互式提问回答
+  submitAskAnswer: (messageIndex: number, answers: Record<string, string>) => void
 }
 
 // 当前流式请求的 AbortController（模块级，用于暂停/中断生成）
@@ -206,7 +225,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
             })
             break
           case 'done':
-            set({ streaming: false, streamingContent: '' })
+            // 解析最后一条 assistant 消息中的 <ask> 标签
+            set((state) => {
+              const msgs = [...state.messages]
+              for (let i = msgs.length - 1; i >= 0; i--) {
+                if (msgs[i].role === 'assistant') {
+                  const askData = parseAskData(msgs[i].content)
+                  if (askData && askData.length > 0) {
+                    msgs[i] = { ...msgs[i], ask_data: askData, ask_answered: false }
+                    return { messages: msgs, streaming: false, streamingContent: '' }
+                  }
+                }
+              }
+              return { streaming: false, streamingContent: '' }
+            })
             activeController = null
             get().loadConversations()
             if (get().currentConvId) get().refreshContext()
@@ -246,6 +278,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({ sendQueue: state.sendQueue.filter((_, i) => i !== index) }))
   },
   clearQueue: () => set({ sendQueue: [] }),
+
+  // 交互式提问：提交答案后标记已答 + 发送答案给 AI
+  submitAskAnswer: (messageIndex, answers) => {
+    set((state) => {
+      const msgs = [...state.messages]
+      if (messageIndex < msgs.length) {
+        msgs[messageIndex] = { ...msgs[messageIndex], ask_answered: true }
+      }
+      return { messages: msgs }
+    })
+    // 将答案格式化为用户消息发送
+    const q = get().messages[messageIndex]
+    const lines = ['【交互回答】']
+    if (q?.ask_data) {
+      for (const aq of q.ask_data) {
+        const val = answers[aq.id]
+        if (val) {
+          lines.push(`${aq.title}: ${val}`)
+        }
+      }
+    }
+    if (lines.length > 1) {
+      get().sendMessage(lines.join('\n'))
+    }
+  },
 
   clearError: () => set({ error: null }),
 
