@@ -127,6 +127,12 @@ export const authApi = {
 
   me: () =>
     request<{ ok: boolean; user: import('../types').User }>('/api/v1/auth/me'),
+
+  updateMe: (data: { username?: string; email?: string; preferences?: Record<string, unknown> }) =>
+    request<{ ok: boolean; user: import('../types').User }>('/api/v1/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 }
 
 // ── 系统 API ──

@@ -37,7 +37,7 @@ export function Sidebar() {
           <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
             AH
           </div>
-          <span className="text-neutral-100 font-semibold">AI Hubs</span>
+          <span className="text-text-primary font-semibold">AI Hubs</span>
         </div>
       </div>
 
@@ -52,7 +52,7 @@ export function Sidebar() {
               `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
                 isActive
                   ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-bg-tertiary'
+                  : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
               }`
             }
           >
@@ -64,7 +64,7 @@ export function Sidebar() {
         {/* 管理员菜单 */}
         {user?.role === 'admin' && (
           <>
-            <div className="px-5 py-2 mt-2 text-xs text-neutral-600 uppercase tracking-wider">
+            <div className="px-5 py-2 mt-2 text-xs text-text-dim uppercase tracking-wider">
               管理
             </div>
             {adminItems.map((item) => (
@@ -75,7 +75,7 @@ export function Sidebar() {
                   `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
                     isActive
                       ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                      : 'text-neutral-400 hover:text-neutral-200 hover:bg-bg-tertiary'
+                      : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
                   }`
                 }
               >
@@ -90,16 +90,16 @@ export function Sidebar() {
       {/* 用户信息 */}
       <div className="px-4 py-3 border-t border-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-bg-tertiary flex items-center justify-center text-neutral-400 text-sm">
+          <div className="w-8 h-8 rounded-full bg-bg-tertiary flex items-center justify-center text-text-muted text-sm">
             {user?.username?.[0]?.toUpperCase() || '?'}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm text-neutral-200 truncate">{user?.username}</div>
-            <div className="text-xs text-neutral-600">{user?.role}</div>
+            <div className="text-sm text-text-primary truncate">{user?.username}</div>
+            <div className="text-xs text-text-dim">{user?.role}</div>
           </div>
           <button
             onClick={logout}
-            className="text-neutral-600 hover:text-neutral-400 text-xs"
+            className="text-text-dim hover:text-text-muted text-xs"
             title="退出登录"
           >
             退出
