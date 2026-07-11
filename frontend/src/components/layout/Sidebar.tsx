@@ -10,17 +10,17 @@ import { useThemeStore } from '../../stores/themeStore'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: '仪表盘' },
-  { to: '/chat', icon: MessageSquare, label: '对话' },
   { to: '/agents', icon: Bot, label: 'Agent' },
   { to: '/tasks', icon: ListTodo, label: '任务' },
   { to: '/skills', icon: Package, label: '技能市场' },
   { to: '/memory', icon: Brain, label: '记忆' },
   { to: '/knowledge', icon: BookOpen, label: '知识库' },
   { to: '/datasets', icon: Database, label: '数据集' },
-  { to: '/ide', icon: Code2, label: 'IDE' },
   { to: '/workflow', icon: Workflow, label: '工作流' },
   { to: '/settings', icon: Settings, label: '设置' },
 ]
+
+const workspaceItem = { to: '/workspace', icon: LayoutTemplate, label: '智能工作台' }
 
 const adminItems = [
   { to: '/admin', icon: Shield, label: '后台管理' },
@@ -45,39 +45,76 @@ export function Sidebar() {
 
       {/* 导航 */}
       <nav className="flex-1 overflow-y-auto py-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
+        {navItems.map((item) => {
+          if (item.to === '/') {
+            return (
+              <>
+                <NavLink key={item.to} to={item.to} end className={({ isActive }) =>
+                  `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                    isActive
+                      ? 'text-accent bg-accent/10 border-r-2 border-accent'
+                      : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+                  }`
+                }>
+                  <item.icon size={18} />
+                  {item.label}
+                </NavLink>
+                <NavLink key={workspaceItem.to} to={workspaceItem.to} className={({ isActive }) =>
+                  `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                    isActive
+                      ? 'text-accent bg-accent/10 border-r-2 border-accent'
+                      : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+                  }`
+                }>
+                  <workspaceItem.icon size={18} />
+                  {workspaceItem.label}
+                </NavLink>
+              </>
+            )
+          }
+          return (
+            <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) =>
               `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
                 isActive
                   ? 'text-accent bg-accent/10 border-r-2 border-accent'
                   : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
               }`
-            }
-          >
-            <item.icon size={18} />
-            {item.label}
-          </NavLink>
-        ))}
+            }>
+              <item.icon size={18} />
+              {item.label}
+            </NavLink>
+          )
+        })}
 
-        {/* 合并视图入口（仅开启 splitLayout 时显示） */}
-        {splitLayout && (
-          <NavLink
-            to="/workspace"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                isActive
-                  ? 'text-accent bg-accent/10 border-r-2 border-accent'
-                  : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-              }`
-            }
-          >
-            <LayoutTemplate size={18} />
-            合并视图
-          </NavLink>
+        {!splitLayout && (
+          <>
+            <NavLink
+              to="/chat"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'text-accent bg-accent/10 border-r-2 border-accent'
+                    : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+                }`
+              }
+            >
+              <MessageSquare size={18} />
+              对话
+            </NavLink>
+            <NavLink
+              to="/ide"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'text-accent bg-accent/10 border-r-2 border-accent'
+                    : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+                }`
+              }
+            >
+              <Code2 size={18} />
+              IDE
+            </NavLink>
+          </>
         )}
 
         {/* 管理员菜单 */}

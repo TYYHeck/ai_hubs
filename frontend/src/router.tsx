@@ -16,7 +16,7 @@ import IdePage from './pages/IdePage'
 import WorkflowPage from './pages/WorkflowPage'
 import AdminPage from './pages/AdminPage'
 import SettingsPage from './pages/SettingsPage'
-import CombinedPage from './pages/CombinedPage'
+import WorkspacePage from './pages/WorkspacePage'
 
 function ProtectedRoute() {
   const user = useAuthStore((s) => s.user)
@@ -36,7 +36,7 @@ export const AppRouter = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
-      { path: '/', element: <DashboardPage /> },
+      { path: '/', element: <Navigate to="/workspace" replace /> },
       { path: '/chat', element: <ChatPage /> },
       { path: '/agents', element: <AgentsPage /> },
       { path: '/tasks', element: <TasksPage /> },
@@ -45,7 +45,7 @@ export const AppRouter = createBrowserRouter([
       { path: '/knowledge', element: <KnowledgePage /> },
       { path: '/datasets', element: <DatasetsPage /> },
       { path: '/ide', element: <IdePage /> },
-      { path: '/workspace', element: <CombinedPage /> },
+      { path: '/workspace', element: <WorkspacePage /> },
       { path: '/workflow', element: <WorkflowPage /> },
       { path: '/admin', element: <AdminPage /> },
       { path: '/settings', element: <SettingsPage /> },
