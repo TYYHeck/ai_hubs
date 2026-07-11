@@ -230,7 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             set((state) => ({
               messages: [...state.messages, {
                 role: 'tool' as const,
-                content: `[询问] ${evt.title}`,
+                content: evt.title || evt.message || '',
                 tool_name: 'request_user_input',
                 tool_summary: evt.title,
                 tool_pending: false,

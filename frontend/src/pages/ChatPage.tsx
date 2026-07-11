@@ -744,15 +744,15 @@ function InteractiveWidget({ interactive, onRespond }: {
 }
 
 // ── 处理交互式组件响应 ──
-function handleInteractiveResponseFn(msgIndex: number, response: string) {
+function handleInteractiveResponse(msgIndex: number, response: string) {
   const store = useChatStore.getState()
   const msgs = [...store.messages]
   const msg = msgs[msgIndex]
   if (msg && msg.interactive) {
-    msgs[msgIndex] = { ...msg, interactive_answered: true, content: `[已回复] ${msg.interactive.title}: ${response}` }
+    msgs[msgIndex] = { ...msg, interactive_answered: true, content: response }
     store.setState({ messages: msgs })
     // 将用户响应作为后续消息发送回对话
-    store.sendMessage(`[对询问「${msg.interactive.title}」的回复] ${response}`, undefined, undefined)
+    store.sendMessage(response, undefined, undefined)
   }
 }
 
