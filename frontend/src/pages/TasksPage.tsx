@@ -14,6 +14,7 @@ interface TaskData {
   output_files?: { path: string; name: string; size: number; is_new: boolean; ext: string }[]
   created_at: string | null; started_at: string | null; finished_at: string | null
   events?: Array<{ event: string; data: Record<string, any> }>
+  metadata?: Record<string, any>
 }
 
 interface ModeInfo { id: string; name: string; desc: string; icon: string }
@@ -34,14 +35,15 @@ function getModeName(mode: string): string {
   return modeNames[mode] || mode
 }
 
-function getAutoWorkflowInfo(events: Array<{ event: string; data: Record<string, any> }> | undefined): { mode: string; reason: string; agent: string } | null {
+function getAutoWorkflowInfo(events: Array<{ event: string; data: Record<string, any> }> | undefined): { mode: string; reason: string; agent: string; name?: string } | null {
   if (!events) return null
   const assigned = events.find(e => e.event === 'auto_assigned')
   if (!assigned?.data) return null
   const wf = assigned.data.workflow_mode
   const reason = assigned.data.workflow_reason
   const agent = assigned.data.agent
-  if (wf) return { mode: wf, reason: reason || '', agent: agent || '' }
+  const name = assigned.data.workflow_name
+  if (wf) return { mode: wf, reason: reason || '', agent: agent || '', name: name || '' }
   return null
 }
 
@@ -135,6 +137,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskData[]>([])
   const [modes, setModes] = useState<ModeInfo[]>([])
   const [agents, setAgents] = useState<{id:number;name:string}[]>([])
+  const [workflows, setWorkflows] = useState<{id:string;name:string}[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -142,6 +145,8 @@ export default function TasksPage() {
     title: '', description: '', mode: 'auto', agent_ids: [] as number[],
     think_depth: 1, think_visibility: 'visible' as string, priority: 0, tags: '',
     assignment: 'direct' as string,
+    workflow_id: '',
+    allowed_workflows: [] as string[],
   })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -160,14 +165,16 @@ export default function TasksPage() {
 
   const fetchData = async () => {
     try {
-      const [tRes, mRes, aRes] = await Promise.all([
+      const [tRes, mRes, aRes, wfRes] = await Promise.all([
         api.get<TaskData[]>('/tasks'),
         api.get<ModeInfo[]>('/tasks/modes'),
         api.get<{ id: number; name: string }[]>('/agents'),
+        api.get<{id:string;name:string}[]>('/workflows'),
       ])
       setTasks(tRes ?? [])
       setModes(mRes ?? [])
       setAgents((aRes ?? []).map((a) => ({ id: a.id, name: a.name })))
+      setWorkflows(wfRes ?? [])
     } catch { /* ignore */ }
     setLoading(false)
   }
@@ -186,19 +193,23 @@ export default function TasksPage() {
   }, [])
 
   const resetForm = () => {
-    setForm({ title: '', description: '', mode: 'auto', agent_ids: [], think_depth: 1, think_visibility: 'visible', priority: 0, tags: '', assignment: 'direct' })
+    setForm({ title: '', description: '', mode: 'auto', agent_ids: [], think_depth: 1, think_visibility: 'visible', priority: 0, tags: '', assignment: 'direct', workflow_id: '', allowed_workflows: [] })
     setShowForm(false)
     setError('')
   }
 
   const handleCreate = async () => {
     if (!form.title.trim()) { setError('标题不能为空'); return }
+    if (form.mode === 'workflow' && !form.workflow_id) { setError('请选择要运行的具体工作流'); return }
     setSubmitting(true)
     try {
-      await api.post('/tasks', {
+      const payload: any = {
         ...form,
         tags: form.tags.split(',').map(s => s.trim()).filter(Boolean),
-      })
+      }
+      if (form.mode !== 'workflow') delete payload.workflow_id
+      if (form.mode !== 'auto') delete payload.allowed_workflows
+      await api.post('/tasks', payload)
       resetForm()
       fetchData()
     } catch (e: any) {
@@ -279,6 +290,37 @@ export default function TasksPage() {
                 {modes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
+            {form.mode === 'workflow' && (
+              <div>
+                <label className="block text-xs text-text-muted mb-1">选择具体工作流</label>
+                <select value={form.workflow_id} onChange={e => setForm({...form, workflow_id: e.target.value})}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-accent outline-none">
+                  <option value="">— 请选择你创建的工作流 —</option>
+                  {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+                {workflows.length === 0 && (
+                  <p className="text-[10px] text-text-dim mt-1">你还没有工作流，请先到「工作流」页创建并命名</p>
+                )}
+              </div>
+            )}
+            {form.mode === 'auto' && workflows.length > 0 && (
+              <div className="col-span-2">
+                <label className="block text-xs text-text-muted mb-1">允许 AI 选用的工作流（可不选 = 全部）</label>
+                <div className="flex flex-wrap gap-2">
+                  {workflows.map(w => (
+                    <label key={w.id} className="flex items-center gap-1.5 text-xs text-text-primary cursor-pointer bg-bg-tertiary border border-border rounded-lg px-2 py-1">
+                      <input type="checkbox" checked={form.allowed_workflows.includes(w.id)}
+                        onChange={e => {
+                          const next = new Set(form.allowed_workflows)
+                          if (e.target.checked) next.add(w.id); else next.delete(w.id)
+                          setForm({...form, allowed_workflows: [...next]})
+                        }} />
+                      {w.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             {form.mode === 'auto' && (
               <div>
                 <label className="block text-xs text-text-muted mb-1">指派策略</label>
@@ -380,10 +422,13 @@ export default function TasksPage() {
                       </span>
                       <span className="text-text-primary font-medium truncate">{t.title}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
-                        {t.mode === 'auto' ? (() => {
-                          const wf = getAutoWorkflowInfo(t.events)
-                          return wf ? `AI → ${getModeName(wf.mode)}` : 'AI 自动'
-                        })() : getModeName(t.mode)}
+                        {t.mode === 'workflow'
+                          ? (t.metadata?.workflow_name || '自定义工作流')
+                          : t.mode === 'auto' ? (() => {
+                              const wf = getAutoWorkflowInfo(t.events)
+                              if (!wf) return 'AI 自动'
+                              return wf.name ? `AI → ${wf.name}` : `AI → ${getModeName(wf.mode)}`
+                            })() : getModeName(t.mode)}
                       </span>
                     </div>
                     <p className="text-text-muted text-xs truncate">{t.description || '无描述'}</p>
@@ -444,11 +489,14 @@ export default function TasksPage() {
                         <span className="text-text-muted text-[10px] uppercase tracking-wide">模式</span>
                         <br />
                         <span className="text-text-primary">
-                          {getModeName(t.mode)}
-                          {t.mode === 'auto' && (() => {
-                            const wf = getAutoWorkflowInfo(t.events)
-                            return wf ? <span className="text-text-dim ml-1">→ {getModeName(wf.mode)}</span> : null
-                          })()}
+                          {t.mode === 'workflow'
+                            ? (t.metadata?.workflow_name || '自定义工作流')
+                            : (() => {
+                                const base = getModeName(t.mode)
+                                if (t.mode !== 'auto') return base
+                                const wf = getAutoWorkflowInfo(t.events)
+                                return wf ? <>{base} <span className="text-text-dim ml-1">→ {wf.name || getModeName(wf.mode)}</span></> : base
+                              })()}
                         </span>
                       </div>
                       <div><span className="text-text-muted text-[10px] uppercase tracking-wide">优先级</span><br /><span className="text-text-primary">{t.priority}</span></div>

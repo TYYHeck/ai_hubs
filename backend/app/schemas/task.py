@@ -20,6 +20,10 @@ class TaskCreate(BaseModel):
     pipeline_steps: Optional[list[str]] = None  # ["agent_id:prompt_suffix", ...]
     # auto 模式下指派策略：direct=直接匹配，ai=AI 分析精细指派
     assignment: str = Field(default="direct", pattern=r"^(direct|ai)$")
+    # 可选：mode=workflow 时指定具体工作流（按名字选用）
+    workflow_id: Optional[str] = None
+    # 可选：mode=auto 时限制 AI 可复用的具体工作流（空=全部）
+    allowed_workflows: Optional[list[str]] = None
 
 
 class TaskResponse(BaseModel):

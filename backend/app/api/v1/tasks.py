@@ -26,6 +26,7 @@ from ...models.agent import Agent
 from ...models.task import Task, TaskEvent
 from ...schemas.task import TaskCreate
 from ..deps import get_current_user
+from .workflows import get_workflow
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -91,6 +92,20 @@ async def create_task(
             "assignment": data.assignment,
         },
     )
+    # ── mode=workflow：按名字选用具体工作流，注入节点/边（议题 #11 落地联动）──
+    if data.mode == "workflow":
+        if not data.workflow_id:
+            raise HTTPException(status_code=400, detail="请先选择要运行的具体工作流")
+        wf = get_workflow(data.workflow_id)
+        if not wf:
+            raise HTTPException(status_code=404, detail="工作流不存在或已被删除")
+        task.metadata_["workflow_nodes"] = wf.get("nodes", [])
+        task.metadata_["workflow_edges"] = wf.get("edges", [])
+        task.metadata_["workflow_id"] = wf["id"]
+        task.metadata_["workflow_name"] = wf.get("name", "")
+    # ── mode=auto：限制 AI 可复用的具体工作流（空=全部）──
+    if data.allowed_workflows:
+        task.metadata_["allowed_workflows"] = data.allowed_workflows
     session.add(task)
     await session.commit()
     return task.to_dict()

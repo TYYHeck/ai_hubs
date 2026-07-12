@@ -20,6 +20,16 @@ _workflows = []
 _next_id = 1
 
 
+def get_workflow(wf_id: str):
+    """按 id 获取工作流（供任务创建按名字选用具体工作流）。"""
+    return next((w for w in _workflows if w["id"] == wf_id), None)
+
+
+def list_workflows():
+    """返回全部工作流（供 auto 模式 AI 选用）。"""
+    return list(_workflows)
+
+
 @router.get("")
 async def api_list_workflows(current_user = Depends(get_current_user)):
     return _workflows

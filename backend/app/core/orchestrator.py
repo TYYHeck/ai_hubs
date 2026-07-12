@@ -863,9 +863,10 @@ def _heuristic_mode(user_input: str, difficulty: str, category: str, n_agents: i
 
 
 async def _allocate_mode_by_ai(
-    user_input: str, analysis: dict | None, agents: list[AgentModel]
+    user_input: str, analysis: dict | None, agents: list[AgentModel],
+    available_workflows: list | None = None,
 ) -> tuple[str, str]:
-    """LLM 分配器：从全部模式中选择最合适者（议题 #4）。"""
+    """LLM 分配器：从全部模式中选择最合适者（议题 #4），可返回 workflow:<id>。"""
     n = len(agents)
     if n < 2:
         return "single", "仅一个可用 Agent，单 Agent 执行"
@@ -875,12 +876,21 @@ async def _allocate_mode_by_ai(
             "debate(辩论交锋) | vote(投票决议) | hierarchical(主管分解委派) | "
             "swarm(群体自组织) | peer_review(同行互审) | round_table(圆桌讨论)"
         )
+        wf_desc = ""
+        if available_workflows:
+            wf_items = "; ".join(
+                f"{w.get('id')}:{w.get('name', '')}" for w in available_workflows
+            )
+            wf_desc = (
+                f"\n\n用户已创建的可复用工作流（若任务高度契合可直接选用，"
+                f"此时 mode 输出 workflow:<id>）：\n{wf_items}"
+            )
         prompt = (
             "你是任务编排调度器。根据任务内容，从以下执行模式中选择最合适的一个：\n"
-            f"{mode_desc}\n\n"
+            f"{mode_desc}{wf_desc}\n\n"
             f"任务：\n{user_input[:800]}\n\n"
-            "只输出 JSON：{\"mode\": \"<模式名>\", \"reason\": \"<一句话理由>\"}，"
-            "不要输出其他文字。"
+            "只输出 JSON：{\"mode\": \"<模式名或 workflow:<id>>\", "
+            "\"reason\": \"<一句话理由>\"，\"不要输出其他文字。"
         )
         resp = await llm_manager.chat(
             [{"role": "system", "content": "你是严谨的编排调度器，只输出 JSON。"},
@@ -892,6 +902,11 @@ async def _allocate_mode_by_ai(
         if m:
             data = _json.loads(m.group(0))
             mode = data.get("mode", "").strip().lower()
+            if mode.startswith("workflow:"):
+                wf_id = mode.split(":", 1)[1]
+                if any(w.get("id") == wf_id for w in (available_workflows or [])):
+                    return mode, data.get("reason", "AI 选用工作流")
+                return "single", "所选工作流不存在，回退单 Agent"
             if mode in _ALLOC_MODES:
                 if mode in _MULTIAGENT_MODES and n < 2:
                     return "single", "所选模式需多 Agent，回退单 Agent"
@@ -910,6 +925,7 @@ async def run_auto(
     user_id: int,
     assignment: str = "direct",   # direct | ai
     task_title: str = "",
+    available_workflows: list | None = None,   # auto 模式下 AI 可复用的具体工作流
 ) -> str:
     """自动工作流：AI 分析任务后自动选择工作流模式和 Agent
 
@@ -967,13 +983,39 @@ async def run_auto(
         workflow_mode = "single"
         workflow_reason = "简短输入，单 Agent 直接处理"
     elif assignment == "ai":
-        # LLM 分配器：返回全部模式中最合适的（含 debate/vote/hierarchical/swarm/peer_review/round_table）
+        # LLM 分配器：返回全部模式中最合适的（含 debate/vote/hierarchical/swarm/peer_review/round_table/workflow:<id>）
         workflow_mode, workflow_reason = await _allocate_mode_by_ai(
-            final_input, analysis, agents
+            final_input, analysis, agents, available_workflows
         )
     else:
         # 关键词启发式（无 LLM）：覆盖更多模式
         workflow_mode, workflow_reason = _heuristic_mode(user_input, difficulty, category, len(agents))
+
+    # 工作流模式：AI 选中了某个具体工作流 → 直接按该工作流拓扑执行
+    if isinstance(workflow_mode, str) and workflow_mode.startswith("workflow:"):
+        wf_id = workflow_mode.split(":", 1)[1]
+        wf = next((w for w in (available_workflows or []) if w.get("id") == wf_id), None)
+        if wf:
+            await _emit_event(None, task_id, "auto_assigned",
+                              {
+                                  "agent": chosen.name,
+                                  "strategy": strategy,
+                                  "workflow_mode": "workflow",
+                                  "workflow_id": wf_id,
+                                  "workflow_name": wf.get("name", ""),
+                                  "workflow_reason": workflow_reason,
+                                  "difficulty": difficulty,
+                                  "category": category,
+                              },
+                              event_queue=event_queue)
+            return await run_workflow(
+                task_id=task_id, agents=agents, user_input=final_input,
+                event_queue=event_queue, user_id=user_id,
+                nodes=wf.get("nodes"), edges=wf.get("edges"),
+            )
+        # 工作流不存在（已被删）→ 回退单 Agent
+        workflow_mode = "single"
+        workflow_reason = "所选工作流不可用，已回退单 Agent"
 
     await _emit_event(None, task_id, "auto_assigned",
                       {
@@ -1160,6 +1202,17 @@ async def execute_task(
             if mode == "auto":
                 extra_kw["assignment"] = assignment
                 extra_kw["task_title"] = task.title or ""
+                # 取出用户已创建的工作流，供 AI 分配器按需复用（议题 #11 联动）
+                try:
+                    from ..api.v1.workflows import list_workflows as _list_wf
+                    _all_wf = _list_wf()
+                    _allowed = (task.metadata_ or {}).get("allowed_workflows")
+                    extra_kw["available_workflows"] = (
+                        [w for w in _all_wf if w.get("id") in _allowed]
+                        if _allowed else _all_wf
+                    )
+                except Exception:
+                    extra_kw["available_workflows"] = []
 
             if mode == "single":
                 # run_single 仅接受单个 agent，而非 agents 列表

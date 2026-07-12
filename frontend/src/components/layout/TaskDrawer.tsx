@@ -290,7 +290,7 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           } else if (isAutoAssigned) {
                             icon = <Sparkles size={12} className="text-accent" />
                             const wfMode = ev.data?.workflow_mode
-                            const wfName = wfMode === 'single' ? '单 Agent' : wfMode === 'sequential' ? '串行' : wfMode === 'parallel' ? '并行' : wfMode || ''
+                            const wfName = ev.data?.workflow_name || (wfMode === 'single' ? '单 Agent' : wfMode === 'sequential' ? '串行' : wfMode === 'parallel' ? '并行' : wfMode || '')
                             title = wfName ? `${wfName}: ${ev.data?.agent || '-'}` : `分配: ${ev.data?.agent || '-'}`
                             desc = ev.data?.workflow_reason || ev.data?.strategy || ''
                           } else if (isTaskStart) {
