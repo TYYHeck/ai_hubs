@@ -155,6 +155,42 @@ export const dashboardApi = {
   stats: () => request<DashboardStats>('/dashboard'),
 }
 
+// ── 效率测试板 API（议题 #15：速度 / 消耗 / 成本 / 协调效率）──
+
+export interface EfficiencySummaryRow {
+  mode: string
+  count: number
+  success_rate: number
+  avg_latency_s: number
+  avg_cost_usd: number
+  avg_in_tokens: number
+  avg_out_tokens: number
+  avg_agents: number
+  avg_rounds: number | null
+}
+
+export interface EfficiencyReport {
+  task_id: string
+  mode: string
+  model: string
+  agents: number
+  latency_s: number
+  in_tokens: number
+  out_tokens: number
+  cost_usd: number
+  success: boolean
+  rounds: number | null
+  created_at: string
+}
+
+export const efficiencyApi = {
+  summary: () => api.get<EfficiencySummaryRow[]>('/efficiency/summary'),
+  reports: (limit = 200, mode?: string) =>
+    api.get<EfficiencyReport[]>(
+      `/efficiency/reports?limit=${limit}${mode ? `&mode=${encodeURIComponent(mode)}` : ''}`,
+    ),
+}
+
 // ── 通用 API 封装 ──
 
 export const api = {

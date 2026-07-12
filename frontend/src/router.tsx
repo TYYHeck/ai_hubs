@@ -17,6 +17,7 @@ import WorkflowPage from './pages/WorkflowPage'
 import AdminPage from './pages/AdminPage'
 import SettingsPage from './pages/SettingsPage'
 import WorkspacePage from './pages/WorkspacePage'
+import EfficiencyPage from './pages/EfficiencyPage'
 
 function ProtectedRoute() {
   const user = useAuthStore((s) => s.user)
@@ -47,6 +48,7 @@ export const AppRouter = createBrowserRouter([
       { path: '/ide', element: <IdePage /> },
       { path: '/workspace', element: <WorkspacePage /> },
       { path: '/workflow', element: <WorkflowPage /> },
+      { path: '/efficiency', element: <EfficiencyPage /> },
       { path: '/admin', element: <AdminPage /> },
       { path: '/settings', element: <SettingsPage /> },
     ],

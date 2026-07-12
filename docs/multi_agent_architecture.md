@@ -1059,7 +1059,7 @@ class EfficiencyBoard:
 | #12 | UI 三缺口（/workspace 不可达、斜杠命令缺项、死组件） | 修 3 缺口+逐页 UI 一致性评审（**UI 部分另开一次任务做**，本轮仅记录决策） | 📌 待实现（UI 专项） |
 | #13 | 数据集路由对齐 | 数据集+知识库(RAG)端到端核通核查：能导入、RAG 搜索真生效、上传真存入、两者实现真实且无混乱（代码不串味） | ✅ 已核查（`knowledge.py` 走 `src.rag.knowledge_base` ChromaDB 真实上传/搜索/向量清理；`datasets.py` 真实 CRUD+record 级联；两者无串味） |
 | #14 | 记忆回滚已可用（剩余：default 混写、缺单条删除、UI 去图谱） | 补单条记忆删除端点(API+服务层)+修 UI"图谱可视化"误导(改关键词索引)；default 混写已并入 #2 | ✅ 已实现（`memory.py` 新增 `delete_entry` 单条删除；`api/v1/memory.py` 新增 `DELETE /memory/entries/{entry_id}`）；UI 去图谱误导并入 #12 UI 专项 |
-| #15 | 效率测试板缺失 | 建效率测试板：benchmark harness(速度/准确度/消耗+可靠性/协调效率/可扩展性/回归)+前端面板；与 #9 成本追踪共用采集层 | ✅ 后端已实现（`app/core/metrics_collector.py` 真实记录延迟/消耗/成本/成功/轮次 + `api/v1/efficiency.py` 提供 `/efficiency/reports`、`/efficiency/summary` 聚合）；前端面板待建 |
+| #15 | 效率测试板缺失 | 建效率测试板：benchmark harness(速度/准确度/消耗+可靠性/协调效率/可扩展性/回归)+前端面板；与 #9 成本追踪共用采集层 | ✅ 后端已实现（`app/core/metrics_collector.py` 真实记录延迟/消耗/成本/成功/轮次 + `api/v1/efficiency.py` 提供 `/efficiency/reports`、`/efficiency/summary` 聚合）；前端面板已建（`EfficiencyPage` + `/efficiency` 路由 + 侧边栏「效率测试」入口：KPI/模式排行加权对比/最近报告/JSON·CSV 导出）；注：批量 benchmark「运行」harness（§15.3.3 选组合×数据集批量跑）仍待建，当前数据随任务自动采集 |
 | #16 | 安全/透明度（后端已收集产出文件） | 增强透明度UI(友好层、不暴露内层实现)+输出易懂性+精确文件展示(仅本次修改/输出文件,**不**dump整个workspace)；工作区约束：远程模式输入落到服务器对应 `DATA_DIR/ide_workspace/{user_id}` **非根目录**、AI临时执行文件用后清理避免臃肿 | 📌 部分实现（后端安全/透明度已落地：guardrails.py L2/L3 护栏、`_collect_output_files` 精确产出收集、sandbox 工作区隔离+临时文件清理；透明度 UI 友好层/精确文件展示并入 #12 UI 专项） |
 
 > 落地状态图例：✅ 完成 / 📌 待实现（已拍板）/ ⏳ 讨论中（未拍板）。

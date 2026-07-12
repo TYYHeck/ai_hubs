@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, ListTodo, Package,
-  Brain, BookOpen, Database, Code2, Workflow, Shield, Settings, LayoutTemplate, X,
+  Brain, BookOpen, Database, Code2, Workflow, Shield, Settings, LayoutTemplate, X, Gauge,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
@@ -21,6 +21,7 @@ const baseItems: NavItem[] = [
   { to: '/skills', icon: Package, label: '技能市场' },
   { to: '/memory', icon: Brain, label: '记忆' },
   { to: '/datasets', icon: Database, label: '数据集' },
+  { to: '/efficiency', icon: Gauge, label: '效率测试' },
   { to: '/settings', icon: Settings, label: '设置' },
 ]
 
