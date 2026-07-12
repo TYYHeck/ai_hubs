@@ -221,17 +221,14 @@ async def run_single(
     """
     pause_evt = get_pause_event(task_id)
     await pause_evt.wait()
-    await _emit_event(None, task_id, "dbg_pause_done", {"agent": agent.name}, event_queue=event_queue)
 
     # ── 构建记忆上下文（长期摘要 + 近期窗口 + 相关性检索）──
     # global 模式记忆键为 "__global__"；memory_manager 以 (user_id, key) 隔离，
     # 不同用户天然分区、不会跨用户混写；多个 global Agent 共享同一 user 的 global 键（设计意图）。
     mem_agent_key = "__global__" if agent.config_mode == "global" else agent.name
-    await _emit_event(None, task_id, "dbg_before_mem", {"key": mem_agent_key}, event_queue=event_queue)
     memory_ctx = await memory_manager.build_context(
         user_id, mem_agent_key, query=user_input, memory_strength=agent.memory_strength
     )
-    await _emit_event(None, task_id, "dbg_after_mem", {"entries": len(memory_ctx)}, event_queue=event_queue)
     # ── RAG 检索（Agent 开启 enable_rag 时）──
     rag_ctx = ""
     if agent.enable_rag:
@@ -1187,9 +1184,8 @@ async def execute_task(
                           event_queue=event_queue)
 
         # ── 任务路径 token 配额护栏（与 chat 一致：仅平台免费额度限制）──
-        from ...models.user import User
+        from ..models.user import User
         user = await session.get(User, user_id)
-        await _emit_event(session, task_id, "dbg_after_userget", {"uid": user_id}, event_queue=event_queue)
         using_own_key = bool((user.llm_config or {}).get("api_key")) if user else False
         if user and not using_own_key and user.role != "admin":
             quota = user.get_token_quota()
@@ -1211,12 +1207,10 @@ async def execute_task(
         _TASK_USAGE_HOOKS[task_id] = _on_usage
 
         # ── 执行前快照（用于检测新增文件）──
-        await _emit_event(session, task_id, "dbg_pre_snapshot", {}, event_queue=event_queue)
         try:
             _pre_scan_snapshots[user_id] = await _snapshot_workspace(user_id)
-        except Exception as _se:
-            await _emit_event(session, task_id, "dbg_snapshot_exc", {"e": str(_se)}, event_queue=event_queue)
-        await _emit_event(session, task_id, "dbg_post_snapshot", {}, event_queue=event_queue)
+        except Exception:
+            pass
 
 
         try:
