@@ -4,7 +4,7 @@
 from __future__ import annotations
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,13 +19,25 @@ _security = HTTPBearer(auto_error=False)
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security),
     session: AsyncSession = Depends(get_session),
+    token: Optional[str] = Query(None, description="可选：通过 URL query 参数传递 token（用于下载/预览等无法设置 header 的场景）"),
 ) -> User:
-    """获取当前认证用户（必须登录）"""
-    if credentials is None:
+    """获取当前认证用户（必须登录）
+
+    支持两种认证方式：
+    1. Authorization: Bearer <token> header（推荐）
+    2. ?token=<token> query 参数（用于文件下载/预览等无法设置 header 的场景）
+    """
+    token_str = None
+    if credentials:
+        token_str = credentials.credentials
+    elif token:
+        token_str = token
+
+    if token_str is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "未提供认证令牌",
                             headers={"WWW-Authenticate": "Bearer"})
 
-    payload = decode_access_token(credentials.credentials)
+    payload = decode_access_token(token_str)
     if payload is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "令牌无效或已过期",
                             headers={"WWW-Authenticate": "Bearer"})
@@ -47,12 +59,11 @@ async def get_current_user(
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security),
     session: AsyncSession = Depends(get_session),
+    token: Optional[str] = Query(None, description="可选：通过 URL query 参数传递 token"),
 ) -> Optional[User]:
     """获取当前用户（可选，未登录返回 None）"""
-    if credentials is None:
-        return None
     try:
-        return await get_current_user(credentials, session)
+        return await get_current_user(credentials, session, token)
     except HTTPException:
         return None
 

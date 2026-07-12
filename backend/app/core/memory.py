@@ -5,7 +5,8 @@
 核心能力：
   1. VCS 式版本控制：每轮对话/任务提交一个 commit（parent_hash 链式），支持回退
   2. 关键词索引 + 重要性：记忆条目带关键词，构成「记忆图谱」节点，支持快速检索
-  3. 高无损压缩：旧记忆经 LLM 摘要压缩为长期记忆，降低 token 开销、加快读取
+  3. 高无损压缩：旧记忆经 LLM 摘要压缩为长期记忆，降低 token 开销、加快读取；
+     压缩前做保真度校验（保留率 < 阈值则放弃摘要、保留原始），写入前对摘要脱敏（剥离 PII）
   4. 上下文构建：近期窗口 + 相关性检索 + 压缩摘要，按记忆强度与 token 预算组装
 
 零配置可用：默认纯关键词检索；可选 jieba 提升中文分词；无需向量数据库。
@@ -21,7 +22,7 @@ import time
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import select, func, desc, Integer
+from sqlalchemy import select, func, desc, Integer, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import create_session
@@ -49,8 +50,60 @@ def _make_hash(user_id: int, agent_name: str) -> str:
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
+# ── 压缩保真度与脱敏 ──────────────────────────────────────
+
+# 摘要对原始实质性事实的保留率低于该值则放弃压缩（保留原始未压缩条目）
+COMPRESS_FIDELITY_THRESHOLD = 0.7
+
+# 脱敏规则：压缩摘要写入长期记忆前剥离 PII，防止敏感信息沉淀
+_PII_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[邮箱]"),
+    (re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"), "[手机号]"),
+    (re.compile(r"\b\d{17}[\dXx]\b"), "[身份证号]"),
+    (re.compile(r"sk-[A-Za-z0-9]{12,}"), "[API_KEY]"),
+    (re.compile(r"https?://[^\s，。 ）)]+"), "[链接]"),
+    (re.compile(r"(?:[A-Za-z]:\\[^\\\s]+|[^\s]*/[^\s/]+(?:/[^\s/]+)+)"), "[路径]"),
+    (re.compile(r"(?i)(password|passwd|密码|api[_-]?key|token|secret|access[_-]?key|私钥)[\s:=：]+[^\s]{4,}"), r"\1=[已脱敏]"),
+]
+
+
+def _desensitize(text: str) -> str:
+    """剥离文本中的 PII（密钥/邮箱/手机号/身份证/链接/路径/密码等）。"""
+    for pat, repl in _PII_PATTERNS:
+        text = pat.sub(repl, text)
+    return text
+
+
+def _extract_facts(text: str) -> set[str]:
+    """抽取文本中的原子事实信号：关键词 + 显式实体 + 数字。"""
+    facts: set[str] = set()
+    try:
+        facts |= set(extract_keywords(text))
+    except Exception:
+        pass
+    for pat, _ in _PII_PATTERNS:
+        for m in pat.findall(text):
+            if isinstance(m, str) and len(m) >= 2:
+                facts.add(m)
+    for m in re.findall(r"\d{2,}", text):
+        facts.add(m)
+    return facts
+
+
+def _fidelity_ratio(raw: str, summary: str) -> float:
+    """计算摘要对原始实质性事实的保留率（0-1）；PII 不计入以免干扰判定。"""
+    raw_facts = _extract_facts(_desensitize(raw))
+    sum_facts = _extract_facts(_desensitize(summary))
+    if not raw_facts:
+        return 1.0
+    return len(raw_facts & sum_facts) / len(raw_facts)
+
+
 class MemoryManager:
     """记忆管理器（单例）"""
+
+    # (user_id, agent_name) -> 最近一次压缩保真度（用于 /stats 暴露，非持久化）
+    _last_fidelity: dict = {}
 
     # ── 分支管理 ──────────────────────────────────────────
 
@@ -224,14 +277,27 @@ class MemoryManager:
         if not summary:
             return None
 
+        # 保真度校验：摘要对原始实质性事实的保留率过低则放弃压缩，保留原始未压缩条目
+        ratio = self._fidelity_ratio(batch, summary)
+        if ratio < COMPRESS_FIDELITY_THRESHOLD:
+            logger.info(
+                "记忆压缩保真度过低(%.2f<%.2f)，放弃摘要以保留原始: user=%s agent=%s",
+                ratio, COMPRESS_FIDELITY_THRESHOLD, user_id, agent_name,
+            )
+            return None
+
+        # 写入前脱敏，防止长期记忆沉淀密钥/邮箱/手机号等 PII
+        safe_summary = _desensitize(summary)
+        self._last_fidelity[(user_id, agent_name)] = round(ratio, 3)
+
         # 写一条 system 摘要条目（高重要性，作为长期记忆）
         seq = await self._next_seq(session, user_id, agent_name)
         summary_entry = MemoryEntry(
             user_id=user_id,
             agent_name=agent_name,
             role="system",
-            content=f"【长期记忆摘要】{summary}",
-            keywords=extract_keywords(summary),
+            content=f"【长期记忆摘要】{safe_summary}",
+            keywords=extract_keywords(safe_summary),
             importance=5.0,
             compressed=True,  # 摘要本身不再被二次压缩
             seq=seq,
@@ -251,7 +317,7 @@ class MemoryManager:
             parent_hash=None,
             message_count=len(old_entries),
             commit_type="compress",
-            summary=summary[:500],
+            summary=safe_summary[:500],
         )
         session.add(commit)
         await session.flush()
@@ -280,9 +346,12 @@ class MemoryManager:
             return None
 
     async def compress_now(self, user_id: int, agent_name: str) -> Optional[dict]:
-        """手动触发压缩。"""
+        """手动触发压缩。返回压缩 commit 的 to_dict()（含 fidelity 字段）；未压缩返回 None。"""
         async with create_session() as session:
-            return await self._maybe_compress(session, user_id, agent_name, threshold=1)
+            commit = await self._maybe_compress(session, user_id, agent_name, threshold=1)
+        if commit is None:
+            return None
+        return {**commit, "fidelity": self._last_fidelity.get((user_id, agent_name))}
 
     # ── 检索：关键词/记忆图谱 ──────────────────────────────
 
@@ -517,7 +586,30 @@ class MemoryManager:
                 "total_entries": total or 0,
                 "compressed_entries": int(compressed or 0),
                 "head_hash": branch.head_hash if branch else None,
+                "last_compress_fidelity": self._last_fidelity.get((user_id, agent_name)),
             }
+
+    async def delete_entry(self, user_id: int, agent_name: str, entry_id: int) -> bool:
+        """删除单条记忆条目（议题 #14：补单条删除端点）。
+
+        仅删除该条目本身（不回退整体版本链）；若该条目是某压缩摘要且被引用，
+        仅移除该条目，版本链中的 rollback 标记保持有效。返回是否删除成功。
+        """
+        async with create_session() as session:
+            res = await session.execute(
+                select(MemoryEntry).where(
+                    MemoryEntry.id == entry_id,
+                    MemoryEntry.user_id == user_id,
+                    MemoryEntry.agent_name == agent_name,
+                )
+            )
+            entry = res.scalar_one_or_none()
+            if entry is None:
+                return False
+            await session.delete(entry)
+            await session.commit()
+            logger.info("删除记忆条目 id=%s user=%s agent=%s", entry_id, user_id, agent_name)
+            return True
 
 
 # 全局单例

@@ -158,12 +158,14 @@ class LLMManager:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         user_config: Optional[dict] = None,
+        on_usage: Optional[Callable[[int, int], None]] = None,
     ) -> AsyncGenerator[str, None]:
         """
         流式对话，逐 token 产出文本。
 
         messages: [{"role": "system"/"user"/"assistant", "content": "..."}]
         user_config: 用户自带 LLM 配置（含 api_key 时使用，否则用全局免费配置）
+        on_usage: 可选回调 (prompt_tokens, completion_tokens)，用于上报真实 token 用量
         Yields: 文本片段 (str)
         """
         client = self._ensure_client(user_config)
@@ -176,9 +178,14 @@ class LLMManager:
                 temperature=temperature if temperature is not None else config["temperature"],
                 max_tokens=max_tokens or config["max_tokens"],
                 stream=True,
+                stream_options={"include_usage": True},
             )
 
             async for chunk in stream:
+                # 真实 token 用量（流式末尾 chunk 携带，choices 可能为空）
+                if getattr(chunk, "usage", None) and on_usage is not None:
+                    u = chunk.usage
+                    on_usage(int(u.prompt_tokens or 0), int(u.completion_tokens or 0))
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 
@@ -209,6 +216,7 @@ class LLMManager:
         max_tokens: Optional[int] = None,
         user_config: Optional[dict] = None,
         max_tool_rounds: int = 10,
+        on_usage: Optional[Callable[[int, int], None]] = None,
     ) -> AsyncGenerator[dict, None]:
         """流式对话 + 工具调用循环。
 
@@ -230,6 +238,14 @@ class LLMManager:
 
         working_messages = [dict(m) for m in messages]  # 复制，避免修改原始列表
 
+        # 真实 token 用量累加（多轮工具调用各自携带 usage）
+        _acc_prompt = 0
+        _acc_completion = 0
+
+        def _flush_usage() -> None:
+            if on_usage is not None:
+                on_usage(_acc_prompt, _acc_completion)
+
         for round_idx in range(max_tool_rounds):
             try:
                 stream = await client.chat.completions.create(
@@ -240,6 +256,7 @@ class LLMManager:
                     tools=tools,
                     tool_choice="auto" if round_idx < max_tool_rounds - 1 else "none",
                     stream=True,
+                    stream_options={"include_usage": True},
                 )
             except Exception as e:
                 logger.error(f"LLM 工具调用失败 (round {round_idx}): {e}")
@@ -250,6 +267,11 @@ class LLMManager:
             tool_calls_map: dict[int, dict] = {}  # index -> {id, function_name, arguments}
 
             async for chunk in stream:
+                # 真实 token 用量（流式末尾 chunk 携带，choices 可能为空）
+                if getattr(chunk, "usage", None):
+                    u = chunk.usage
+                    _acc_prompt += int(u.prompt_tokens or 0)
+                    _acc_completion += int(u.completion_tokens or 0)
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
@@ -283,6 +305,7 @@ class LLMManager:
 
             # 没有工具调用 — 对话结束
             if not tool_calls_map:
+                _flush_usage()
                 yield {"type": "done"}
                 return
 
@@ -353,7 +376,18 @@ class LLMManager:
                     except (json.JSONDecodeError, TypeError):
                         pass
 
+                # ui_action 的结果中包含 UI 操作事件，提取并转发
+                if tool_name == "ui_action":
+                    try:
+                        parsed = json.loads(result_str)
+                        ui_action = parsed.get("ui_action")
+                        if ui_action and isinstance(ui_action, dict):
+                            yield {"type": "ui_action", **ui_action}
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
         # 超过最大轮次，结束
+        _flush_usage()
         yield {"type": "done"}
 
     def is_configured(self) -> bool:

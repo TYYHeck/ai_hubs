@@ -19,6 +19,7 @@ import { useAuthStore } from './authStore'
    ═══════════════════════════════════════════════════════════ */
 
 export const AI_MUTATION_EVENT = 'ai-hubs:resource-changed'
+export const UI_ACTION_EVENT = 'ai-hubs:ui-action'
 
 interface AIMutationDetail {
   /** 资源类型，如 'agents' / 'tasks' / 'skills' / 'memory' / 'datasets' / 'llm-config' / 'auth' */
@@ -27,6 +28,13 @@ interface AIMutationDetail {
   method: string
   /** API 路径 */
   path: string
+}
+
+export interface UIActionDetail {
+  /** UI 操作名称，如 'toggle_theme' / 'navigate' / 'toggle_sidebar' */
+  action: string
+  /** 操作参数 */
+  params: Record<string, any>
 }
 
 /** 派发 AI 资源变更事件 */
@@ -38,11 +46,27 @@ function dispatchAIMutation(detail: AIMutationDetail) {
   }
 }
 
+/** 派发 UI 操作事件 */
+function dispatchUIAction(detail: UIActionDetail) {
+  try {
+    window.dispatchEvent(new CustomEvent(UI_ACTION_EVENT, { detail }))
+  } catch (e) {
+    console.warn('[chat] failed to dispatch ui action event:', e)
+  }
+}
+
 /** 监听 AI 资源变更事件的 hook（在 useEffect 里用） */
 export function onAIMutation(handler: (detail: AIMutationDetail) => void): () => void {
   const wrapped = (e: Event) => handler((e as CustomEvent<AIMutationDetail>).detail)
   window.addEventListener(AI_MUTATION_EVENT, wrapped)
   return () => window.removeEventListener(AI_MUTATION_EVENT, wrapped)
+}
+
+/** 监听 UI 操作事件的 hook（在 useEffect 里用） */
+export function onUIAction(handler: (detail: UIActionDetail) => void): () => void {
+  const wrapped = (e: Event) => handler((e as CustomEvent<UIActionDetail>).detail)
+  window.addEventListener(UI_ACTION_EVENT, wrapped)
+  return () => window.removeEventListener(UI_ACTION_EVENT, wrapped)
 }
 
 interface MutationRule {
@@ -71,6 +95,9 @@ const MUTATION_RULES: MutationRule[] = [
   { pattern: /\/datasets(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'datasets' },
   // 对话管理
   { pattern: /\/conversations(\/|\?|$)/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], resource: 'conversations' },
+  // IDE / 工作区文件操作（写文件、删除文件、运行命令等）
+  { pattern: /\/ide\/(write|delete|mkdir|rename|run|upload)/, methods: ['POST', 'PUT', 'DELETE'], resource: 'ide-files' },
+  { pattern: /\/workspace\/(write|delete|mkdir|rename|run|upload)/, methods: ['POST', 'PUT', 'DELETE'], resource: 'ide-files' },
 ]
 
 /** 检测 call_internal_api 影响的资源类型 */
@@ -270,10 +297,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
               const msgs = [...state.messages]
               const last = msgs[msgs.length - 1]
               if (last && last.role === 'assistant') {
+                // 最后一条是 assistant 消息，直接追加
                 msgs[msgs.length - 1] = {
                   ...last,
                   content: last.content + (evt.content || ''),
                 }
+              } else {
+                // 最后一条不是 assistant 消息（比如是 tool 消息），创建新的 assistant 消息
+                // 这样工具调用后的最终回复会显示在工具消息下面，更符合阅读习惯
+                msgs.push({
+                  role: 'assistant',
+                  content: evt.content || '',
+                  agent_name: null,
+                })
               }
               return { messages: msgs, streamingContent: msgs[msgs.length - 1]?.content || '' }
             })
@@ -376,6 +412,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 interactive_answered: false,
               }],
             }))
+            break
+          case 'ui_action':
+            // UI 操作事件：派发全局事件，由各页面/组件监听并执行
+            dispatchUIAction({ action: evt.action || '', params: evt.params || {} })
+
+            // 全局可处理的操作在这里直接执行
+            if (evt.action === 'toggle_theme') {
+              const current = useThemeStore.getState()
+              const next = current.resolved === 'dark' ? 'light' : 'dark'
+              useThemeStore.getState().setMode(next)
+            } else if (evt.action === 'set_theme' && evt.params?.theme) {
+              useThemeStore.getState().setMode(evt.params.theme)
+            }
             break
           case 'done':
             // 解析最后一条 assistant 消息中的 <ask> 标签，并添加产出文件

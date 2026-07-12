@@ -172,10 +172,100 @@ async def delete_record(
     record = await session.get(DatasetRecord, record_id)
     if not record or record.dataset_id != dataset_id:
         raise HTTPException(status_code=404, detail="记录不存在")
+    dataset = await session.get(Dataset, dataset_id)
+    if not dataset or dataset.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="数据集不存在")
     await session.delete(record)
     await session.commit()
     await _recalc_count(session, dataset_id)
     await session.commit()
+
+
+@router.put("/{dataset_id}/records/{record_id}")
+async def update_record(
+    dataset_id: int,
+    record_id: int,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    dataset = await session.get(Dataset, dataset_id)
+    if not dataset or dataset.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="数据集不存在")
+    record = await session.get(DatasetRecord, record_id)
+    if not record or record.dataset_id != dataset_id:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    
+    new_data = data.get("data")
+    if new_data is None:
+        raise HTTPException(status_code=400, detail="缺少 data 字段")
+    if not isinstance(new_data, dict):
+        raise HTTPException(status_code=400, detail="data 必须是对象")
+    
+    record.data = new_data
+    await session.commit()
+    await session.refresh(record)
+    return DatasetRecordResponse.model_validate(record.to_dict()).model_dump()
+
+
+@router.post("/{dataset_id}/records/batch-delete", status_code=status.HTTP_204_NO_CONTENT)
+async def batch_delete_records(
+    dataset_id: int,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    dataset = await session.get(Dataset, dataset_id)
+    if not dataset or dataset.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="数据集不存在")
+    
+    record_ids = body.get("ids", [])
+    if not isinstance(record_ids, list) or not record_ids:
+        raise HTTPException(status_code=400, detail="ids 必须是非空数组")
+    
+    from sqlalchemy import delete as sa_delete
+    await session.execute(
+        sa_delete(DatasetRecord).where(
+            DatasetRecord.dataset_id == dataset_id,
+            DatasetRecord.id.in_(record_ids)
+        )
+    )
+    await session.commit()
+    await _recalc_count(session, dataset_id)
+    await session.commit()
+
+
+@router.get("/{dataset_id}/records/search")
+async def search_records(
+    dataset_id: int,
+    q: str,
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    dataset = await session.get(Dataset, dataset_id)
+    if not dataset or dataset.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="数据集不存在")
+    
+    if not q.strip():
+        return []
+    
+    limit = max(1, min(limit, 500))
+    stmt = select(DatasetRecord).where(DatasetRecord.dataset_id == dataset_id) \
+        .order_by(DatasetRecord.id).limit(limit * 10).offset(offset)
+    records = (await session.execute(stmt)).scalars().all()
+    
+    q_lower = q.lower()
+    matched = []
+    for r in records:
+        data_str = json.dumps(r.data or {}, ensure_ascii=False).lower()
+        if q_lower in data_str:
+            matched.append(r)
+            if len(matched) >= limit:
+                break
+    
+    return [DatasetRecordResponse.model_validate(r.to_dict()).model_dump() for r in matched]
 
 
 # ── 导入 / 导出 ──

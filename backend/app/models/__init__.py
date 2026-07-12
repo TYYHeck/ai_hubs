@@ -11,6 +11,7 @@ from .memory import MemoryBranch, MemoryCommit, MemoryEntry, MemorySnapshot
 from .conversation import Conversation, Message
 from .attachment import Attachment
 from .system import SystemLog, KnowledgeSource
+from .knowledge import KnowledgeBase, KnowledgeDoc
 
 __all__ = [
     "Base",
@@ -21,5 +22,7 @@ __all__ = [
     "Dataset", "DatasetRecord",
     "MemoryBranch", "MemoryCommit", "MemoryEntry", "MemorySnapshot",
     "Conversation", "Message",
+    "Attachment",
     "SystemLog", "KnowledgeSource",
+    "KnowledgeBase", "KnowledgeDoc",
 ]

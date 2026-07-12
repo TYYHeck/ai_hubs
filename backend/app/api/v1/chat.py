@@ -35,10 +35,10 @@ from ...core.tools import (
     TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT,
     should_enable_tools, should_enable_code_tools, execute_tool, get_tool_summary,
 )
-from ...core.orchestrator import _collect_output_files
+from ...core.orchestrator import _collect_output_files, _snapshot_workspace
 from ...core.internal_tools import (
-    INTERNAL_API_TOOL, USER_INPUT_TOOL,
-    execute_internal_api, build_interactive_event,
+    INTERNAL_API_TOOL, USER_INPUT_TOOL, UI_ACTION_TOOL,
+    execute_internal_api, build_interactive_event, build_ui_action_event,
 )
 from functools import partial
 from ...config import DATA_DIR
@@ -413,8 +413,8 @@ async def chat_stream(
             # 3.1 构建工具列表：内部工具始终可用，代码执行工具按技能启用
             code_tools_enabled = should_enable_code_tools(req.skills or [])
             
-            # 基础工具：始终包含内部 API 调用 + 用户交互工具
-            active_tools = [INTERNAL_API_TOOL, USER_INPUT_TOOL]
+            # 基础工具：始终包含内部 API 调用 + 用户交互 + UI操作
+            active_tools = [INTERNAL_API_TOOL, USER_INPUT_TOOL, UI_ACTION_TOOL]
             
             # 代码执行工具：仅选用代码类技能时附加
             if code_tools_enabled:
@@ -440,6 +440,19 @@ async def chat_stream(
                 "code_tools_enabled": code_tools_enabled,
             })
     
+            # 4.5 执行前文件快照（用于检测本轮新增的产出文件）
+            try:
+                from ...core.orchestrator import _pre_scan_snapshots
+                from ...core.sandbox import list_files as sandbox_list
+                result = sandbox_list(".", current_user.id)
+                if result.get("ok"):
+                    _pre_scan_snapshots[current_user.id] = {
+                        e.get("path", "") for e in result.get("entries", [])
+                        if e.get("type") == "file"
+                    }
+            except Exception:
+                pass
+
             # 5. 流式调用 LLM
             full_response = []
     
@@ -449,6 +462,13 @@ async def chat_stream(
     
             # ── 工具调用分支：逐事件产出具象化输出 ──
             llm_config = user_llm if using_own_key else None
+            # 真实 token 用量采集（替换字符估算，见下方配额扣减）
+            _usage_acc = {"prompt": 0, "completion": 0}
+
+            def _on_usage(p: int, c: int) -> None:
+                _usage_acc["prompt"] += p
+                _usage_acc["completion"] += c
+
             async for event in llm_manager.stream_with_tools(
                 messages=messages,
                 tools=active_tools,
@@ -456,6 +476,7 @@ async def chat_stream(
                 user_id=current_user.id,
                 model=req.model or None,
                 user_config=llm_config,
+                on_usage=_on_usage,
             ):
                     if await request.is_disconnected():
                         break
@@ -495,6 +516,13 @@ async def chat_stream(
                             "confirm_text": event.get("confirm_text", "确认"),
                             "cancel_text": event.get("cancel_text", "取消"),
                         })
+                    elif etype == "ui_action":
+                        # UI 操作事件：转发给前端执行
+                        yield _sse({
+                            "event": "ui_action",
+                            "action": event.get("action", ""),
+                            "params": event.get("params", {}),
+                        })
                     elif etype == "done":
                         break  # 正常结束
     
@@ -510,10 +538,10 @@ async def chat_stream(
             # 更新对话时间
             conv.updated_at = datetime.now(timezone.utc)
     
-            # 累计 token 用量（仅使用平台免费额度时累计；用户自带 key 不计入平台配额）
+            # 累计 token 用量（仅使用平台免费额度时累计；用 LLM 真实 usage 替换字符估算）
             if not using_own_key:
-                est_tokens = _estimate_tokens(req.message) + _estimate_tokens("".join(full_response))
-                current_user.add_token_usage(est_tokens)
+                real_tokens = _usage_acc["prompt"] + _usage_acc["completion"]
+                current_user.add_token_usage(real_tokens)
                 await session.flush()
     
             # 7. 收集产出文件并发送完成事件
@@ -718,6 +746,17 @@ async def _execute_any_tool(
             "message": f"已向用户发起交互请求: {tool_args.get('title', '')}",
         }, ensure_ascii=False)
 
+    # ── UI 操作 ──
+    if tool_name == "ui_action":
+        action = tool_args.get("action", "")
+        params = tool_args.get("params", {})
+        event = build_ui_action_event(action, params)
+        return _json.dumps({
+            "ok": True,
+            "ui_action": event,
+            "message": f"已执行 UI 操作: {action}",
+        }, ensure_ascii=False)
+
     # ── 代码执行 / 任务创建（走原有 tools.py 调度）──
     return await execute_tool(tool_name, tool_args, user_id, session)
 
@@ -751,6 +790,14 @@ def _build_internal_tools_prompt() -> str:
 - multi_select：多选（如「请选择要启用的技能」）
 - form：表单（如「请填写 Agent 的名称和描述」）
 
+## ui_action — 前端 UI 操作
+
+直接控制前端界面，用户说切换主题、跳转页面、调整布局时使用此工具：
+- **主题切换**：`toggle_theme`（切换明暗）、`set_theme`（设置指定主题）
+- **页面导航**：`navigate`（跳转到指定页面，如 /chat、/workspace、/tasks 等）
+- **布局调整**：`toggle_sidebar`（切换侧边栏）、`toggle_file_tree`（切换文件树）、`toggle_chat_panel`（切换聊天面板）
+- **界面操作**：`show_notification`（显示通知）、`new_chat`（新建对话）、`new_task`（新建任务）
+
 ## 🔴 使用原则（非常重要）
 
 1. **主动调用**：用户说「创建 PPT」「做个 Agent」「修改主题」时，**直接调用内部 API 完成操作**，不要只说「你可以去XX页面操作」
@@ -758,7 +805,7 @@ def _build_internal_tools_prompt() -> str:
 3. **缺少信息时提问**：如果用户指令模糊（如只说「创建智能体」没给名字），用 request_user_input 询问缺失参数
 4. **操作后告知结果**：API 调用完成后，向用户报告操作结果（成功/失败/创建了什么）
 5. **PPT 生成**：用户说需要 PPT 时，先询问主题和内容要求，然后通过 call_internal_api 创建 PPT 相关任务，同时在沙箱中可以用 python-pptx 生成 .pptx 文件
-6. **主题/字体设置**：用户说修改主题/字体时，通过 call_internal_api PUT /api/v1/auth/me 的 preferences 字段存储设置（前端会自动应用新主题，无需用户手动点击）
+6. **主题/布局调整**：用户说切换主题、切换暗色/亮色模式、跳转页面、隐藏/显示侧边栏时，使用 ui_action 工具直接操作前端界面，操作立即生效
 7. **创建 Agent**：用户说要创建智能体时，先收集名称和描述，再用 call_internal_api POST /api/v1/agents 创建
 
 ## API 路径速查

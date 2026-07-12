@@ -17,6 +17,7 @@ from .dashboard import router as dashboard_router
 from .ws import router as ws_router
 from .knowledge import router as knowledge_router
 from .workflows import router as workflows_router
+from .efficiency import router as efficiency_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -33,6 +34,7 @@ api_router.include_router(dashboard_router)
 api_router.include_router(ws_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(workflows_router)
+api_router.include_router(efficiency_router)
 
 __all__ = [
     "api_router", "auth_router", "chat_router", "agents_router", "tasks_router",

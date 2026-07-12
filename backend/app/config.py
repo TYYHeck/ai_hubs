@@ -27,7 +27,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
-    port: int = 8080
+    port: int = 8082
 
 
 class MySQLConfig(BaseModel):

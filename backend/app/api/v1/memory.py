@@ -100,6 +100,19 @@ async def get_stats(
     return await memory_manager.get_stats(current_user.id, agent)
 
 
+@router.delete("/entries/{entry_id}")
+async def delete_entry(
+    entry_id: int,
+    agent: str = "default",
+    current_user: User = Depends(get_current_user),
+):
+    """删除单条记忆条目（议题 #14）。"""
+    ok = await memory_manager.delete_entry(current_user.id, agent, entry_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="记忆条目不存在")
+    return {"ok": True}
+
+
 @router.post("/compress")
 async def compress(
     agent: str = "default",

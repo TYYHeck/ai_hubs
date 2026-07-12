@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("ai_hubs.agents")
 
+# Agent 名保留字：与记忆隔离键/系统语义冲突，禁止作为 Agent 名（不区分大小写）。
+# 防止普通 Agent 命名为 "default"/"global" 导致记忆与 global/默认记忆键混写。
+_RESERVED_AGENT_NAMES = {"default", "global", "__global__", "system", "user"}
+
 from ...core.llm import llm_manager
 from ...database import get_session
 from ...models.agent import Agent
@@ -132,6 +136,13 @@ async def create_agent(
             detail=f"名为「{data.name}」的 Agent 已存在，请勿重复创建。",
         )
 
+    # 保留名校验：禁止与记忆隔离键/系统语义冲突的 Agent 名，防记忆混写
+    if data.name.strip().lower() in _RESERVED_AGENT_NAMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Agent 名称「{data.name}」为系统保留字，请换一个名称。",
+        )
+
     system_prompt = data.system_prompt
     # 快速配置：仅输入名称与描述，由 AI 自动生成专业 system_prompt
     if data.setup_mode == "quick" and not system_prompt:
@@ -197,6 +208,14 @@ async def update_agent(
         raise HTTPException(status_code=404, detail="Agent 不存在")
 
     update_data = data.model_dump(exclude_unset=True)
+
+    # 保留名校验：若改名，禁止改为系统保留字，防记忆混写
+    new_name = update_data.get("name")
+    if new_name is not None and new_name.strip().lower() in _RESERVED_AGENT_NAMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Agent 名称「{new_name}」为系统保留字，请换一个名称。",
+        )
 
     # 全局默认互斥：若设为默认，则将该用户其他 Agent 的 is_default 置否
     if update_data.get("is_default") is True and not agent.is_default:

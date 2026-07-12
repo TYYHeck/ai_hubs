@@ -6,6 +6,7 @@ import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { useLocalProxyStore } from './stores/localProxyStore'
 import { AppRouter } from './router'
+import NotificationContainer from './components/NotificationContainer'
 
 export default function App() {
   const checkAuth = useAuthStore((s) => s.checkAuth)
@@ -34,5 +35,10 @@ export default function App() {
     )
   }
 
-  return <RouterProvider router={AppRouter} />
+  return (
+    <>
+      <RouterProvider router={AppRouter} />
+      <NotificationContainer />
+    </>
+  )
 }

@@ -158,9 +158,10 @@ TOOL_DEFINITIONS: list[dict] = [
             "name": "create_task",
             "description": (
                 "为用户创建一个后台异步任务。当对话内容涉及需要较长时间执行、"
-                "需要多步骤处理、或用户明确要求创建任务时调用此工具。"
-                "任务创建后会出现在用户的侧边栏任务列表中，用户可手动执行。"
+                "需要多步骤处理时调用此工具。任务创建后会出现在用户的侧边栏任务列表中。"
                 "必须提供任务标题和描述；可选指定 Agent 名称、优先级(0-10)、标签。"
+                "重要：auto_execute 参数控制是否立即执行——用户说'帮我做/生成/写...'等需求描述时设为 true；"
+                "用户明确说'创建任务'或'新建任务'时设为 false。"
             ),
             "parameters": {
                 "type": "object",
@@ -185,6 +186,15 @@ TOOL_DEFINITIONS: list[dict] = [
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "任务标签列表（可选）",
+                    },
+                    "auto_execute": {
+                        "type": "boolean",
+                        "description": (
+                            "创建后是否立即自动执行任务。"
+                            "true = 用户表达了要完成某事的需求（如'帮我做PPT'、'写个脚本'），创建后立即运行；"
+                            "false = 用户明确说'创建任务'、'新建任务'，只创建不执行，由用户手动启动。"
+                            "默认 true。"
+                        ),
                     },
                 },
                 "required": ["title", "description"],
@@ -299,7 +309,8 @@ plt.savefig('/root/chart.png') # 用户看不到！
 
 **当用户让你完成 PPT、报告、数据分析、模型训练等复杂耗时工作时，必须主动调用 `create_task` 工具创建后台任务，而不是仅用文字描述步骤。**
 
-- 遇到「生成 PPT」「写报告」「做分析」「训练/微调模型」等指令 → 立刻 `create_task`
+- 遇到「生成 PPT」「写报告」「做分析」「训练/微调模型」等指令 → 立刻 `create_task`，且 `auto_execute=true` 自动执行
+- 用户明确说「创建一个XX任务」「新建任务」→ `create_task` 且 `auto_execute=false`，只创建不执行
 - 任务 description 要包含完整执行指令，让 Agent 拿到后能直接开始
 - 创建任务后告知用户任务已提交，可在侧边栏「任务」页面追踪进度
 """
@@ -394,7 +405,7 @@ async def _execute_create_task(
     user_id: int,
     session: "AsyncSession | None",
 ) -> str:
-    """在数据库中创建任务（由 LLM 通过 create_task 工具调用触发）。"""
+    """在数据库中创建任务（由 LLM 通过 create_task 工具调用触发），并自动开始执行。"""
     if session is None:
         return json.dumps({"error": "创建任务需要数据库会话，当前上下文不可用"}, ensure_ascii=False)
 
@@ -405,14 +416,18 @@ async def _execute_create_task(
     if not title:
         return json.dumps({"error": "任务标题不能为空"}, ensure_ascii=False)
 
+    auto_execute = bool(args.get("auto_execute", True))
+    mode = args.get("mode", "auto")
+    priority = max(0, min(10, int(args.get("priority", 5) or 5)))
+
     task = Task(
         id=uuid.uuid4().hex[:12],
         user_id=user_id,
         title=title,
         description=description,
         status="pending",
-        priority=max(0, min(10, int(args.get("priority", 5) or 5))),
-        mode="auto",
+        priority=priority,
+        mode=mode,
         think_depth=1,
         think_visibility="visible",
         assigned_agent=args.get("agent_name", ""),
@@ -422,13 +437,56 @@ async def _execute_create_task(
     session.add(task)
     await session.flush()
 
-    logger.info(f"create_task 工具创建任务: id={task.id} title={title!r} user={user_id}")
+    logger.info(f"create_task 工具创建任务: id={task.id} title={title!r} user={user_id} auto_execute={auto_execute}")
+
+    # 自动执行任务（后台运行）
+    if auto_execute:
+        try:
+            from .orchestrator import execute_task
+            queue: asyncio.Queue = asyncio.Queue()
+            asyncio.create_task(
+                _bg_execute_task(task.id, user_id, queue, mode)
+            )
+            task.status = "running"
+            await session.flush()
+            return json.dumps({
+                "ok": True,
+                "task_id": task.id,
+                "title": title,
+                "status": "running",
+                "message": f"任务「{title}」已创建并开始执行，可在侧边栏任务列表中查看进度。",
+            }, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"自动启动任务失败: {e}")
+            return json.dumps({
+                "ok": True,
+                "task_id": task.id,
+                "title": title,
+                "status": "pending",
+                "message": f"任务「{title}」已创建，可在侧边栏任务列表中手动执行。",
+            }, ensure_ascii=False)
+
     return json.dumps({
         "ok": True,
         "task_id": task.id,
         "title": title,
+        "status": "pending",
         "message": f"任务「{title}」已创建，可在侧边栏任务列表中查看和执行。",
     }, ensure_ascii=False)
+
+
+async def _bg_execute_task(task_id: str, user_id: int, queue: asyncio.Queue, mode: str = "auto"):
+    """后台执行任务的包装函数"""
+    try:
+        from .orchestrator import execute_task
+        await execute_task(
+            task_id=task_id,
+            event_queue=queue,
+            user_id=user_id,
+            assignment="ai" if mode == "auto" else "direct",
+        )
+    except Exception as e:
+        logger.error(f"后台任务执行异常: {e}", exc_info=True)
 
 
 def should_enable_tools(skills: list[str]) -> bool:
@@ -449,6 +507,26 @@ def should_enable_code_tools(skills: list[str]) -> bool:
         return False
     requested = {s.lower().strip() for s in skills}
     return bool(requested & {s.lower() for s in EXECUTABLE_SKILLS})
+
+
+# 代码执行类工具名（受 Agent skills 约束，须与 EXECUTABLE_SKILLS 语义对应）
+CODE_TOOL_NAMES: set[str] = {
+    "run_code", "run_terminal", "read_file", "write_file", "list_files",
+}
+
+
+def get_enabled_tools(skills: list[str]) -> list[dict]:
+    """按 Agent 的 skills 过滤工具定义。
+
+    内部工具（call_internal_api、request_user_input、ui_action 等）始终可用；
+    代码执行类工具（run_code/run_terminal/read_file/write_file/list_files）
+    仅当 should_enable_code_tools(skills) 为真时附加。
+    """
+    enable_code = should_enable_code_tools(skills or [])
+    return [
+        t for t in TOOL_DEFINITIONS
+        if t["function"]["name"] not in CODE_TOOL_NAMES or enable_code
+    ]
 
 
 def get_tool_summary(tool_name: str, tool_args: dict) -> str:
@@ -473,11 +551,21 @@ def get_tool_summary(tool_name: str, tool_args: dict) -> str:
         return f"列出目录: {p}"
     elif tool_name == "call_internal_api":
         reason = tool_args.get("reason", "")
-        method = tool_args.get("method", "")
-        path = tool_args.get("path", "")
-        return f"内部调用: {method} {path} — {reason}"
+        # 不暴露内部 API 路径，只显示调用目的
+        if reason:
+            return f"查询平台信息: {reason}"
+        return "查询平台信息"
     elif tool_name == "request_user_input":
         itype = tool_args.get("interaction_type", "")
         title = tool_args.get("title", "")
-        return f"询问用户: [{itype}] {title}"
+        type_names = {
+            "confirm": "确认",
+            "select": "选择",
+            "multi_select": "多选",
+            "form": "表单填写",
+        }
+        type_label = type_names.get(itype, "交互")
+        if title:
+            return f"{type_label}: {title}"
+        return f"请求用户{type_label}"
     return f"调用 {tool_name}"

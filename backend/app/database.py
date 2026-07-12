@@ -148,7 +148,7 @@ async def _create_tables():
     from .models.base import Base
     from sqlalchemy import inspect, text
     # 导入所有模型以确保它们被注册到 Base.metadata
-    from .models import user, agent, task, skill, dataset, memory, conversation, system  # noqa: F401
+    from .models import user, agent, task, skill, dataset, memory, conversation, system, knowledge  # noqa: F401
 
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

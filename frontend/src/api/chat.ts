@@ -55,7 +55,7 @@ export interface Conversation {
 }
 
 export interface SSEEvent {
-  event: 'start' | 'delta' | 'think' | 'done' | 'error' | 'tool_start' | 'tool_result' | 'interactive'
+  event: 'start' | 'delta' | 'think' | 'done' | 'error' | 'tool_start' | 'tool_result' | 'interactive' | 'ui_action'
   conversation_id?: string
   content?: string
   message_id?: number
@@ -76,6 +76,9 @@ export interface SSEEvent {
   fields?: { name: string; label: string; type: string; options?: { value: string; label: string }[]; placeholder?: string }[]
   confirm_text?: string
   cancel_text?: string
+  // UI 操作事件
+  action?: string
+  params?: Record<string, any>
 }
 
 // ── 对话管理 ──

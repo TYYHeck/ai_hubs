@@ -108,7 +108,10 @@ async def list_modes(current_user=Depends(get_current_user)):
         {"id": "hierarchical", "name": "层级", "desc": "主管 Agent 分解任务，委派成员执行，汇总交付", "icon": "git-merge"},
         {"id": "swarm", "name": "群体自组织", "desc": "Agent 共享上下文，自选子任务协作", "icon": "share-2"},
         {"id": "custom", "name": "自定义流水线", "desc": "按指定顺序串行执行，每个步骤可指定 Agent", "icon": "sliders"},
-        {"id": "auto", "name": "自动工作流", "desc": "按任务内容自动指派最合适 Agent（支持直接匹配或 AI 分析精细指派）", "icon": "sparkles"},
+        {"id": "peer_review", "name": "同行评审", "desc": "多 Agent 出初稿 → 评审者逐一点评 → 作者修订 → 汇总终稿", "icon": "check-circle"},
+        {"id": "round_table", "name": "圆桌讨论", "desc": "主持人引导 + 参与者轮流发言，动态收敛提前结束", "icon": "users"},
+        {"id": "workflow", "name": "自定义工作流", "desc": "按 WorkflowNode 图拓扑执行（agent/tool/condition/parallel/sequential）", "icon": "workflow"},
+        {"id": "auto", "name": "自动工作流", "desc": "按任务内容自动指派最合适 Agent 与编排模式（覆盖全部 8+ 模式，支持直接匹配或 AI 分析）", "icon": "sparkles"},
     ]
     return modes
 

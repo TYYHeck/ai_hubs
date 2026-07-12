@@ -8,6 +8,26 @@ import remarkGfm from 'remark-gfm'
 import { api, ideApi } from '../../api/client'
 import { getToken } from '../../api/client'
 import { FilePreviewModal } from '../../components/FilePreviewModal'
+import { notifySuccess, notifyError } from '../../stores/notificationStore'
+
+function shouldShowTool(toolName: string): boolean {
+  const internalTools = ['call_internal_api']
+  return !internalTools.includes(toolName)
+}
+
+function getFriendlyToolName(toolName: string): string {
+  const names: Record<string, string> = {
+    run_code: '执行代码',
+    run_terminal: '运行命令',
+    read_file: '读取文件',
+    write_file: '写入文件',
+    list_files: '列出文件',
+    request_user_input: '用户交互',
+    call_internal_api: '查询平台',
+    web_search: '网络搜索',
+  }
+  return names[toolName] || toolName
+}
 
 async function readSSE(taskId: string, onMessage: (data: any) => void, signal: AbortSignal) {
   try {
@@ -108,6 +128,11 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       if (evt.event === 'agent_done' || evt.event === 'task_completed' || evt.event === 'task_failed') {
         setWorkingAgent(null)
         fetchTasks()
+        if (evt.event === 'task_completed') {
+          notifySuccess('任务完成', running.title)
+        } else if (evt.event === 'task_failed') {
+          notifyError('任务失败', evt.data?.error || running.title)
+        }
       }
       setEvents((prev) => [...prev, evt])
     }, ctrl.signal)
@@ -226,11 +251,18 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     ) : (
                       <div className="relative">
                         <div className="absolute left-[6px] top-1 bottom-1 w-px bg-border" />
-                        {events.map((ev, i) => {
+                        {events.filter(ev => {
+                          if (ev.event === 'tool_start' || ev.event === 'tool_result') {
+                            return shouldShowTool(ev.data?.tool || '')
+                          }
+                          return true
+                        }).map((ev, i) => {
                           const isToolStart = ev.event === 'tool_start'
                           const isToolResult = ev.event === 'tool_result'
                           const isAutoAssign = ev.event === 'auto_assign_start'
                           const isAutoAssigned = ev.event === 'auto_assigned'
+                          const isAiAnalysisStart = ev.event === 'ai_analysis_start'
+                          const isAiAnalysisDone = ev.event === 'ai_analysis_done'
                           const isAgentStart = ev.event === 'agent_start'
                           const isAgentDone = ev.event === 'agent_done'
                           const isTaskStart = ev.event === 'task_start'
@@ -245,12 +277,22 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
                           if (isAutoAssign) {
                             icon = <div className="w-3 h-3 rounded-full bg-blue-500" />
-                            title = 'AI 分析任务'
+                            title = 'AI 分配任务'
                             desc = ev.data?.candidates?.length ? `${ev.data.candidates.length} 个候选` : ''
+                          } else if (isAiAnalysisStart) {
+                            icon = <div className="w-3 h-3 rounded-full bg-purple-500 animate-pulse" />
+                            title = 'AI 分析任务'
+                            desc = ev.data?.title || ''
+                          } else if (isAiAnalysisDone) {
+                            icon = <div className="w-3 h-3 rounded-full bg-purple-500" />
+                            title = '分析完成'
+                            desc = ev.data?.category || ''
                           } else if (isAutoAssigned) {
                             icon = <Sparkles size={12} className="text-accent" />
-                            title = `分配: ${ev.data?.agent || '-'}`
-                            desc = ev.data?.strategy || ''
+                            const wfMode = ev.data?.workflow_mode
+                            const wfName = wfMode === 'single' ? '单 Agent' : wfMode === 'sequential' ? '串行' : wfMode === 'parallel' ? '并行' : wfMode || ''
+                            title = wfName ? `${wfName}: ${ev.data?.agent || '-'}` : `分配: ${ev.data?.agent || '-'}`
+                            desc = ev.data?.workflow_reason || ev.data?.strategy || ''
                           } else if (isTaskStart) {
                             icon = <div className="w-3 h-3 rounded-full bg-blue-500" />
                             title = '任务开始'
@@ -260,11 +302,11 @@ export function TaskDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                             desc = ev.data?.model || ''
                           } else if (isToolStart) {
                             icon = <Wrench size={12} className="text-purple-500" />
-                            title = `工具: ${ev.data?.tool || '-'}`
+                            title = `${getFriendlyToolName(ev.data?.tool || '')}`
                             desc = ev.data?.summary || ''
                           } else if (isToolResult) {
                             icon = <CheckCircle2 size={12} className="text-green-500" />
-                            title = `${ev.data?.tool || '工具'} 完成`
+                            title = `${getFriendlyToolName(ev.data?.tool || '工具')} 完成`
                           } else if (isAgentDone) {
                             icon = <div className="w-3 h-3 rounded-full bg-green-500" />
                             title = `${ev.data?.agent || 'Agent'} 完成`

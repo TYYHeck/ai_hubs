@@ -18,6 +18,103 @@ interface TaskData {
 
 interface ModeInfo { id: string; name: string; desc: string; icon: string }
 
+const modeNames: Record<string, string> = {
+  auto: 'AI 自动',
+  single: '单 Agent',
+  sequential: '串行执行',
+  parallel: '并行执行',
+  debate: '辩论模式',
+  vote: '投票模式',
+  hierarchical: '分层管理',
+  swarm: '群体协作',
+  custom: '自定义',
+}
+
+function getModeName(mode: string): string {
+  return modeNames[mode] || mode
+}
+
+function getAutoWorkflowInfo(events: Array<{ event: string; data: Record<string, any> }> | undefined): { mode: string; reason: string; agent: string } | null {
+  if (!events) return null
+  const assigned = events.find(e => e.event === 'auto_assigned')
+  if (!assigned?.data) return null
+  const wf = assigned.data.workflow_mode
+  const reason = assigned.data.workflow_reason
+  const agent = assigned.data.agent
+  if (wf) return { mode: wf, reason: reason || '', agent: agent || '' }
+  return null
+}
+
+function safeSlice(str: string, maxLen: number): string {
+  if (!str || str.length <= maxLen) return str
+  let result = ''
+  let count = 0
+  for (const ch of str) {
+    if (count >= maxLen) break
+    result += ch
+    count++
+  }
+  return result
+}
+
+function formatToolArgs(args: Record<string, any> | undefined): string {
+  if (!args || Object.keys(args).length === 0) return ''
+  try {
+    const cloned: Record<string, any> = {}
+    for (const [k, v] of Object.entries(args)) {
+      if (typeof v === 'string' && v.length > 200) {
+        cloned[k] = v.slice(0, 200) + '…'
+      } else {
+        cloned[k] = v
+      }
+    }
+    return JSON.stringify(cloned, null, 2)
+  } catch {
+    return ''
+  }
+}
+
+function getToolSummary(args: Record<string, any> | undefined, toolName: string): string {
+  if (!args) return ''
+  if (toolName === 'write_file' && args.path) {
+    return `写入文件: ${args.path}`
+  }
+  if (toolName === 'read_file' && args.path) {
+    return `读取文件: ${args.path}`
+  }
+  if (toolName === 'run_command' && args.command) {
+    return `执行命令: ${String(args.command).slice(0, 60)}`
+  }
+  if (toolName === 'call_internal_api' && args.endpoint) {
+    const ep = String(args.endpoint)
+    if (ep.includes('/agents')) return '查询 Agent 信息'
+    if (ep.includes('/tasks')) return '查询任务信息'
+    if (ep.includes('/datasets')) return '查询数据集'
+    if (ep.includes('/memory')) return '查询记忆'
+    if (ep.includes('/skills')) return '查询技能'
+    if (ep.includes('/workspace') || ep.includes('/ide')) return '查询工作区'
+    return '查询平台信息'
+  }
+  if (toolName === 'request_user_input') {
+    const itype = String(args.interaction_type || '')
+    const title = String(args.title || '')
+    const typeNames: Record<string, string> = {
+      confirm: '确认',
+      select: '选择',
+      multi_select: '多选',
+      form: '表单填写',
+    }
+    const typeLabel = typeNames[itype] || '交互'
+    return title ? `${typeLabel}: ${title}` : `请求用户${typeLabel}`
+  }
+  return ''
+}
+
+function shouldShowTool(toolName: string): boolean {
+  const internalTools = ['call_internal_api']
+  return !internalTools.includes(toolName)
+}
+
 const modeIcons: Record<string, JSX.Element> = {
   user: <Zap size={14} />, 'arrow-right': <GitBranch size={14} />,
   'git-branch': <GitBranch size={14} />, 'message-square': <GitBranch size={14} />,
@@ -48,6 +145,18 @@ export default function TasksPage() {
   })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const [expandedToolArgs, setExpandedToolArgs] = useState<Record<string, boolean>>({})
+  const [expandedToolResult, setExpandedToolResult] = useState<Record<string, boolean>>({})
+
+  const toggleToolArgs = (taskId: string, evtIdx: number) => {
+    const key = `${taskId}-args-${evtIdx}`
+    setExpandedToolArgs(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+  const toggleToolResult = (taskId: string, evtIdx: number) => {
+    const key = `${taskId}-result-${evtIdx}`
+    setExpandedToolResult(prev => ({ ...prev, [key]: !prev[key] }))
+  }
 
   const fetchData = async () => {
     try {
@@ -270,7 +379,12 @@ export default function TasksPage() {
                         {t.status === 'pending' ? '等待中' : t.status === 'running' ? '运行中' : t.status === 'completed' ? '已完成' : t.status === 'failed' ? '失败' : t.status === 'paused' ? '已暂停' : t.status}
                       </span>
                       <span className="text-text-primary font-medium truncate">{t.title}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">{t.mode}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
+                        {t.mode === 'auto' ? (() => {
+                          const wf = getAutoWorkflowInfo(t.events)
+                          return wf ? `AI → ${getModeName(wf.mode)}` : 'AI 自动'
+                        })() : getModeName(t.mode)}
+                      </span>
                     </div>
                     <p className="text-text-muted text-xs truncate">{t.description || '无描述'}</p>
                     {t.assigned_agent && (
@@ -326,7 +440,17 @@ export default function TasksPage() {
                 {expandedId === t.id && (
                   <div className="px-4 pb-4 border-t border-border pt-3">
                     <div className="grid grid-cols-4 gap-3 text-xs text-text-secondary mb-4">
-                      <div><span className="text-text-muted text-[10px] uppercase tracking-wide">模式</span><br /><span className="text-text-primary">{t.mode}</span></div>
+                      <div>
+                        <span className="text-text-muted text-[10px] uppercase tracking-wide">模式</span>
+                        <br />
+                        <span className="text-text-primary">
+                          {getModeName(t.mode)}
+                          {t.mode === 'auto' && (() => {
+                            const wf = getAutoWorkflowInfo(t.events)
+                            return wf ? <span className="text-text-dim ml-1">→ {getModeName(wf.mode)}</span> : null
+                          })()}
+                        </span>
+                      </div>
                       <div><span className="text-text-muted text-[10px] uppercase tracking-wide">优先级</span><br /><span className="text-text-primary">{t.priority}</span></div>
                       <div><span className="text-text-muted text-[10px] uppercase tracking-wide">思考深度</span><br /><span className={t.think_depth > 1 ? 'text-accent font-medium' : 'text-text-primary'}>{t.think_depth}</span></div>
                       <div><span className="text-text-muted text-[10px] uppercase tracking-wide">思考可见</span><br /><span className="text-text-primary">{t.think_visibility}</span></div>
@@ -341,16 +465,23 @@ export default function TasksPage() {
                       <div className="mb-4">
                         <div className="text-xs text-text-muted font-medium mb-2 flex items-center gap-2">
                           <GitBranch size={12} /> 工作流阶段
-                          <span className="text-text-dim font-normal">({t.events.length} 个事件)</span>
+                          <span className="text-text-dim font-normal">({t.events.filter(e => !(e.event === 'tool_start' || e.event === 'tool_result') || shouldShowTool(e.data?.tool || '')).length} 个步骤)</span>
                         </div>
                         <div className="bg-bg-tertiary rounded-lg p-3 max-h-[300px] overflow-y-auto">
                           <div className="relative">
                             <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
-                            {t.events.map((evt, idx) => {
+                            {t.events.filter(evt => {
+                              if (evt.event === 'tool_start' || evt.event === 'tool_result') {
+                                return shouldShowTool(evt.data?.tool || '')
+                              }
+                              return true
+                            }).map((evt, idx) => {
                               const isToolStart = evt.event === 'tool_start'
                               const isToolResult = evt.event === 'tool_result'
                               const isAutoAssign = evt.event === 'auto_assign_start'
                               const isAutoAssigned = evt.event === 'auto_assigned'
+                              const isAiAnalysisStart = evt.event === 'ai_analysis_start'
+                              const isAiAnalysisDone = evt.event === 'ai_analysis_done'
                               const isAgentStart = evt.event === 'agent_start'
                               const isAgentDone = evt.event === 'agent_done'
                               const isTaskStart = evt.event === 'task_start'
@@ -369,13 +500,29 @@ export default function TasksPage() {
 
                               if (isAutoAssign) {
                                 icon = <div className="w-3.5 h-3.5 rounded-full bg-blue-500" />
-                                title = 'AI 分析任务'
+                                title = 'AI 分配任务'
                                 desc = `候选 Agent: ${evt.data?.candidates?.join(', ') || '-'}`
                                 colorClass = 'text-blue-600 dark:text-blue-400'
+                              } else if (isAiAnalysisStart) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-purple-500 animate-pulse" />
+                                title = 'AI 分析任务'
+                                desc = evt.data?.title ? `任务: ${evt.data.title}` : '正在分析任务...'
+                                colorClass = 'text-purple-600 dark:text-purple-400'
+                              } else if (isAiAnalysisDone) {
+                                icon = <div className="w-3.5 h-3.5 rounded-full bg-purple-500" />
+                                title = '任务分析完成'
+                                const kws = evt.data?.keywords?.slice(0, 4)?.join(', ')
+                                desc = `分类: ${evt.data?.category || '-'}${kws ? ` | 关键词: ${kws}` : ''}`
+                                colorClass = 'text-purple-600 dark:text-purple-400'
                               } else if (isAutoAssigned) {
                                 icon = <div className="w-3.5 h-3.5 rounded-full bg-accent" />
                                 title = '任务分配'
-                                desc = `策略: ${evt.data?.strategy || '-'} → Agent: ${evt.data?.agent || '-'}`
+                                const wfMode = evt.data?.workflow_mode
+                                const wfName = wfMode ? getModeName(wfMode) : ''
+                                desc = `${evt.data?.strategy || '-'} → ${wfName || '单 Agent'}: ${evt.data?.agent || '-'}`
+                                if (evt.data?.workflow_reason) {
+                                  desc += `\n原因: ${evt.data.workflow_reason}`
+                                }
                                 colorClass = 'text-accent'
                               } else if (isTaskStart) {
                                 icon = <div className="w-3.5 h-3.5 rounded-full bg-blue-500" />
@@ -389,12 +536,12 @@ export default function TasksPage() {
                               } else if (isToolStart) {
                                 icon = <Wrench size={14} className="text-purple-500" />
                                 title = `调用工具: ${evt.data?.tool || '-'}`
-                                desc = evt.data?.summary || ''
+                                desc = getToolSummary(evt.data?.args, evt.data?.tool || '') || evt.data?.summary || ''
                                 colorClass = 'text-purple-600 dark:text-purple-400'
                               } else if (isToolResult) {
                                 icon = <CheckCircle2 size={14} className="text-green-500" />
                                 title = `工具完成: ${evt.data?.tool || '-'}`
-                                desc = evt.data?.result_preview ? `${evt.data.result_preview.slice(0, 80)}${evt.data.result_preview.length > 80 ? '...' : ''}` : ''
+                                desc = evt.data?.result_preview ? `${safeSlice(evt.data.result_preview, 100)}${evt.data.result_preview.length > 100 ? '…' : ''}` : ''
                                 colorClass = 'text-green-600 dark:text-green-400'
                               } else if (isAgentDone) {
                                 icon = <div className="w-3.5 h-3.5 rounded-full bg-green-500" />
@@ -443,12 +590,54 @@ export default function TasksPage() {
                                   <div className="text-xs">
                                     <span className={`font-medium ${colorClass}`}>{title}</span>
                                     {desc && (
-                                      <p className="text-text-dim mt-0.5 break-words">{desc}</p>
+                                      <p className="text-text-dim mt-0.5 break-words whitespace-pre-wrap">{desc}</p>
                                     )}
                                     {evt.data?.args && isToolStart && Object.keys(evt.data.args).length > 0 && (
-                                      <div className="mt-1 bg-bg-secondary/60 rounded p-1.5 text-[10px] font-mono text-text-muted break-all">
-                                        {JSON.stringify(evt.data.args).slice(0, 120)}
-                                        {JSON.stringify(evt.data.args).length > 120 && '...'}
+                                      <div className="mt-1">
+                                        {(() => {
+                                          const key = `${t.id}-args-${idx}`
+                                          const expanded = expandedToolArgs[key]
+                                          const formatted = formatToolArgs(evt.data.args)
+                                          const hasMore = JSON.stringify(evt.data.args).length > 200
+                                          return (
+                                            <>
+                                              <div className={`bg-bg-secondary/60 rounded p-2 text-[10px] font-mono text-text-muted break-all whitespace-pre-wrap ${expanded ? '' : 'max-h-[80px] overflow-hidden'}`}>
+                                                {formatted}
+                                              </div>
+                                              {hasMore && (
+                                                <button
+                                                  onClick={(e) => { e.stopPropagation(); toggleToolArgs(t.id, idx) }}
+                                                  className="mt-1 text-[10px] text-text-dim hover:text-text-primary flex items-center gap-0.5"
+                                                >
+                                                  {expanded ? <>收起 <ChevronDown size={10} /></> : <>展开详情 <ChevronRight size={10} /></>}
+                                                </button>
+                                              )}
+                                            </>
+                                          )
+                                        })()}
+                                      </div>
+                                    )}
+                                    {evt.data?.result_preview && isToolResult && evt.data.result_preview.length > 100 && (
+                                      <div className="mt-1">
+                                        {(() => {
+                                          const key = `${t.id}-result-${idx}`
+                                          const expanded = expandedToolResult[key]
+                                          return (
+                                            <>
+                                              {expanded && (
+                                                <div className="bg-green-500/5 border border-green-500/20 rounded p-2 text-[10px] font-mono text-text-muted break-all whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                                                  {evt.data.result_preview}
+                                                </div>
+                                              )}
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); toggleToolResult(t.id, idx) }}
+                                                className="mt-1 text-[10px] text-green-600 dark:text-green-400 hover:underline flex items-center gap-0.5"
+                                              >
+                                                {expanded ? <>收起结果 <ChevronDown size={10} /></> : <>查看完整结果 <ChevronRight size={10} /></>}
+                                              </button>
+                                            </>
+                                          )
+                                        })()}
                                       </div>
                                     )}
                                   </div>

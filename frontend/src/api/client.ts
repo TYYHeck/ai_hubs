@@ -308,7 +308,13 @@ export const datasetApi = {
     api.get<DatasetRecord[]>(`/datasets/${id}/records?limit=${limit}&offset=${offset}`),
   addRecord: (id: number, data: Record<string, unknown>) =>
     api.post<DatasetRecord>(`/datasets/${id}/records`, { data }),
+  updateRecord: (id: number, recordId: number, data: Record<string, unknown>) =>
+    api.put<DatasetRecord>(`/datasets/${id}/records/${recordId}`, { data }),
   deleteRecord: (id: number, recordId: number) => api.delete(`/datasets/${id}/records/${recordId}`),
+  batchDelete: (id: number, ids: number[]) =>
+    api.post(`/datasets/${id}/records/batch-delete`, { ids }),
+  search: (id: number, q: string, limit = 100, offset = 0) =>
+    api.get<DatasetRecord[]>(`/datasets/${id}/records/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
   importRecords: (id: number, format: 'json' | 'csv', content: string) =>
     api.post<{ inserted: number; skipped: number; total_records: number }>(`/datasets/${id}/import`, { format, content }),
   exportRecords: (id: number, format: 'json' | 'csv' = 'json') =>
@@ -477,12 +483,16 @@ export const ideApi = {
     path: string; name: string; size: number; ext: string; mime: string;
     is_text: boolean; is_image: boolean; is_pdf: boolean; is_media: boolean;
   }>(`/api/v1/ide/files/info?path=${encodeURIComponent(path)}`),
-  // 预览（直接内嵌 URL）
-  previewUrl: (path: string, inline: boolean = true) =>
-    `/api/v1/ide/files/preview?path=${encodeURIComponent(path)}&inline=${inline}`,
-  // 下载 URL
-  downloadUrl: (path: string) =>
-    `/api/v1/ide/files/download?path=${encodeURIComponent(path)}`,
+  // 预览（直接内嵌 URL，自动附加 token 参数用于鉴权）
+  previewUrl: (path: string, inline: boolean = true) => {
+    const token = getToken() || ''
+    return `/api/v1/ide/files/preview?path=${encodeURIComponent(path)}&inline=${inline}${token ? `&token=${encodeURIComponent(token)}` : ''}`
+  },
+  // 下载 URL（自动附加 token 参数用于鉴权）
+  downloadUrl: (path: string) => {
+    const token = getToken() || ''
+    return `/api/v1/ide/files/download?path=${encodeURIComponent(path)}${token ? `&token=${encodeURIComponent(token)}` : ''}`
+  },
 }
 
 // ── 附件上传 API ──

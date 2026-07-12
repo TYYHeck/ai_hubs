@@ -93,10 +93,12 @@ app.include_router(api_router, prefix="/api/v1")
 
 
 # ============================================================
-# 前端静态托管（与旧版兼容：frontend/dist 存在时托管）
+# 前端静态托管（优先根目录 dist，兼容 frontend/dist）
 # ============================================================
 
+_ROOT_DIST = PROJECT_ROOT / "dist"
 _FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+_DIST_DIR = _ROOT_DIST if _ROOT_DIST.is_dir() else _FRONTEND_DIST
 
 
 @app.get("/health")
@@ -113,22 +115,22 @@ async def health():
 @app.get("/", response_class=HTMLResponse)
 async def index():
     """根路由：优先返回前端 SPA，未构建返回简单欢迎页"""
-    index_html = _FRONTEND_DIST / "index.html"
+    index_html = _DIST_DIR / "index.html"
     if index_html.exists():
         return FileResponse(index_html)
     return HTMLResponse(_WELCOME_PAGE)
 
 
 # 前端静态资源（assets 目录）
-if (_FRONTEND_DIST / "assets").is_dir():
-    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+if (_DIST_DIR / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=_DIST_DIR / "assets"), name="assets")
 
 
 # SPA 兜底
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     """未知的非 API 路径返回 index.html（SPA 路由）"""
-    index_html = _FRONTEND_DIST / "index.html"
+    index_html = _DIST_DIR / "index.html"
     if not index_html.exists():
         return HTMLResponse(_WELCOME_PAGE, status_code=404)
     # 放行 API 路径

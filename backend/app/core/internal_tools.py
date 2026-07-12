@@ -130,6 +130,54 @@ INTERNAL_API_TOOL = {
 }
 
 # ═══════════════════════════════════════════════════════════
+# UI 操作工具定义
+# ═══════════════════════════════════════════════════════════
+
+UI_ACTION_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "ui_action",
+        "description": (
+            "触发前端 UI 交互操作，直接控制界面显示状态。"
+            "当用户要求切换主题、切换页面、调整布局、显示/隐藏侧边栏等前端操作时使用此工具。"
+            "调用后前端会立即执行对应的操作，无需用户手动点击。"
+            "\n\n"
+            "【支持的操作】\n\n"
+            "## 主题切换\n"
+            "- 'toggle_theme' — 切换明暗主题（light/dark）\n"
+            "- 'set_theme' — 设置指定主题，params: {theme: 'light'|'dark'}\n\n"
+            "## 页面导航\n"
+            "- 'navigate' — 跳转到指定页面，params: {path: '/chat'|'/workspace'|'/tasks'|'/agents'|'/datasets'|'/knowledge'|'/workflows'|'/skills'|'/settings'}\n\n"
+            "## 布局调整\n"
+            "- 'toggle_sidebar' — 切换左侧边栏显示/隐藏（对话页、工作空间等）\n"
+            "- 'toggle_file_tree' — 切换工作空间文件树显示/隐藏\n"
+            "- 'toggle_chat_panel' — 切换工作空间聊天面板显示/隐藏\n\n"
+            "## 界面操作\n"
+            "- 'show_notification' — 显示通知消息，params: {type: 'success'|'error'|'info'|'warning', title: string, message?: string}\n"
+            "- 'scroll_to_bottom' — 滚动到页面底部\n"
+            "- 'new_chat' — 新建对话\n"
+            "- 'new_task' — 打开新建任务对话框\n\n"
+            "【重要】执行 UI 操作后，用一句话告知用户已完成操作即可，不要重复描述操作细节。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "要执行的 UI 操作名称",
+                },
+                "params": {
+                    "type": "object",
+                    "description": "操作参数（根据不同 action 传入不同参数）",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+}
+
+
+# ═══════════════════════════════════════════════════════════
 # 用户交互工具定义
 # ═══════════════════════════════════════════════════════════
 
@@ -250,7 +298,7 @@ async def execute_internal_api(
     if not path.startswith("/"):
         path = "/" + path
 
-    url = f"http://127.0.0.1:8080{path}"
+    url = f"http://127.0.0.1:8082{path}"
     headers = {
         "Authorization": f"Bearer {user_token}",
         "Content-Type": "application/json",
@@ -350,3 +398,19 @@ def build_interactive_event(
         event["fields"] = fields
 
     return event
+
+
+def build_ui_action_event(action: str, params: dict | None = None) -> dict:
+    """构建 UI 操作事件，通过 SSE 发送给前端执行。
+
+    这个函数不执行实际操作，而是生成一个特殊事件，
+    前端收到后会执行对应的 UI 操作（切换主题、跳转页面等）。
+
+    Returns:
+        UI 操作事件 dict，包含 type='ui_action' 和 action/params
+    """
+    return {
+        "type": "ui_action",
+        "action": action,
+        "params": params or {},
+    }

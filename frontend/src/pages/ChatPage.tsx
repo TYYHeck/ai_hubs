@@ -3,7 +3,7 @@
 //       快捷键 · 搜索 · @Agent/#技能 自动补全 · 实时上下文占用 · 发送/暂停
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { useChatStore, CHAT_SHORTCUTS } from '../stores/chatStore'
+import { useChatStore, CHAT_SHORTCUTS, onUIAction } from '../stores/chatStore'
 import { llmApi } from '../api/chat'
 import { useNavigate } from 'react-router-dom'
 import { TaskDrawer } from '../components/layout/TaskDrawer'
@@ -12,7 +12,7 @@ import {
   Send, Plus, Trash2, Bot, User, Loader2, AlertCircle, Paperclip,
   Search, X, Keyboard, Cpu, ListTodo, Sparkles, FileText, Image as ImageIcon,
   ChevronDown, Check, Star, Code, Terminal, Play, CheckCircle, XCircle,
-  Settings, Eye, Download,
+  Settings, Eye, Download, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { ideApi } from '../api/client'
 import { FilePreviewModal } from '../components/FilePreviewModal'
@@ -45,6 +45,8 @@ export default function ChatPage() {
   const [dragOver, setDragOver] = useState(false)
   const [completers, setCompleters] = useState<Completer>({ agents: [], skills: [] })
   const [completion, setCompletion] = useState<{ items: string[]; active: number; start: number; kind: 'agent' | 'skill' | 'command' } | null>(null)
+  const [completionPos, setCompletionPos] = useState<{ left: number; bottom: number } | null>(null)
+  const mirrorRef = useRef<HTMLDivElement>(null)
 
   // Agent 选择（下拉框 + 输入匹配 + 默认全局默认 Agent）
   const [agents, setAgents] = useState<Agent[]>([])
@@ -103,6 +105,29 @@ export default function ChatPage() {
       setActiveModel(cfg.model || '')
     })
   }, [loadConversations])
+
+  // 监听 AI UI 操作事件
+  useEffect(() => {
+    const off = onUIAction((detail) => {
+      switch (detail.action) {
+        case 'toggle_sidebar':
+          setShowSidebar(s => !s)
+          break
+        case 'new_chat':
+          newConversation()
+          break
+        case 'navigate':
+          if (detail.params?.path) {
+            navigate(detail.params.path)
+          }
+          break
+        case 'scroll_to_bottom':
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+          break
+      }
+    })
+    return off
+  }, [navigate, newConversation])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -201,6 +226,32 @@ export default function ChatPage() {
     const caret = e.target.selectionStart ?? val.length
     const before = val.slice(0, caret)
 
+    // 计算光标位置（用于补全弹窗定位）
+    const calcCaretPos = () => {
+      if (!inputRef.current || !mirrorRef.current) return null
+      const ta = inputRef.current
+      const mirror = mirrorRef.current
+      const style = window.getComputedStyle(ta)
+      const props = ['boxSizing','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle','paddingTop','paddingRight','paddingBottom','paddingLeft','fontStyle','fontVariant','fontWeight','fontStretch','fontSize','fontSizeAdjust','lineHeight','fontFamily','textAlign','textTransform','textIndent','textDecoration','letterSpacing','wordSpacing','tabSize','whiteSpace','wordBreak','overflowWrap']
+      props.forEach(p => {
+        // @ts-ignore
+        mirror.style[p] = style[p]
+      })
+      mirror.style.position = 'absolute'
+      mirror.style.visibility = 'hidden'
+      mirror.style.top = '0'
+      mirror.style.left = '-9999px'
+      mirror.style.width = style.width
+      mirror.style.height = 'auto'
+      mirror.textContent = before + '\u200b'
+      const rect = mirror.getBoundingClientRect()
+      const taRect = ta.getBoundingClientRect()
+      return {
+        left: rect.left - taRect.left,
+        bottom: taRect.height - (rect.top - taRect.top + rect.height),
+      }
+    }
+
     // 匹配 @Agent 或 #技能 或 /命令
     const m = before.match(/(^|\s)([@#])(\w*)$/)  // @ 和 #
     const mCmd = before.match(/(^|\s)(\/)([\w\u4e00-\u9fff-]*)$/)  // /命令（支持中文）
@@ -212,6 +263,7 @@ export default function ChatPage() {
       const items = pool.filter(n => n.toLowerCase().includes(frag)).slice(0, 8)
       if (items.length) {
         setCompletion({ items, active: 0, start: caret - frag.length - 1, kind: trigger === '@' ? 'agent' : 'skill' })
+        setCompletionPos(calcCaretPos())
         return
       }
     } else if (mCmd) {
@@ -236,10 +288,12 @@ export default function ChatPage() {
       const items = pool.filter(n => n.toLowerCase().includes(frag)).slice(0, 8)
       if (items.length) {
         setCompletion({ items, active: 0, start: caret - frag.length - 1, kind: 'command' })
+        setCompletionPos(calcCaretPos())
         return
       }
     }
     setCompletion(null)
+    setCompletionPos(null)
   }
 
   const applyCompletion = (name: string) => {
@@ -282,6 +336,7 @@ export default function ChatPage() {
   // 对话列表宽度（可拖拽）
   const [sidebarWidth, setSidebarWidth] = useState(240)
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(true)
   const sidebarDragRef = useRef<HTMLDivElement>(null)
 
   const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
@@ -290,10 +345,14 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
-    if (!isDraggingSidebar) return
+    if (!isDraggingSidebar || !sidebarDragRef.current) return
+
+    const startX = sidebarDragRef.current.getBoundingClientRect().right
+    const startWidth = sidebarWidth
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.min(Math.max(160, e.clientX), 400)
+      const delta = e.clientX - startX
+      const newWidth = Math.min(Math.max(140, startWidth + delta), 480)
       setSidebarWidth(newWidth)
     }
 
@@ -303,50 +362,58 @@ export default function ChatPage() {
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
     }
-  }, [isDraggingSidebar])
+  }, [isDraggingSidebar, sidebarWidth])
 
   return (
     <div className="flex h-full relative">
       {/* 左侧对话列表（可拖拽宽度） */}
-      <div
-        className="border-r border-border bg-bg-secondary flex flex-col flex-shrink-0"
-        style={{ width: `${sidebarWidth}px` }}>
-        <div className="p-3 border-b border-border flex items-center justify-between">
-          <button onClick={() => { newConversation(); setTaskOpen(false) }}
-            className="btn-primary w-full text-sm flex items-center justify-center gap-2">
-            <Plus size={16} /> 新对话
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {conversations.length === 0 ? (
-            <div className="p-4 text-center text-xs text-text-dim">暂无对话</div>
-          ) : conversations.map((conv) => (
-            <div key={conv.id}
-              onClick={() => selectConversation(conv.id)}
-              className={`group flex items-center gap-2 px-3 py-2.5 cursor-pointer text-sm transition-colors ${
-                currentConvId === conv.id ? 'bg-accent/10 text-accent' : 'text-text-muted hover:bg-bg-tertiary'}`}>
-              <span className="flex-1 truncate">{conv.title || '新对话'}</span>
-              <button onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id) }}
-                className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red-500 dark:hover:text-red-400 transition-opacity">
-                <Trash2 size={14} /></button>
+      {showSidebar && (
+        <>
+          <div
+            className="border-r border-border bg-bg-secondary flex flex-col flex-shrink-0"
+            style={{ width: `${sidebarWidth}px` }}>
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <button onClick={() => { newConversation(); setTaskOpen(false) }}
+                className="btn-primary w-full text-sm flex items-center justify-center gap-2">
+                <Plus size={16} /> 新对话
+              </button>
             </div>
-          ))}
-        </div>
-      </div>
+            <div className="flex-1 overflow-y-auto">
+              {conversations.length === 0 ? (
+                <div className="p-4 text-center text-xs text-text-dim">暂无对话</div>
+              ) : conversations.map((conv) => (
+                <div key={conv.id}
+                  onClick={() => selectConversation(conv.id)}
+                  className={`group flex items-center gap-2 px-3 py-2.5 cursor-pointer text-sm transition-colors ${
+                    currentConvId === conv.id ? 'bg-accent/10 text-accent' : 'text-text-muted hover:bg-bg-tertiary'}`}>
+                  <span className="flex-1 truncate">{conv.title || '新对话'}</span>
+                  <button onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id) }}
+                    className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red-500 dark:hover:text-red-400 transition-opacity">
+                    <Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
 
-      {/* 拖拽条 */}
-      <div
-        ref={sidebarDragRef}
-        onMouseDown={handleSidebarMouseDown}
-        className="w-1 bg-border cursor-col-resize hover:bg-accent/50 transition-colors flex-shrink-0 relative group"
-        style={{ cursor: isDraggingSidebar ? 'col-resize' : 'col-resize' }}>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-text-dim/30 rounded-full group-hover:bg-accent/50" />
-      </div>
+          {/* 拖拽条 */}
+          <div
+            ref={sidebarDragRef}
+            onMouseDown={handleSidebarMouseDown}
+            className="w-1 bg-border cursor-col-resize hover:bg-accent/50 transition-colors flex-shrink-0 relative group"
+            style={{ cursor: isDraggingSidebar ? 'col-resize' : 'col-resize' }}>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-text-dim/30 rounded-full group-hover:bg-accent/50" />
+          </div>
+        </>
+      )}
 
       {/* 主区 */}
       <div className="flex-1 flex flex-col min-w-0 relative"
@@ -356,6 +423,12 @@ export default function ChatPage() {
 
         {/* 顶部工具条：选择 Agent / 上传文档 / 管理Agent / 选择技能 / 任务按钮 */}
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-bg-secondary/50 flex-wrap">
+          <button onClick={() => setShowSidebar(s => !s)}
+            className="p-1.5 rounded-lg border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors"
+            title={showSidebar ? '隐藏对话列表' : '显示对话列表'}>
+            {showSidebar ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+          </button>
+
           {/* 选择 Agent（下拉框 + 输入匹配） */}
           <div className="relative">
             <button onClick={() => setAgentOpen(o => !o)}
@@ -586,20 +659,6 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* 自动补全弹层 */}
-        {completion && (
-          <div className="absolute bottom-24 left-4 right-4 max-w-md mx-auto bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden z-30">
-            {completion.items.map((item, i) => (
-              <div key={item} onClick={() => applyCompletion(item)}
-                className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
-                  i === completion.active ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:bg-bg-tertiary'}`}>
-                {completion.kind === 'agent' ? <Bot size={12} /> : completion.kind === 'skill' ? <Sparkles size={12} /> : <Terminal size={12} />}
-                {item}
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* 底部输入 + 状态栏 */}
         <div className="border-t border-border p-3 bg-bg-secondary/50">
           <div className="max-w-3xl mx-auto">
@@ -618,7 +677,28 @@ export default function ChatPage() {
               </div>
             )}
 
-            <div className="flex gap-2 items-end">
+            <div className="flex gap-2 items-end relative">
+              {/* 补全弹层镜像元素（用于计算光标位置） */}
+              <div ref={mirrorRef} style={{ position: 'absolute', visibility: 'hidden', top: 0, left: '-9999px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} />
+
+              {/* 自动补全弹层 */}
+              {completion && completionPos && (
+                <div className="absolute bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden z-30 min-w-[180px]"
+                  style={{
+                    left: Math.min(completionPos.left, 300),
+                    bottom: completionPos.bottom + 8,
+                  }}>
+                  {completion.items.map((item, i) => (
+                    <div key={item} onClick={() => applyCompletion(item)}
+                      className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
+                        i === completion.active ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:bg-bg-tertiary'}`}>
+                      {completion.kind === 'agent' ? <Bot size={12} /> : completion.kind === 'skill' ? <Sparkles size={12} /> : <Terminal size={12} />}
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <textarea
                 ref={inputRef}
                 value={input}
@@ -834,6 +914,25 @@ function handleInteractiveResponse(msgIndex: number, response: string) {
   }
 }
 
+// ── 工具友好名称映射 ──
+function getFriendlyToolName(toolName: string): string {
+  const map: Record<string, string> = {
+    'call_internal_api': '平台操作',
+    'request_user_input': '用户交互',
+    'ui_action': '界面操作',
+    'write_file': '写入文件',
+    'read_file': '读取文件',
+    'run_code': '执行代码',
+    'run_command': '执行命令',
+    'create_task': '创建任务',
+    'search_memory': '搜索记忆',
+    'web_search': '网页搜索',
+    'python_run': 'Python 执行',
+    'ppt_generate': '生成 PPT',
+  }
+  return map[toolName] || toolName
+}
+
 // ── 消息气泡（支持 agent 前缀 + 搜索高亮 + 占位符渲染 + 工具消息 + 交互提问）──
 function MessageBubble({ msg, highlight, streaming, msgIndex, onPreview }: {
   msg: import('../api/chat').ChatMessage; highlight?: string; streaming: boolean; msgIndex?: number; onPreview: (path: string) => void
@@ -844,6 +943,11 @@ function MessageBubble({ msg, highlight, streaming, msgIndex, onPreview }: {
 
   // 工具消息：独立的紧凑渲染
   if (isTool) {
+    // 内部工具不显示（call_internal_api / ui_action 等静默执行）
+    const hiddenTools = ['call_internal_api', 'ui_action']
+    if (hiddenTools.includes(msg.tool_name || '')) {
+      return null
+    }
     // 交互式组件特殊渲染
     if (msg.interactive && !msg.interactive_answered) {
       return (
@@ -874,7 +978,7 @@ function MessageBubble({ msg, highlight, streaming, msgIndex, onPreview }: {
               ) : (
                 <CheckCircle size={11} className="text-green-600 dark:text-green-400" />
               )}
-              <span className="font-medium">{msg.tool_summary || `执行 ${msg.tool_name || '工具'}`}</span>
+              <span className="font-medium">{msg.tool_summary || `执行 ${getFriendlyToolName(msg.tool_name || '工具')}`}</span>
             </div>
             {msg.tool_pending ? (
               <span className="text-text-muted italic">执行中…</span>

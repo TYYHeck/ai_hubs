@@ -27,8 +27,21 @@ from ..models.task import Task as TaskModel, TaskEvent as TaskEventModel
 from .llm import llm_manager
 from .memory import memory_manager
 from .rag import rag_service
-from .tools import TOOL_SYSTEM_PROMPT
+from .tools import TOOL_SYSTEM_PROMPT, should_enable_code_tools
+from .blackboard import get_blackboard, drop_blackboard
+from .guardrails import guard_output
+from . import scorer as _scorer
+from . import contracts as _contracts
+from .collab import run_peer_review, run_round_table
+from .workflow_runner import run_workflow_graph
+from . import metrics_collector as _metrics
 from ..config import settings
+
+# 并行模式最大并发 Agent 数（避免一次性拉起过多 Agent 同时打 LLM 导致限流/超时）
+MAX_PARALLEL_AGENTS = 5
+
+# 任务级 token 用量回调钩子：execute_task 注册，run_single 内部按 task_id 取用（避免逐层透传参数）
+_TASK_USAGE_HOOKS: dict[str, Callable[[int, int], None]] = {}
 
 logger = logging.getLogger("ai_hubs.orchestrator")
 
@@ -79,15 +92,21 @@ async def _snapshot_workspace(user_id: int) -> set:
 
 
 async def _collect_output_files(user_id: int) -> list[dict]:
-    """任务执行后的产出文件列表（新增 + 已知类型文件）"""
+    """任务执行后的产出文件列表（仅新增文件）。
+    如果没有预先做快照（user_id 不在 _pre_scan_snapshots 中），
+    说明本次执行不涉及文件操作，直接返回空列表，避免误报。
+    """
     from .sandbox import list_files as sandbox_list
+
+    # 没有预先快照 → 本次不应该有产出文件
+    if user_id not in _pre_scan_snapshots:
+        return []
 
     result = sandbox_list(".", user_id)
     if not result.get("ok"):
         return []
 
     prev = _pre_scan_snapshots.pop(user_id, set())
-    current = set()
     outputs = []
 
     for entry in result.get("entries", []):
@@ -96,13 +115,11 @@ async def _collect_output_files(user_id: int) -> list[dict]:
         path = entry.get("path", "")
         name = entry.get("name", "")
         size = entry.get("size", 0)
-        current.add(path)
 
         ext = Path(name).suffix.lower() if name else ""
         is_new = path not in prev
-        is_artifact = ext in _OUTPUT_EXTENSIONS
 
-        if is_new or is_artifact:
+        if is_new:
             outputs.append({
                 "path": path,
                 "name": name,
@@ -168,6 +185,7 @@ async def run_single(
     user_id: int,
     enable_tools: bool = True,
     session: "AsyncSession | None" = None,
+    on_usage: Optional[Callable[[int, int], None]] = None,
 ) -> str:
     """单 Agent 模式（含记忆上下文 + RAG 注入 + 工具调用 + 记忆提交）。
 
@@ -178,6 +196,8 @@ async def run_single(
     await pause_evt.wait()
 
     # ── 构建记忆上下文（长期摘要 + 近期窗口 + 相关性检索）──
+    # global 模式记忆键为 "__global__"；memory_manager 以 (user_id, key) 隔离，
+    # 不同用户天然分区、不会跨用户混写；多个 global Agent 共享同一 user 的 global 键（设计意图）。
     mem_agent_key = "__global__" if agent.config_mode == "global" else agent.name
     memory_ctx = await memory_manager.build_context(
         user_id, mem_agent_key, query=user_input, memory_strength=agent.memory_strength
@@ -195,8 +215,14 @@ async def run_single(
             system_parts.append(m["content"])
     if rag_ctx:
         system_parts.append(rag_ctx)
-    # 注入工具使用指引（含 create_task 主动调用提示）
-    system_parts.append(TOOL_SYSTEM_PROMPT)
+    # 注入工具使用指引（含 create_task 主动调用提示）；无代码权限时不授予代码能力说明
+    if should_enable_code_tools(agent.skills):
+        system_parts.append(TOOL_SYSTEM_PROMPT)
+    else:
+        system_parts.append(
+            "你可以使用对话类工具与内部 API，但当前未被授予代码执行/文件读写权限，"
+            "请勿尝试运行代码或读写文件。"
+        )
     system_content = "\n\n".join(system_parts) or "你是一个 AI 助手。"
 
     messages = [{"role": "system", "content": system_content}]
@@ -213,13 +239,26 @@ async def run_single(
 
     try:
         if enable_tools:
+            # 任务级用量钩子：优先用显式 on_usage，否则取 execute_task 注册的 task_id 钩子
+            usage_hook = on_usage or _TASK_USAGE_HOOKS.get(task_id)
             result = await _run_with_tools(
-                task_id, agent, messages, user_id, pause_evt, event_queue, session=session
+                task_id, agent, messages, user_id, pause_evt, event_queue,
+                session=session, on_usage=usage_hook,
             )
         else:
             result = await _run_text_only(
                 task_id, agent, messages, pause_evt, event_queue
             )
+
+        # ── 内容护栏（议题 #9③）：L3 注入清洗 + L2 内容标记 ──
+        # 在把产出交给下游 Agent / 写入记忆前清洗，防止注入污染与敏感内容沉淀
+        guarded, verdict = guard_output(result)
+        if verdict.status != "info":
+            await _emit_event(None, task_id, "guardrail",
+                              {"agent": agent.name, "status": verdict.status,
+                               "reasons": verdict.reasons},
+                              event_queue=event_queue)
+        result = guarded
 
         await _emit_event(None, task_id, "agent_done",
                           {"agent": agent.name, "length": len(result)},
@@ -269,6 +308,7 @@ async def _run_with_tools(
     pause_evt: asyncio.Event,
     event_queue: asyncio.Queue,
     session: "AsyncSession | None" = None,
+    on_usage: Optional[Callable[[int, int], None]] = None,
 ) -> str:
     """工具调用模式：LLM 可调用 run_code / write_file 等工具完成实际工作"""
     from functools import partial
@@ -278,7 +318,8 @@ async def _run_with_tools(
 
     async for evt in llm_manager.stream_with_tools(
         messages=messages,
-        tools=TOOL_DEFINITIONS,
+        tools=get_enabled_tools(agent.skills),
+        on_usage=on_usage,
         tool_executor=partial(execute_tool, session=session),
         user_id=user_id,
         model=agent.model,
@@ -352,9 +393,13 @@ async def run_parallel(
                       {"agents": [a.name for a in agents]},
                       event_queue=event_queue)
 
+    # 并发限流：限制同时打 LLM 的 Agent 数，避免限流/超时雪崩
+    sem = asyncio.Semaphore(min(len(agents), MAX_PARALLEL_AGENTS))
+
     async def _run_one(agent: AgentModel) -> dict:
         try:
-            out = await run_single(task_id, agent, user_input, event_queue, user_id)
+            async with sem:
+                out = await run_single(task_id, agent, user_input, event_queue, user_id)
             return {"agent": agent.name, "output": out}
         except Exception as e:
             return {"agent": agent.name, "error": str(e)}
@@ -478,10 +523,17 @@ async def run_hierarchical(
                       {"plan_summary": plan[:300]},
                       event_queue=event_queue)
 
-    # 工作者并行执行各自的子任务
+    # 工作者并行执行各自的子任务（受并发限流约束）
+    sem = asyncio.Semaphore(min(len(workers), MAX_PARALLEL_AGENTS))
+
     async def _worker(w: AgentModel, idx: int):
         sub_prompt = f"主管分解的子任务（第 {idx + 1} 项）：\n{plan}\n\n请完成分配给你的部分。"
-        return {"agent": w.name, "output": await run_single(task_id, w, sub_prompt, event_queue, user_id)}
+        try:
+            async with sem:
+                out = await run_single(task_id, w, sub_prompt, event_queue, user_id)
+            return {"agent": w.name, "output": out}
+        except Exception as e:
+            return {"agent": w.name, "error": str(e)}
 
     worker_results = await asyncio.gather(*[_worker(w, i) for i, w in enumerate(workers)])
 
@@ -539,16 +591,28 @@ async def run_custom(
     pipeline_steps: list[str],
     event_queue: asyncio.Queue,
     user_id: int,
+    strict: bool = False,
 ) -> str:
-    """自定义流水线模式"""
+    """自定义流水线模式（议题 #6 结构化契约 + #7 阶段间质量门控 + #1 Blackboard）"""
     agent_map = {a.name: a for a in agents}
     agent_map.update({str(a.id): a for a in agents})
+
+    board = get_blackboard(task_id, "custom")
+    for a in agents:
+        board.join_participant(a.name)
 
     context = user_input
     results = []
 
     for i, step in enumerate(pipeline_steps):
-        # 格式: "agent_name_or_id:prompt_suffix" 或 "agent_name_or_id"
+        # 格式: "agent_name_or_id:prompt_suffix [@schema=SchemaName]"
+        # 末尾可附 @schema=Name 声明该阶段产出需满足的结构化契约
+        schema_name = None
+        m_schema = _re.search(r"@schema=([A-Za-z_]+)\s*$", step)
+        if m_schema:
+            schema_name = m_schema.group(1)
+            step = step[:m_schema.start()].strip()
+
         parts = step.split(":", 1)
         agent_key = parts[0].strip()
         suffix = parts[1].strip() if len(parts) > 1 else ""
@@ -561,12 +625,67 @@ async def run_custom(
             continue
 
         await _emit_event(None, task_id, "custom_step",
-                          {"step": i + 1, "agent": agent.name},
+                          {"step": i + 1, "agent": agent.name, "schema": schema_name},
                           event_queue=event_queue)
 
         prompt = f"{context}\n\n{suffix}".strip()
         out = await run_single(task_id, agent, prompt, event_queue, user_id)
-        context = out
+
+        # ── 阶段间质量门控（议题 #7）：Gate-1 结构化校验 / Gate-2 质量评分 ──
+        validated_obj = None
+        if schema_name:
+            obj, err = _contracts.extract_structured(out)
+            if obj is not None:
+                ok, cerr = _contracts.validate_contract(obj, schema_name, None)
+                if ok:
+                    validated_obj = obj
+                else:
+                    # 重试一次（把校验错误回灌给 Agent）
+                    await _emit_event(None, task_id, "custom_gate_retry",
+                                      {"step": i + 1, "reason": f"结构不符: {cerr}"},
+                                      event_queue=event_queue)
+                    retry = await run_single(
+                        task_id, agent,
+                        f"{prompt}\n\n上一次产出不符合结构要求（{cerr}），"
+                        f"请严格输出满足 schema={schema_name} 的 JSON。",
+                        event_queue, user_id,
+                    )
+                    obj2, err2 = _contracts.extract_structured(retry)
+                    if obj2 is not None and _contracts.validate_contract(obj2, schema_name, None)[0]:
+                        validated_obj = obj2
+                        out = retry
+                    else:
+                        await _emit_event(None, task_id, "custom_gate_warn",
+                                          {"step": i + 1, "reason": "结构化校验失败，降级为文本接力"},
+                                          event_queue=event_queue)
+            else:
+                await _emit_event(None, task_id, "custom_gate_warn",
+                                  {"step": i + 1, "reason": f"未解析到结构化产出: {err}"},
+                                  event_queue=event_queue)
+
+        # Gate-2：严格模式下对产出做质量评分（低于阈值重试一次）
+        if strict and not schema_name:
+            sc = await _scorer.score(out, task_id and f"{user_input}", strict=True)
+            if not sc.passed:
+                await _emit_event(None, task_id, "custom_gate_retry",
+                                  {"step": i + 1, "score": sc.total, "notes": sc.notes},
+                                  event_queue=event_queue)
+                retry = await run_single(
+                    task_id, agent,
+                    f"{prompt}\n\n你的上一版产出质量不足（{sc.notes}），请改进后重新输出。",
+                    event_queue, user_id,
+                )
+                sc2 = await _scorer.score(retry, user_input, strict=True)
+                if sc2.passed:
+                    out = retry
+
+        # 写入 Blackboard（结构化优先，便于下游程序消费）
+        if validated_obj is not None:
+            board.write_public(agent.name, f"stage_{i}", validated_obj)
+            context = _contracts.format_for_next(validated_obj, f"阶段{i+1}产出")
+        else:
+            board.write_public(agent.name, f"stage_{i}", out)
+            context = out
         results.append(out)
 
     return "\n\n---\n\n".join(results)
@@ -611,6 +730,63 @@ async def _select_agent_direct(
     return best or agents[0]
 
 
+async def _analyze_task_by_ai(
+    title: str,
+    description: str,
+    event_queue: asyncio.Queue,
+) -> dict | None:
+    """AI 分析任务：提取关键词、拓展描述、分类任务
+
+    当任务描述较短或较模糊时，AI 会自动拓展任务描述，
+    使其更清晰、更具体，便于后续 Agent 执行。
+    """
+    full_text = f"标题：{title}\n描述：{description}"
+    text_len = len((title or "") + (description or ""))
+
+    # 描述较长时跳过拓展，只做关键词提取
+    need_expand = text_len < 200
+
+    prompt = (
+        "你是一个专业的任务分析专家。请分析以下任务，输出 JSON 格式的分析结果。\n\n"
+        f"任务标题：{title or '未命名'}\n"
+        f"任务描述：{description or '（无）'}\n\n"
+        "请输出严格的 JSON 格式，包含以下字段：\n"
+        "1. keywords: 字符串数组，3-8个关键词，概括任务的核心主题和技术栈\n"
+        "2. category: 字符串，任务分类（如：代码开发、文档写作、数据分析、PPT制作、创意设计、研究分析、通用任务等）\n"
+        "3. difficulty: 字符串，难度评估（简单/中等/复杂）\n"
+        "4. expanded_description: 字符串，" + ("拓展后的详细任务描述，补充任务目标、输出要求、注意事项等，使任务更清晰具体（200-500字）" if need_expand else "与原描述一致即可") + "\n"
+        "5. estimated_duration: 字符串，预估耗时\n"
+        "6. key_points: 字符串数组，任务的核心要点和注意事项（3-5条）\n\n"
+        "只输出 JSON，不要输出任何解释或额外文字。"
+    )
+    try:
+        resp = await llm_manager.chat(
+            [{"role": "system", "content": "你是严谨的任务分析专家，只输出 JSON 格式。"},
+             {"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+        # 解析 JSON
+        import json as _json
+        # 尝试从响应中提取 JSON（可能被代码块包裹）
+        resp_clean = resp.strip()
+        if resp_clean.startswith("```"):
+            resp_clean = resp_clean.strip("`")
+            if resp_clean.lower().startswith("json"):
+                resp_clean = resp_clean[4:].strip()
+        result = _json.loads(resp_clean)
+        # 确保字段存在
+        if not isinstance(result.get("keywords"), list):
+            result["keywords"] = []
+        if not result.get("category"):
+            result["category"] = "通用任务"
+        if not result.get("expanded_description"):
+            result["expanded_description"] = description or title
+        return result
+    except Exception as e:
+        logger.warning(f"AI 任务分析失败: {e}")
+        return None
+
+
 async def _select_agent_by_ai(
     user_input: str,
     agents: list[AgentModel],
@@ -651,6 +827,81 @@ async def _select_agent_by_ai(
     return await _select_agent_direct(user_input, agents)
 
 
+# 自动分配器可选择的全部模式（单 Agent 场景会回退 single）
+_ALLOC_MODES = ["single", "sequential", "parallel", "debate", "vote",
+                "hierarchical", "swarm", "peer_review", "round_table"]
+# 需要 >=2 个 Agent 的协作模式
+_MULTIAGENT_MODES = {"debate", "vote", "hierarchical", "swarm", "peer_review", "round_table"}
+
+
+def _heuristic_mode(user_input: str, difficulty: str, category: str, n_agents: int) -> tuple[str, str]:
+    """无 LLM 的关键词启发式模式分配（覆盖全部模式）。"""
+    text = (user_input or "").lower()
+    if n_agents < 2:
+        return "single", "仅一个可用 Agent，单 Agent 执行"
+    # 关键词 → 模式
+    if any(k in text for k in ("辩论", "对立", "双方", "正方", "反方", "debate")):
+        return "debate", "检测到辩论/对立诉求，启用辩论模式"
+    if any(k in text for k in ("投票", "表决", "少数服从多数", "vote", "选一个")):
+        return "vote", "检测到需要表决，启用投票模式"
+    if any(k in text for k in ("评审", "审查", "互审", "peer", "review")):
+        return "peer_review", "检测到同行评审诉求，启用 peer_review 模式"
+    if any(k in text for k in ("圆桌", "讨论", "集思", "round", "brainstorm")):
+        return "round_table", "检测到圆桌讨论诉求，启用 round_table 模式"
+    if any(k in text for k in ("分解", "主管", "分层", "层级", "hierarch")):
+        return "hierarchical", "检测到层级分解诉求，启用 hierarchical 模式"
+    if any(k in text for k in ("自组织", " swarm", "群策", "多角色自由")):
+        return "swarm", "检测到自组织协作诉求，启用 swarm 模式"
+    # 难度/分类兜底
+    if difficulty == "复杂" and n_agents >= 3:
+        return "sequential", "复杂任务，多 Agent 串行协作"
+    if category in ("创意设计", "研究分析", "方案对比") and n_agents >= 3:
+        return "parallel", "创意/分析类任务，多 Agent 并行产出"
+    if n_agents >= 2:
+        return "parallel", "多 Agent 可用，并行产出多视角结果"
+    return "single", "标准任务，单 Agent 执行"
+
+
+async def _allocate_mode_by_ai(
+    user_input: str, analysis: dict | None, agents: list[AgentModel]
+) -> tuple[str, str]:
+    """LLM 分配器：从全部模式中选择最合适者（议题 #4）。"""
+    n = len(agents)
+    if n < 2:
+        return "single", "仅一个可用 Agent，单 Agent 执行"
+    try:
+        mode_desc = (
+            "single(单Agent) | sequential(串行协作) | parallel(并行多视角) | "
+            "debate(辩论交锋) | vote(投票决议) | hierarchical(主管分解委派) | "
+            "swarm(群体自组织) | peer_review(同行互审) | round_table(圆桌讨论)"
+        )
+        prompt = (
+            "你是任务编排调度器。根据任务内容，从以下执行模式中选择最合适的一个：\n"
+            f"{mode_desc}\n\n"
+            f"任务：\n{user_input[:800]}\n\n"
+            "只输出 JSON：{\"mode\": \"<模式名>\", \"reason\": \"<一句话理由>\"}，"
+            "不要输出其他文字。"
+        )
+        resp = await llm_manager.chat(
+            [{"role": "system", "content": "你是严谨的编排调度器，只输出 JSON。"},
+             {"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+        import json as _json
+        m = _re.search(r"\{.*\}", resp, _re.DOTALL)
+        if m:
+            data = _json.loads(m.group(0))
+            mode = data.get("mode", "").strip().lower()
+            if mode in _ALLOC_MODES:
+                if mode in _MULTIAGENT_MODES and n < 2:
+                    return "single", "所选模式需多 Agent，回退单 Agent"
+                return mode, data.get("reason", "AI 分配")
+    except Exception as e:
+        logger.warning(f"LLM 模式分配失败，回退启发式: {e}")
+    return _heuristic_mode(user_input, (analysis or {}).get("difficulty", "简单"),
+                           (analysis or {}).get("category", "通用"), n)
+
+
 async def run_auto(
     task_id: str,
     agents: list[AgentModel],
@@ -658,11 +909,15 @@ async def run_auto(
     event_queue: asyncio.Queue,
     user_id: int,
     assignment: str = "direct",   # direct | ai
+    task_title: str = "",
 ) -> str:
-    """自动工作流：根据任务内容自动指派 Agent 执行
+    """自动工作流：AI 分析任务后自动选择工作流模式和 Agent
 
-    - direct：基于标签/关键词/分类直接匹配最合适的 Agent
-    - ai：先由 AI 分析任务与 Agent 画像，再做精细指派
+    工作流选择逻辑：
+    - 简单任务 → single（单 Agent）
+    - 需要多步骤协作 → sequential（串行）
+    - 需要多角色并行产出 → parallel（并行）
+    - 需要观点碰撞 → debate（辩论）
     """
     if not agents:
         raise RuntimeError("没有可用的 Agent，无法自动指派")
@@ -671,8 +926,30 @@ async def run_auto(
                       {"assignment": assignment, "candidates": [a.name for a in agents]},
                       event_queue=event_queue)
 
+    final_input = user_input
+    analysis = None
+
     if assignment == "ai":
-        chosen = await _select_agent_by_ai(user_input, agents, event_queue)
+        # ── AI 分析任务：关键词提取 + 描述拓展 + 任务分类 ──
+        await _emit_event(None, task_id, "ai_analysis_start",
+                          {"title": task_title, "input_length": len(user_input or "")},
+                          event_queue=event_queue)
+
+        analysis = await _analyze_task_by_ai(task_title, user_input, event_queue)
+        if analysis:
+            await _emit_event(None, task_id, "ai_analysis_done",
+                              analysis,
+                              event_queue=event_queue)
+            # 用拓展后的描述作为最终输入
+            if analysis.get("expanded_description"):
+                final_input = (
+                    f"## 任务标题\n{task_title or '未命名任务'}\n\n"
+                    f"## 任务描述（AI 拓展）\n{analysis['expanded_description']}\n\n"
+                    f"## 任务关键词\n{', '.join(analysis.get('keywords', []))}\n\n"
+                    f"## 任务分类\n{analysis.get('category', '通用')}"
+                )
+
+        chosen = await _select_agent_by_ai(final_input, agents, event_queue)
         strategy = "ai 分析指派"
     else:
         chosen = await _select_agent_direct(user_input, agents)
@@ -681,17 +958,92 @@ async def run_auto(
     if chosen is None:
         chosen = agents[0]
 
+    # ── 自动选择工作流模式（议题 #4：覆盖全部 8+ 模式）──
+    difficulty = (analysis or {}).get("difficulty", "简单")
+    category = (analysis or {}).get("category", "通用")
+
+    # 快路径：超短 / 简单问答 → 直接 single，零额外 LLM 调用
+    if len(user_input or "") < 20:
+        workflow_mode = "single"
+        workflow_reason = "简短输入，单 Agent 直接处理"
+    elif assignment == "ai":
+        # LLM 分配器：返回全部模式中最合适的（含 debate/vote/hierarchical/swarm/peer_review/round_table）
+        workflow_mode, workflow_reason = await _allocate_mode_by_ai(
+            final_input, analysis, agents
+        )
+    else:
+        # 关键词启发式（无 LLM）：覆盖更多模式
+        workflow_mode, workflow_reason = _heuristic_mode(user_input, difficulty, category, len(agents))
+
     await _emit_event(None, task_id, "auto_assigned",
-                      {"agent": chosen.name, "strategy": strategy},
+                      {
+                          "agent": chosen.name,
+                          "strategy": strategy,
+                          "workflow_mode": workflow_mode,
+                          "workflow_reason": workflow_reason,
+                          "difficulty": difficulty,
+                          "category": category,
+                      },
                       event_queue=event_queue)
 
-    # 复用单 Agent 执行流程
-    return await run_single(
+    # 根据选择的工作流模式执行
+    if workflow_mode == "sequential" and len(agents) >= 2:
+        # 串行模式：选择 2-3 个相关 Agent
+        selected_agents = [chosen]
+        for a in agents:
+            if a.id != chosen.id and len(selected_agents) < min(3, len(agents)):
+                selected_agents.append(a)
+        return await run_sequential(
+            task_id=task_id,
+            agents=selected_agents,
+            user_input=final_input,
+            event_queue=event_queue,
+            user_id=user_id,
+        )
+    elif workflow_mode == "parallel" and len(agents) >= 3:
+        # 并行模式：选择 3 个相关 Agent
+        selected_agents = [chosen]
+        for a in agents:
+            if a.id != chosen.id and len(selected_agents) < min(3, len(agents)):
+                selected_agents.append(a)
+        return await run_parallel(
+            task_id=task_id,
+            agents=selected_agents,
+            user_input=final_input,
+            event_queue=event_queue,
+            user_id=user_id,
+        )
+    else:
+        # 默认单 Agent
+        return await run_single(
+            task_id=task_id,
+            agent=chosen,
+            user_input=final_input,
+            event_queue=event_queue,
+            user_id=user_id,
+        )
+
+
+async def run_workflow(
+    task_id: str,
+    agents: list[AgentModel],
+    user_input: str,
+    event_queue: asyncio.Queue,
+    user_id: int,
+    nodes: list[dict] | None = None,
+    edges: list[dict] | None = None,
+) -> str:
+    """自定义工作流执行（议题 #11）：按 WorkflowNode[]/edges 拓扑遍历，复用 Graph Runner。"""
+    if not nodes:
+        return "工作流为空（无 nodes），无法执行。"
+    return await run_workflow_graph(
         task_id=task_id,
-        agent=chosen,
-        user_input=user_input,
-        event_queue=event_queue,
+        nodes=nodes,
+        edges=edges or [],
         user_id=user_id,
+        event_queue=event_queue,
+        agents=agents,
+        initial_input=user_input,
     )
 
 
@@ -705,6 +1057,9 @@ MODE_RUNNERS = {
     "swarm": run_swarm,
     "custom": run_custom,
     "auto": run_auto,
+    "peer_review": run_peer_review,
+    "round_table": run_round_table,
+    "workflow": run_workflow,
 }
 
 
@@ -759,6 +1114,29 @@ async def execute_task(
                            "input": (task.description or "")[:200]},
                           event_queue=event_queue)
 
+        # ── 任务路径 token 配额护栏（与 chat 一致：仅平台免费额度限制）──
+        from ...models.user import User
+        user = await session.get(User, user_id)
+        using_own_key = bool((user.llm_config or {}).get("api_key")) if user else False
+        if user and not using_own_key and user.role != "admin":
+            quota = user.get_token_quota()
+            if quota is not None and user.get_token_used() >= quota:
+                await _emit_event(session, task_id, "task_error",
+                                  {"error": f"您的任务 token 配额已用尽（上限 {quota}），"
+                                            f"可在「设置」中填写自己的 API Key 后无限制使用，或联系管理员重置。"},
+                                  event_queue=event_queue)
+                _TASK_USAGE_HOOKS.pop(task_id, None)
+                return ""
+
+        # 注册任务级真实 token 用量钩子（run_single 内部按 task_id 取用）
+        _usage_acc = {"prompt": 0, "completion": 0}
+
+        def _on_usage(p: int, c: int) -> None:
+            _usage_acc["prompt"] += p
+            _usage_acc["completion"] += c
+
+        _TASK_USAGE_HOOKS[task_id] = _on_usage
+
         # ── 执行前快照（用于检测新增文件）──
         try:
             _pre_scan_snapshots[user_id] = await _snapshot_workspace(user_id)
@@ -768,12 +1146,20 @@ async def execute_task(
         try:
             runner = MODE_RUNNERS[mode]
             extra_kw = {}
+            meta = task.metadata_ or {}
             if mode == "custom":
                 extra_kw["pipeline_steps"] = pipeline_steps or []
+                extra_kw["strict"] = bool(meta.get("strict_mode", False))
             if mode == "debate":
                 extra_kw["rounds"] = 2
+            if mode in ("peer_review", "round_table"):
+                extra_kw["rounds"] = int(meta.get("rounds", 2) or 2)
+            if mode == "workflow":
+                extra_kw["nodes"] = meta.get("workflow_nodes") or meta.get("nodes")
+                extra_kw["edges"] = meta.get("workflow_edges") or meta.get("edges") or []
             if mode == "auto":
                 extra_kw["assignment"] = assignment
+                extra_kw["task_title"] = task.title or ""
 
             if mode == "single":
                 # run_single 仅接受单个 agent，而非 agents 列表
@@ -796,8 +1182,25 @@ async def execute_task(
                 )
 
             task.result = _clean_result(result)
+            # 真实 token 用量扣减（仅平台免费额度；与 chat 一致）
+            if user and not using_own_key and user.role != "admin":
+                user.add_token_usage(_usage_acc["prompt"] + _usage_acc["completion"])
             task.status = "completed"
             task.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            # ── 记录效率指标（议题 #15）：延迟/消耗/成本/协调轮次 ──
+            try:
+                _latency = (task.finished_at - task.started_at).total_seconds() if task.started_at else 0.0
+                _metrics.record_task(
+                    task_id=task_id, user_id=user_id, mode=mode,
+                    model=agents[0].model if agents else "default",
+                    agents=len(agents), latency_s=_latency,
+                    in_tokens=_usage_acc["prompt"], out_tokens=_usage_acc["completion"],
+                    success=True,
+                    rounds=extra_kw.get("rounds"),
+                )
+            except Exception as me:
+                logger.warning(f"效率指标记录失败（不影响主流程）: {me}")
 
             # ── 扫描工作区产出文件 ──
             output_files = await _collect_output_files(user_id)
@@ -813,8 +1216,10 @@ async def execute_task(
                                "output_files": output_files},
                               event_queue=event_queue)
 
-            # 清理暂停事件
+            # 清理暂停事件与用量钩子
             _active_tasks.pop(task_id, None)
+            _TASK_USAGE_HOOKS.pop(task_id, None)
+            drop_blackboard(task_id)
             return result
 
         except Exception as e:
@@ -822,6 +1227,21 @@ async def execute_task(
             task.status = "failed"
             task.error = str(e)
             task.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            # ── 记录效率指标（议题 #15）：失败也记录，用于可靠性聚合 ──
+            try:
+                _latency = (task.finished_at - task.started_at).total_seconds() if task.started_at else 0.0
+                _metrics.record_task(
+                    task_id=task_id, user_id=user_id, mode=mode,
+                    model=agents[0].model if agents else "default",
+                    agents=len(agents), latency_s=_latency,
+                    in_tokens=_usage_acc["prompt"], out_tokens=_usage_acc["completion"],
+                    success=False,
+                    rounds=extra_kw.get("rounds"),
+                )
+            except Exception as me:
+                logger.warning(f"效率指标记录失败（不影响主流程）: {me}")
+
             await session.commit()
 
             await _emit_event(session, task_id, "task_failed",
@@ -829,6 +1249,8 @@ async def execute_task(
                               event_queue=event_queue)
 
             _active_tasks.pop(task_id, None)
+            _TASK_USAGE_HOOKS.pop(task_id, None)
+            drop_blackboard(task_id)
             raise
 
 

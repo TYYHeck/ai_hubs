@@ -10,7 +10,7 @@ class TaskCreate(BaseModel):
     """创建任务"""
     title: str = Field(..., min_length=1, max_length=256)
     description: str = ""
-    mode: str = Field(default="single", pattern=r"^(single|sequential|parallel|debate|vote|hierarchical|swarm|custom|auto)$")
+    mode: str = Field(default="single", pattern=r"^(single|sequential|parallel|debate|vote|hierarchical|swarm|custom|auto|peer_review|round_table|workflow)$")
     think_depth: int = Field(default=1, ge=1, le=3)
     think_visibility: str = Field(default="visible", pattern=r"^(visible|hidden|folded)$")
     agent_ids: list[int] = []           # 指定 Agent IDs，空则用默认
