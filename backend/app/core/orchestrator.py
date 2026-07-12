@@ -221,14 +221,17 @@ async def run_single(
     """
     pause_evt = get_pause_event(task_id)
     await pause_evt.wait()
+    await _emit_event(None, task_id, "dbg_pause_done", {"agent": agent.name}, event_queue=event_queue)
 
     # ── 构建记忆上下文（长期摘要 + 近期窗口 + 相关性检索）──
     # global 模式记忆键为 "__global__"；memory_manager 以 (user_id, key) 隔离，
     # 不同用户天然分区、不会跨用户混写；多个 global Agent 共享同一 user 的 global 键（设计意图）。
     mem_agent_key = "__global__" if agent.config_mode == "global" else agent.name
+    await _emit_event(None, task_id, "dbg_before_mem", {"key": mem_agent_key}, event_queue=event_queue)
     memory_ctx = await memory_manager.build_context(
         user_id, mem_agent_key, query=user_input, memory_strength=agent.memory_strength
     )
+    await _emit_event(None, task_id, "dbg_after_mem", {"entries": len(memory_ctx)}, event_queue=event_queue)
     # ── RAG 检索（Agent 开启 enable_rag 时）──
     rag_ctx = ""
     if agent.enable_rag:
