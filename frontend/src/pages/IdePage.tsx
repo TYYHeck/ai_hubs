@@ -299,27 +299,40 @@ export default function IdePage() {
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false)
 
+  // 拖拽起点：记录按下时的鼠标 X 与当时的宽度，按「相对位移」计算新宽度，
+  // 避免用绝对 e.clientX 时受左侧应用侧边栏偏移影响（IDE 单独模式下会「跳到右边」）
+  const dragStartRef = useRef<{ x: number; width: number } | null>(null)
+
   const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
+    dragStartRef.current = { x: e.clientX, width: sidebarWidth }
     setIsDraggingSidebar(true)
-  }, [])
+  }, [sidebarWidth])
 
   useEffect(() => {
     if (!isDraggingSidebar) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.min(Math.max(140, e.clientX), 400)
+      const start = dragStartRef.current
+      if (!start) return
+      const delta = e.clientX - start.x
+      const newWidth = Math.min(Math.max(140, start.width + delta), 400)
       setSidebarWidth(newWidth)
     }
 
     const handleMouseUp = () => {
+      dragStartRef.current = null
       setIsDraggingSidebar(false)
     }
 
+    // 拖拽期间禁用文本选中，避免选到编辑器内容
+    const prevUserSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
 
     return () => {
+      document.body.style.userSelect = prevUserSelect
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }

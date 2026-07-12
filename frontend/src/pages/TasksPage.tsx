@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight, Sparkles, Brain, FileText, Download, Eye, Wrench, CheckCircle2, Loader2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ListTodo, Plus, Play, Pause, RotateCw, Trash2, Clock, GitBranch, Zap, X, ChevronDown, ChevronRight, Sparkles, Brain, FileText, Download, Eye, Wrench, CheckCircle2, Loader2, Bot } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, ideApi } from '../api/client'
@@ -139,6 +140,7 @@ const statusColors: Record<string, string> = {
 }
 
 export default function TasksPage() {
+  const navigate = useNavigate()
   const [tasks, setTasks] = useState<TaskData[]>([])
   const [modes, setModes] = useState<ModeInfo[]>([])
   const [agents, setAgents] = useState<{id:number;name:string}[]>([])
@@ -206,6 +208,11 @@ export default function TasksPage() {
 
   const handleCreate = async () => {
     if (!form.title.trim()) { setError('标题不能为空'); return }
+    // 议题 #8：没有任何智能体时无法执行任务，提示用户先创建 Agent
+    if (agents.length === 0) {
+      setError('当前没有可用的智能体，任务将无法执行。请先到「Agent」页面创建至少一个智能体。')
+      return
+    }
     const submitMode = form.workflow_id ? 'workflow' : form.mode
     if (submitMode === 'workflow' && !form.workflow_id) { setError('请选择要绑定的工作流'); return }
     setSubmitting(true)
@@ -360,20 +367,33 @@ export default function TasksPage() {
           {/* Agent 选择 */}
           <div className="mt-4">
             <label className="block text-xs text-text-muted mb-2">选择 Agent ({form.agent_ids.length} 个已选)</label>
-            <div className="flex flex-wrap gap-2">
-              {agents.map(a => (
-                <button key={a.id}
-                  onClick={() => toggleAgent(a.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
-                    form.agent_ids.includes(a.id)
-                      ? 'bg-accent/20 border-accent/40 text-accent'
-                      : 'bg-bg-tertiary border-border text-text-muted hover:text-text-secondary'
-                  }`}>
-                  {form.agent_ids.includes(a.id) ? '✓' : '+'} {a.name}
+            {agents.length === 0 ? (
+              // 议题 #8：空智能体时明确提示并提供创建入口
+              <div className="flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                <Bot size={18} className="text-amber-500 flex-shrink-0" />
+                <div className="flex-1 text-xs text-amber-700 dark:text-amber-300">
+                  还没有任何智能体，任务将无法执行。请先创建至少一个 Agent。
+                </div>
+                <button type="button" onClick={() => navigate('/agents')}
+                  className="flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white px-3 py-1.5 rounded-lg text-xs transition-colors flex-shrink-0">
+                  <Plus size={13} /> 去创建 Agent
                 </button>
-              ))}
-              {agents.length === 0 && <span className="text-xs text-text-dim">暂无 Agent，请先创建</span>}
-            </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {agents.map(a => (
+                  <button key={a.id}
+                    onClick={() => toggleAgent(a.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                      form.agent_ids.includes(a.id)
+                        ? 'bg-accent/20 border-accent/40 text-accent'
+                        : 'bg-bg-tertiary border-border text-text-muted hover:text-text-secondary'
+                    }`}>
+                    {form.agent_ids.includes(a.id) ? '✓' : '+'} {a.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex gap-3 mt-5">
             <button onClick={handleCreate} disabled={submitting}

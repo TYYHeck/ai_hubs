@@ -409,11 +409,16 @@ async def _execute_create_task(
     user_id: int,
     session: "AsyncSession | None",
 ) -> str:
-    """在数据库中创建任务（由 LLM 通过 create_task 工具调用触发），并自动开始执行。"""
-    if session is None:
-        return json.dumps({"error": "创建任务需要数据库会话，当前上下文不可用"}, ensure_ascii=False)
+    """在数据库中创建任务（由 LLM 通过 create_task 工具调用触发），并自动开始执行。
 
+    注意：create_task 始终使用**独立**数据库会话，不复用调用方 session：
+      1. 编排任务路径（auto/多 Agent 等）未逐层透传 session，此前会误报
+         「创建任务需要数据库会话」——独立会话彻底规避（议题 #1.2）；
+      2. 新任务是一个独立后台执行单元，必须在启动后台执行前 commit，
+         否则后台任务用新会话读不到未提交的行。
+    """
     from ...models.task import Task
+    from ..database import create_session
 
     title = (args.get("title") or "").strip()
     description = (args.get("description") or "").strip()
@@ -424,47 +429,55 @@ async def _execute_create_task(
     mode = args.get("mode", "auto")
     priority = max(0, min(10, int(args.get("priority", 5) or 5)))
 
-    task = Task(
-        id=uuid.uuid4().hex[:12],
-        user_id=user_id,
-        title=title,
-        description=description,
-        status="pending",
-        priority=priority,
-        mode=mode,
-        think_depth=1,
-        think_visibility="visible",
-        assigned_agent=args.get("agent_name", ""),
-        tags=args.get("tags") or [],
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
-    )
-    session.add(task)
-    await session.flush()
+    task_id = uuid.uuid4().hex[:12]
+    async with create_session() as own:
+        task = Task(
+            id=task_id,
+            user_id=user_id,
+            title=title,
+            description=description,
+            status="running" if auto_execute else "pending",
+            priority=priority,
+            mode=mode,
+            think_depth=1,
+            think_visibility="visible",
+            assigned_agent=args.get("agent_name", ""),
+            tags=args.get("tags") or [],
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        own.add(task)
+        await own.commit()
 
-    logger.info(f"create_task 工具创建任务: id={task.id} title={title!r} user={user_id} auto_execute={auto_execute}")
+    logger.info(f"create_task 工具创建任务: id={task_id} title={title!r} user={user_id} auto_execute={auto_execute}")
 
-    # 自动执行任务（后台运行）
+    # 自动执行任务（后台运行）—— 已 commit，后台会话可读到该行
     if auto_execute:
         try:
-            from .orchestrator import execute_task
             queue: asyncio.Queue = asyncio.Queue()
             asyncio.create_task(
-                _bg_execute_task(task.id, user_id, queue, mode)
+                _bg_execute_task(task_id, user_id, queue, mode)
             )
-            task.status = "running"
-            await session.flush()
             return json.dumps({
                 "ok": True,
-                "task_id": task.id,
+                "task_id": task_id,
                 "title": title,
                 "status": "running",
                 "message": f"任务「{title}」已创建并开始执行，可在侧边栏任务列表中查看进度。",
             }, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"自动启动任务失败: {e}")
+            # 回退为 pending（用独立会话改状态）
+            try:
+                async with create_session() as own2:
+                    t = await own2.get(Task, task_id)
+                    if t:
+                        t.status = "pending"
+                        await own2.commit()
+            except Exception:
+                pass
             return json.dumps({
                 "ok": True,
-                "task_id": task.id,
+                "task_id": task_id,
                 "title": title,
                 "status": "pending",
                 "message": f"任务「{title}」已创建，可在侧边栏任务列表中手动执行。",
@@ -472,7 +485,7 @@ async def _execute_create_task(
 
     return json.dumps({
         "ok": True,
-        "task_id": task.id,
+        "task_id": task_id,
         "title": title,
         "status": "pending",
         "message": f"任务「{title}」已创建，可在侧边栏任务列表中查看和执行。",
