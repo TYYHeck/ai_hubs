@@ -1122,23 +1122,20 @@ export default function WorkspacePage() {
               {currentPath ? (
                 content || isTextFile(currentPath) ? (
                   currentPath.toLowerCase().endsWith('.md') && mdPreview ? (
-                    <div className="h-full overflow-y-auto p-4 bg-bg-primary text-text-secondary markdown-content max-w-none" style={{ fontSize: `${fontSize}px` }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}
-                        components={{
-                          code: ({ node, className, children, ...props }: any) => {
-                            const match = /language-(\w+)/.exec(className || '')
-                            return match ? (
-                              <pre className="bg-bg-tertiary text-text-primary rounded p-2 overflow-x-auto my-2">
-                                <code className={className} {...props}>{children}</code>
-                              </pre>
-                            ) : (
-                              <code className="bg-bg-tertiary text-text-primary px-1 rounded" {...props}>{children}</code>
-                            )
-                          },
-                          h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-4 text-text-primary border-b border-border pb-1">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-lg font-bold mb-2 mt-3 text-text-primary">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-base font-bold mb-1.5 mt-2 text-text-primary">{children}</h3>,
-                          p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,
+                  <div className="h-full overflow-y-auto p-4 bg-bg-primary text-text-secondary markdown-content md-editor-preview max-w-none" style={{ fontSize: `${fontSize}px` }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}
+                      components={{
+                        code: ({ node, className, children, ...props }: any) => {
+                          const match = /language-(\w+)/.exec(className || '')
+                          return match ? (
+                            <pre className="bg-bg-tertiary text-text-primary rounded p-2 overflow-x-auto my-2">
+                              <code className={className} {...props}>{children}</code>
+                            </pre>
+                          ) : (
+                            <code className="bg-bg-tertiary text-text-primary px-1 rounded" {...props}>{children}</code>
+                          )
+                        },
+                        p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,
                           ul: ({ children }) => <ul className="list-disc list-inside my-2 space-y-0.5">{children}</ul>,
                           ol: ({ children }) => <ol className="list-decimal list-inside my-2 space-y-0.5">{children}</ol>,
                           blockquote: ({ children }) => <blockquote className="border-l-2 border-accent/50 pl-3 my-2 text-text-dim italic">{children}</blockquote>,

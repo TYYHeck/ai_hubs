@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
@@ -14,7 +16,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import {
   Code2, FileCode, Folder, FolderOpen, Plus, Save, Trash2, Play, RefreshCw,
   ChevronRight, ChevronDown, Terminal, Monitor, Cloud, FolderOpen as FolderOpenIcon,
-  Upload, Download, Eye,
+  Upload, Download, Eye, ZoomIn, ZoomOut, Maximize2,
 } from 'lucide-react'
 import { ideApi, type FsNode, type RunResult, type WorkspaceUsage } from '../api/client'
 import { FilePreviewModal } from '../components/FilePreviewModal'
@@ -125,6 +127,8 @@ export default function IdePage() {
   const [currentPath, setCurrentPath] = useState('')
   const [content, setContent] = useState('')
   const [dirty, setDirty] = useState(false)
+  const [mdPreview, setMdPreview] = useState(false)
+  const [fontSize, setFontSize] = useState(14)
 
   const [runResult, setRunResult] = useState<RunResult | null>(null)
   const [running, setRunning] = useState(false)
@@ -193,6 +197,7 @@ export default function IdePage() {
       setCurrentPath(n.path)
       setContent(r.content)
       setDirty(false)
+      setMdPreview(false)
     } catch (e) { setError((e as Error)?.message || '读取失败') }
   }, [isLocal])
 
@@ -441,6 +446,20 @@ export default function IdePage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {currentPath && currentPath.toLowerCase().endsWith('.md') && (
+              <button onClick={() => setMdPreview(v => !v)}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 text-sm transition-colors"
+                title={mdPreview ? '切换到编辑模式' : '切换到预览模式'}>
+                {mdPreview ? <Code2 size={14} /> : <Eye size={14} />}
+                {mdPreview ? '编辑' : '预览'}
+              </button>
+            )}
+            <div className="flex items-center gap-0.5">
+              <button onClick={() => setFontSize(f => Math.max(10, f - 2))} className="p-1 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="缩小字体"><ZoomOut size={13} /></button>
+              <span className="text-[10px] text-text-dim w-8 text-center">{fontSize}px</span>
+              <button onClick={() => setFontSize(f => Math.min(24, f + 2))} className="p-1 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="放大字体"><ZoomIn size={13} /></button>
+              <button onClick={() => setFontSize(14)} className="p-1 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="重置字体"><Maximize2 size={13} /></button>
+            </div>
             <button onClick={run} disabled={running || !currentPath}
               className="flex items-center gap-1 px-3 py-1.5 rounded bg-green-600 text-white text-sm disabled:opacity-40">
               <Play size={14} /> {running ? '运行中…' : '运行'}
@@ -455,6 +474,35 @@ export default function IdePage() {
         <div className="flex-1 min-h-0 overflow-hidden">
           {currentPath ? (
             content || isTextFile(currentPath) ? (
+              currentPath.toLowerCase().endsWith('.md') && mdPreview ? (
+                <div className="h-full overflow-y-auto p-4 bg-bg-primary text-text-secondary markdown-content md-editor-preview max-w-none" style={{ fontSize: `${fontSize}px` }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}
+                    components={{
+                      code: ({ node, className, children, ...props }: any) => {
+                        const match = /language-(\w+)/.exec(className || '')
+                        return match ? (
+                          <pre className="bg-bg-tertiary text-text-primary rounded p-2 overflow-x-auto my-2">
+                            <code className={className} {...props}>{children}</code>
+                          </pre>
+                        ) : (
+                          <code className="bg-bg-tertiary text-text-primary px-1 rounded" {...props}>{children}</code>
+                        )
+                      },
+                      p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc list-inside my-2 space-y-0.5">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside my-2 space-y-0.5">{children}</ol>,
+                      blockquote: ({ children }) => <blockquote className="border-l-2 border-accent/50 pl-3 my-2 text-text-dim italic">{children}</blockquote>,
+                      table: ({ children }) => <div className="my-2 overflow-x-auto"><table className="min-w-full border border-border rounded">{children}</table></div>,
+                      th: ({ children }) => <th className="border border-border px-2 py-1 text-left text-xs font-medium text-text-muted bg-bg-tertiary">{children}</th>,
+                      td: ({ children }) => <td className="border border-border px-2 py-1 text-xs">{children}</td>,
+                      a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{children}</a>,
+                      img: ({ src, alt }) => <img src={src} alt={alt || ''} className="max-w-full rounded my-2" />,
+                      hr: () => <hr className="my-4 border-border" />,
+                    }}>
+                    {content || ''}
+                  </ReactMarkdown>
+                </div>
+              ) : (
               <CodeMirror
                 key={currentPath}
                 value={content}
@@ -462,8 +510,9 @@ export default function IdePage() {
                 theme={oneDark}
                 extensions={extensions}
                 onChange={(val) => { setContent(val); setDirty(true) }}
-                className="h-full text-sm"
+                className="h-full text-sm" style={{ fontSize: `${fontSize}px` }}
               />
+              )
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-text-dim text-sm bg-bg-tertiary">
                 <FileCode size={48} className="mb-4 opacity-30" />

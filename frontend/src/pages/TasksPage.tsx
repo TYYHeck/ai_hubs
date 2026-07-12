@@ -29,6 +29,7 @@ const modeNames: Record<string, string> = {
   hierarchical: '分层管理',
   swarm: '群体协作',
   custom: '自定义',
+  workflow: '工作流',
 }
 
 function getModeName(mode: string): string {
@@ -137,7 +138,8 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskData[]>([])
   const [modes, setModes] = useState<ModeInfo[]>([])
   const [agents, setAgents] = useState<{id:number;name:string}[]>([])
-  const [workflows, setWorkflows] = useState<{id:string;name:string}[]>([])
+  const [workflows, setWorkflows] = useState<{id:string;name:string;enabled?:boolean}[]>([])
+  const enabledWorkflows = workflows.filter(w => w.enabled !== false)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -200,15 +202,16 @@ export default function TasksPage() {
 
   const handleCreate = async () => {
     if (!form.title.trim()) { setError('标题不能为空'); return }
-    if (form.mode === 'workflow' && !form.workflow_id) { setError('请选择要运行的具体工作流'); return }
+    const submitMode = form.workflow_id ? 'workflow' : form.mode
+    if (submitMode === 'workflow' && !form.workflow_id) { setError('请选择要绑定的工作流'); return }
     setSubmitting(true)
     try {
       const payload: any = {
         ...form,
+        mode: submitMode,
         tags: form.tags.split(',').map(s => s.trim()).filter(Boolean),
       }
-      if (form.mode !== 'workflow') delete payload.workflow_id
-      if (form.mode !== 'auto') delete payload.allowed_workflows
+      delete payload.allowed_workflows
       await api.post('/tasks', payload)
       resetForm()
       fetchData()
@@ -287,38 +290,17 @@ export default function TasksPage() {
               <label className="block text-xs text-text-muted mb-1">编排模式</label>
               <select value={form.mode} onChange={e => setForm({...form, mode: e.target.value})}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-accent outline-none">
-                {modes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {modes.filter(m => m.id !== 'workflow').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
-            {form.mode === 'workflow' && (
-              <div>
-                <label className="block text-xs text-text-muted mb-1">选择具体工作流</label>
+            {enabledWorkflows.length > 0 && (
+              <div className="col-span-2">
+                <label className="block text-xs text-text-muted mb-1">绑定工作流（可选 · 选中后按该工作流拓扑运行）</label>
                 <select value={form.workflow_id} onChange={e => setForm({...form, workflow_id: e.target.value})}
                   className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-accent outline-none">
-                  <option value="">— 请选择你创建的工作流 —</option>
-                  {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  <option value="">— 不绑定（按上方编排模式执行）—</option>
+                  {enabledWorkflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
-                {workflows.length === 0 && (
-                  <p className="text-[10px] text-text-dim mt-1">你还没有工作流，请先到「工作流」页创建并命名</p>
-                )}
-              </div>
-            )}
-            {form.mode === 'auto' && workflows.length > 0 && (
-              <div className="col-span-2">
-                <label className="block text-xs text-text-muted mb-1">允许 AI 选用的工作流（可不选 = 全部）</label>
-                <div className="flex flex-wrap gap-2">
-                  {workflows.map(w => (
-                    <label key={w.id} className="flex items-center gap-1.5 text-xs text-text-primary cursor-pointer bg-bg-tertiary border border-border rounded-lg px-2 py-1">
-                      <input type="checkbox" checked={form.allowed_workflows.includes(w.id)}
-                        onChange={e => {
-                          const next = new Set(form.allowed_workflows)
-                          if (e.target.checked) next.add(w.id); else next.delete(w.id)
-                          setForm({...form, allowed_workflows: [...next]})
-                        }} />
-                      {w.name}
-                    </label>
-                  ))}
-                </div>
               </div>
             )}
             {form.mode === 'auto' && (

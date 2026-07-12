@@ -78,12 +78,17 @@ async def create_task(
         if len(found_agents) != len(data.agent_ids):
             raise HTTPException(status_code=400, detail="部分 Agent 不存在或不属于你")
 
+    # 议题 #6：前端选中具体工作流后统一以 workflow 模式运行（即便模式下拉不是 workflow）
+    _mode = data.mode
+    if data.workflow_id and _mode != "workflow":
+        _mode = "workflow"
+
     task = Task(
         id=task_id,
         user_id=current_user.id,
         title=data.title,
         description=data.description,
-        mode=data.mode,
+        mode=_mode,
         think_depth=data.think_depth,
         think_visibility=data.think_visibility,
         priority=data.priority,
@@ -95,7 +100,7 @@ async def create_task(
         },
     )
     # ── mode=workflow：按名字选用具体工作流，注入节点/边（议题 #11 落地联动）──
-    if data.mode == "workflow":
+    if _mode == "workflow":
         if not data.workflow_id:
             raise HTTPException(status_code=400, detail="请先选择要运行的具体工作流")
         wf = get_workflow(data.workflow_id)

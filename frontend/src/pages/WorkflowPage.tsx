@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Workflow, Plus, Play, Pause, RotateCw, Trash2, X, ChevronRight, ChevronDown, FileText, Circle, GitBranch, CheckCircle, AlertCircle, Settings, Sparkles, ArrowRight, Zap, Brain, Layers, MessageSquare, Code2, FileCode, Plus as PlusIcon, Minus, Edit3, Save, Wand2 } from 'lucide-react'
+import { Workflow, Plus, Play, Pause, RotateCw, Trash2, X, ChevronRight, ChevronDown, FileText, Circle, GitBranch, CheckCircle, AlertCircle, Settings, Sparkles, ArrowRight, Zap, Brain, Layers, MessageSquare, Code2, FileCode, Plus as PlusIcon, Minus, Edit3, Save, Wand2, EyeOff } from 'lucide-react'
 import { api } from '../api/client'
 
 interface WorkflowNode {
@@ -19,6 +19,7 @@ interface WorkflowData {
   nodes: WorkflowNode[]
   edges: { from: string; to: string }[]
   status: string
+  enabled?: boolean
   created_at: string
   updated_at: string
 }
@@ -284,12 +285,12 @@ export default function WorkflowPage() {
     }
   }
 
-  const handleExecute = async (id: string) => {
+  const handleToggle = async (id: string) => {
     try {
-      await api.post(`/workflows/${id}/execute`)
+      await api.post(`/workflows/${id}/toggle`)
       fetchWorkflows()
     } catch (e) {
-      setError((e as Error)?.message || '执行失败')
+      setError((e as Error)?.message || '操作失败')
     }
   }
 
@@ -670,6 +671,12 @@ export default function WorkflowPage() {
                       }`}>
                         {wf.status === 'running' ? '运行中' : wf.status === 'completed' ? '已完成' : '待运行'}
                       </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        wf.enabled !== false ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
+                        'bg-gray-500/20 text-gray-600 dark:text-gray-400'
+                      }`}>
+                        {wf.enabled !== false ? '已启用' : '未启用'}
+                      </span>
                       <span className="text-text-primary font-medium truncate">{wf.name}</span>
                     </div>
                     <p className="text-text-muted text-xs">{wf.description || '无描述'}</p>
@@ -680,12 +687,15 @@ export default function WorkflowPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 ml-3" onClick={e => e.stopPropagation()}>
-                    {wf.status !== 'running' && (
-                      <button onClick={() => handleExecute(wf.id)}
-                        className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-500/10 rounded-lg transition-colors" title="执行">
-                        <Play size={15} />
-                      </button>
-                    )}
+                    <button onClick={() => handleToggle(wf.id)}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        wf.enabled !== false
+                          ? 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-bg-tertiary'
+                          : 'text-green-600 dark:text-green-400 hover:bg-green-500/10'
+                      }`}
+                      title={wf.enabled !== false ? '停用（从任务选取中隐藏）' : '启用（可在任务创建时选取运行）'}>
+                      {wf.enabled !== false ? <EyeOff size={15} /> : <Play size={15} />}
+                    </button>
                     <button onClick={() => { startEdit(wf); setExpandedId(wf.id) }}
                       className="p-1.5 text-text-muted hover:text-accent hover:bg-bg-tertiary rounded-lg transition-colors" title="编辑">
                       <Edit3 size={15} />

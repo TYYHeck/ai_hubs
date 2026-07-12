@@ -45,11 +45,25 @@ async def api_create_workflow(data: dict, current_user = Depends(get_current_use
         "nodes": data.get("nodes", []),
         "edges": data.get("edges", []),
         "status": "pending",
+        # 议题 #5/#6：工作流默认「未启用」，需用户在列表点击「启用」后，
+        # 才会出现在任务创建的工作流下拉里供选取运行。
+        "enabled": bool(data.get("enabled", False)),
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat(),
     }
     _next_id += 1
     _workflows.append(wf)
+    return wf
+
+
+@router.post("/{wf_id}/toggle")
+async def api_toggle_workflow(wf_id: str, current_user = Depends(get_current_user)):
+    """启用/停用工作流（议题 #5/#6）：启用后才可在任务创建中选取运行，不再直接创建任务。"""
+    wf = next((w for w in _workflows if w["id"] == wf_id), None)
+    if not wf:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    wf["enabled"] = not wf.get("enabled", False)
+    wf["updated_at"] = datetime.now().isoformat()
     return wf
 
 
