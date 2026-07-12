@@ -1189,6 +1189,7 @@ async def execute_task(
         # ── 任务路径 token 配额护栏（与 chat 一致：仅平台免费额度限制）──
         from ...models.user import User
         user = await session.get(User, user_id)
+        await _emit_event(session, task_id, "dbg_after_userget", {"uid": user_id}, event_queue=event_queue)
         using_own_key = bool((user.llm_config or {}).get("api_key")) if user else False
         if user and not using_own_key and user.role != "admin":
             quota = user.get_token_quota()
