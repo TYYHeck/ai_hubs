@@ -1210,10 +1210,13 @@ async def execute_task(
         _TASK_USAGE_HOOKS[task_id] = _on_usage
 
         # ── 执行前快照（用于检测新增文件）──
+        await _emit_event(session, task_id, "dbg_pre_snapshot", {}, event_queue=event_queue)
         try:
             _pre_scan_snapshots[user_id] = await _snapshot_workspace(user_id)
-        except Exception:
-            pass
+        except Exception as _se:
+            await _emit_event(session, task_id, "dbg_snapshot_exc", {"e": str(_se)}, event_queue=event_queue)
+        await _emit_event(session, task_id, "dbg_post_snapshot", {}, event_queue=event_queue)
+
 
         try:
             runner = MODE_RUNNERS[mode]
