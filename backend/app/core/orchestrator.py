@@ -131,6 +131,27 @@ async def _collect_output_files(user_id: int) -> list[dict]:
     return outputs
 
 
+# ── SSE 事件广播注册表（修复「任务卡死在开始阶段」议题）──
+# 历史实现里 stream_events 与 execute 各自创建独立的 asyncio.Queue，两者从未
+# 连通，导致 SSE 永远收不到实时事件、前端只在「开始」后卡死。此处用全局注册表
+# 把每个 task 的 SSE 订阅队列登记起来，_emit_event 在写入 DB 的同时向所有订阅者广播。
+_task_sse_queues: dict[str, list[asyncio.Queue]] = {}
+
+
+def register_sse_queue(task_id: str, queue: asyncio.Queue) -> None:
+    """SSE 连接建立时登记自己的队列，开始接收该任务的实时事件。"""
+    _task_sse_queues.setdefault(task_id, []).append(queue)
+
+
+def unregister_sse_queue(task_id: str, queue: asyncio.Queue) -> None:
+    """SSE 连接断开时注销，避免泄漏。"""
+    qs = _task_sse_queues.get(task_id)
+    if qs and queue in qs:
+        qs.remove(queue)
+        if not qs:
+            _task_sse_queues.pop(task_id, None)
+
+
 async def _emit_event(session, task_id: str, event: str, data: dict = None, *, event_queue: asyncio.Queue = None):
     """记录事件到 DB 并推送到 SSE 队列
 
@@ -154,13 +175,19 @@ async def _emit_event(session, task_id: str, event: str, data: dict = None, *, e
             s.add(evt)
             await s.commit()
 
+    payload = {
+        "time": evt.created_at.isoformat(timespec="seconds"),
+        "event": event,
+        "data": data or {},
+    }
     if event_queue is not None:
-        payload = {
-            "time": evt.created_at.isoformat(timespec="seconds"),
-            "event": event,
-            "data": data or {},
-        }
         await event_queue.put(payload)
+    # 广播给所有 SSE 订阅者（任务卡死修复）
+    for q in list(_task_sse_queues.get(task_id, [])):
+        try:
+            await q.put(payload)
+        except Exception:
+            pass
 
 
 async def _update_task_status(session, task_id: str, status: str, **kwargs):

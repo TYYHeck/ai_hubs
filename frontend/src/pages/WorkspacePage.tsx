@@ -1122,17 +1122,17 @@ export default function WorkspacePage() {
               {currentPath ? (
                 content || isTextFile(currentPath) ? (
                   currentPath.toLowerCase().endsWith('.md') && mdPreview ? (
-                    <div className="h-full overflow-y-auto p-4 bg-bg-primary text-text-secondary prose prose-sm dark:prose-invert max-w-none">
+                    <div className="h-full overflow-y-auto p-4 bg-bg-primary text-text-secondary markdown-content max-w-none" style={{ fontSize: `${fontSize}px` }}>
                       <ReactMarkdown remarkPlugins={[remarkGfm]}
                         components={{
                           code: ({ node, className, children, ...props }: any) => {
                             const match = /language-(\w+)/.exec(className || '')
                             return match ? (
-                              <pre className="bg-bg-tertiary rounded p-2 overflow-x-auto my-2">
+                              <pre className="bg-bg-tertiary text-text-primary rounded p-2 overflow-x-auto my-2">
                                 <code className={className} {...props}>{children}</code>
                               </pre>
                             ) : (
-                              <code className="bg-bg-tertiary px-1 rounded" {...props}>{children}</code>
+                              <code className="bg-bg-tertiary text-text-primary px-1 rounded" {...props}>{children}</code>
                             )
                           },
                           h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-4 text-text-primary border-b border-border pb-1">{children}</h1>,

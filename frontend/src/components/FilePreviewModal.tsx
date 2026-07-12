@@ -38,7 +38,7 @@ export function FilePreviewButton({ path, label, className = '' }: { path: strin
 }
 
 // ── 完整弹层 ──
-export function FilePreviewModal({ path, onClose, title }: { path: string; onClose: () => void; title?: string }) {
+export function FilePreviewModal({ path, onClose, title, fontSize }: { path: string; onClose: () => void; title?: string; fontSize?: number }) {
   const [meta, setMeta] = useState<FileMeta | null>(null)
   const [text, setText] = useState<string | null>(null)
   const [imageBlobUrl, setImageBlobUrl] = useState<string | null>(null)
@@ -152,7 +152,7 @@ export function FilePreviewModal({ path, onClose, title }: { path: string; onClo
             <iframe src={previewHref} className="w-full h-full" title={name} />
           ) : meta.is_text ? (
             meta.ext === 'md' ? (
-              <div className="p-4 text-sm text-text-primary max-w-none prose prose-sm">
+              <div className="p-4 markdown-content max-w-none" style={fontSize ? { fontSize: `${fontSize}px` } : undefined}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{text || '空文件'}</ReactMarkdown>
               </div>
             ) : (

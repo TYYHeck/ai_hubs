@@ -19,6 +19,8 @@ from ...core.orchestrator import (
     execute_task,
     pause_task as _pause_task,
     resume_task as _resume_task,
+    register_sse_queue,
+    unregister_sse_queue,
     _active_tasks,
 )
 from ...database import get_session, create_session
@@ -125,7 +127,7 @@ async def list_modes(current_user=Depends(get_current_user)):
         {"id": "custom", "name": "自定义流水线", "desc": "按指定顺序串行执行，每个步骤可指定 Agent", "icon": "sliders"},
         {"id": "peer_review", "name": "同行评审", "desc": "多 Agent 出初稿 → 评审者逐一点评 → 作者修订 → 汇总终稿", "icon": "check-circle"},
         {"id": "round_table", "name": "圆桌讨论", "desc": "主持人引导 + 参与者轮流发言，动态收敛提前结束", "icon": "users"},
-        {"id": "workflow", "name": "自定义工作流", "desc": "按 WorkflowNode 图拓扑执行（agent/tool/condition/parallel/sequential）", "icon": "workflow"},
+        {"id": "workflow", "name": "工作流", "desc": "按 WorkflowNode 图拓扑执行（agent/tool/condition/parallel/sequential）", "icon": "workflow"},
         {"id": "auto", "name": "自动工作流", "desc": "按任务内容自动指派最合适 Agent 与编排模式（覆盖全部 8+ 模式，支持直接匹配或 AI 分析）", "icon": "sparkles"},
     ]
     return modes
@@ -213,15 +215,16 @@ async def stream_events(
 
     async def event_generator():
         queue: asyncio.Queue = asyncio.Queue()
-
-        async with create_session() as s:
-            evt_stmt = select(TaskEvent).where(TaskEvent.task_id == task_id).order_by(TaskEvent.created_at)
-            result = await s.execute(evt_stmt)
-            for evt in result.scalars().all():
-                d = evt.to_dict()
-                yield f"data: {json.dumps(d, ensure_ascii=False)}\n\n"
+        register_sse_queue(task_id, queue)
 
         try:
+            async with create_session() as s:
+                evt_stmt = select(TaskEvent).where(TaskEvent.task_id == task_id).order_by(TaskEvent.created_at)
+                result = await s.execute(evt_stmt)
+                for evt in result.scalars().all():
+                    d = evt.to_dict()
+                    yield f"data: {json.dumps(d, ensure_ascii=False)}\n\n"
+
             while True:
                 try:
                     event_data = await asyncio.wait_for(queue.get(), timeout=30)
@@ -230,6 +233,8 @@ async def stream_events(
                     yield f": heartbeat\n\n"
         except asyncio.CancelledError:
             pass
+        finally:
+            unregister_sse_queue(task_id, queue)
 
     return StreamingResponse(
         event_generator(),

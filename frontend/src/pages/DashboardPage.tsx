@@ -94,10 +94,7 @@ export default function DashboardPage() {
 
       {/* 提示 */}
       <div className="card p-5 mt-4 border-dashed">
-        <p className="text-sm text-text-secondary">
-          v4.0 持续迭代中。更多功能即将推出。
-        </p>
-        <p className="text-xs text-text-dim mt-1">
+        <p className="text-xs text-text-dim">
           对话核心 · Agent管理 · 任务编排 · 记忆系统 · 技能市场 · IDE · 多端
         </p>
       </div>

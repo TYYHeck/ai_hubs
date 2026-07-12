@@ -423,7 +423,7 @@ export default function TasksPage() {
                       <span className="text-text-primary font-medium truncate">{t.title}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
                         {t.mode === 'workflow'
-                          ? (t.metadata?.workflow_name || '自定义工作流')
+                          ? (t.metadata?.workflow_name || '工作流')
                           : t.mode === 'auto' ? (() => {
                               const wf = getAutoWorkflowInfo(t.events)
                               if (!wf) return 'AI 自动'
@@ -490,7 +490,7 @@ export default function TasksPage() {
                         <br />
                         <span className="text-text-primary">
                           {t.mode === 'workflow'
-                            ? (t.metadata?.workflow_name || '自定义工作流')
+                            ? (t.metadata?.workflow_name || '工作流')
                             : (() => {
                                 const base = getModeName(t.mode)
                                 if (t.mode !== 'auto') return base
