@@ -27,7 +27,7 @@ from ..models.task import Task as TaskModel, TaskEvent as TaskEventModel
 from .llm import llm_manager
 from .memory import memory_manager
 from .rag import rag_service
-from .tools import TOOL_SYSTEM_PROMPT, should_enable_code_tools
+from .tools import TOOL_SYSTEM_PROMPT, should_enable_code_tools, get_enabled_tools
 from .blackboard import get_blackboard, drop_blackboard
 from .guardrails import guard_output
 from . import scorer as _scorer
