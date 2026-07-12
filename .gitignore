@@ -18,6 +18,10 @@ env/
 
 # Runtime data
 data/
+
+# 构建过程偶发生成的杂散空文件
+docs/BUG_*.text
+
 output/
 logs/
 backend/logs/
