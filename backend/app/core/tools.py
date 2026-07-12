@@ -377,11 +377,15 @@ async def execute_tool(
                 cwd_rel=tool_args.get("cwd", ""),
             )
         elif tool_name == "read_file":
-            result = fn(path=tool_args.get("path", ""), user_id=user_id)
+            result = fn(path=tool_args.get("path") or tool_args.get("file_path") or "", user_id=user_id)
         elif tool_name == "write_file":
-            result = fn(path=tool_args.get("path", ""), content=tool_args.get("content", ""), user_id=user_id)
+            result = fn(
+                path=tool_args.get("path") or tool_args.get("file_path") or "",
+                content=tool_args.get("content", ""),
+                user_id=user_id,
+            )
         elif tool_name == "list_files":
-            result = fn(path=tool_args.get("path", ""), user_id=user_id)
+            result = fn(path=tool_args.get("path") or tool_args.get("file_path") or "", user_id=user_id)
         else:
             result = {"error": f"工具未实现: {tool_name}"}
 

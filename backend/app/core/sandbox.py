@@ -364,6 +364,8 @@ def read_file(path: str, user_id: int) -> dict:
 
 def write_file(path: str, content: str, user_id: int) -> dict:
     """写入文件到工作区（自动创建父目录，受配额限制）"""
+    if not path or not str(path).strip():
+        return {"ok": False, "error": "路径不能为空，请传入文件相对路径（如 'result.md'）"}
     root = _workspace_root(user_id)
     target = _resolve(root, path)
     if target.is_dir():

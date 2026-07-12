@@ -79,11 +79,11 @@ function formatToolArgs(args: Record<string, any> | undefined): string {
 
 function getToolSummary(args: Record<string, any> | undefined, toolName: string): string {
   if (!args) return ''
-  if (toolName === 'write_file' && args.path) {
-    return `写入文件: ${args.path}`
+  if (toolName === 'write_file' && (args.path || args.file_path)) {
+    return `写入文件: ${args.path || args.file_path}`
   }
-  if (toolName === 'read_file' && args.path) {
-    return `读取文件: ${args.path}`
+  if (toolName === 'read_file' && (args.path || args.file_path)) {
+    return `读取文件: ${args.path || args.file_path}`
   }
   if (toolName === 'run_command' && args.command) {
     return `执行命令: ${String(args.command).slice(0, 60)}`
@@ -117,6 +117,10 @@ function shouldShowTool(toolName: string): boolean {
   const internalTools = ['call_internal_api']
   return !internalTools.includes(toolName)
 }
+
+// 内部编排类工具：原始参数 JSON 噪声大（如 create_task 的大段 description），
+// 任务详情里只显示友好摘要，不展开原始参数（议题 #10「信息没隐藏好」）。
+const HIDE_RAW_ARGS = new Set(['create_task', 'call_internal_api'])
 
 const modeIcons: Record<string, JSX.Element> = {
   user: <Zap size={14} />, 'arrow-right': <GitBranch size={14} />,
@@ -622,7 +626,7 @@ export default function TasksPage() {
                                     {desc && (
                                       <p className="text-text-dim mt-0.5 break-words whitespace-pre-wrap">{desc}</p>
                                     )}
-                                    {evt.data?.args && isToolStart && Object.keys(evt.data.args).length > 0 && (
+                                    {evt.data?.args && isToolStart && !HIDE_RAW_ARGS.has(evt.data?.tool || '') && Object.keys(evt.data.args).length > 0 && (
                                       <div className="mt-1">
                                         {(() => {
                                           const key = `${t.id}-args-${idx}`
