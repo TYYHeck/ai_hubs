@@ -266,6 +266,8 @@ async def _run_and_collect(
             assignment=assignment,
         )
     except Exception as e:
+        import logging as _logging
+        _logging.getLogger("ai_hubs.tasks").exception(f"任务执行异常 task_id={task_id}: {e}")
         await event_queue.put({
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "event": "task_error",
