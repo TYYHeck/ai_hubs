@@ -16,7 +16,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import {
   Code2, FileCode, Folder, FolderOpen, Plus, Save, Trash2, Play, RefreshCw,
   ChevronRight, ChevronDown, Terminal, Monitor, Cloud, FolderOpen as FolderOpenIcon,
-  Upload, Download, Eye, ZoomIn, ZoomOut, Maximize2,
+  Upload, Download, Eye, ZoomIn, ZoomOut, Maximize2, Columns2,
 } from 'lucide-react'
 import { ideApi, type FsNode, type RunResult, type WorkspaceUsage } from '../api/client'
 import { FilePreviewModal } from '../components/FilePreviewModal'
@@ -113,6 +113,30 @@ function TreeNode({ node, depth, onOpen, activePath, onDelete, onPreview }: Tree
   )
 }
 
+// md 预览渲染配置（编辑 / 预览 / 拆分 共用，议题 #4.1）
+const markdownComponents: any = {
+  code: ({ node, className, children, ...props }: any) => {
+    const match = /language-(\w+)/.exec(className || '')
+    return match ? (
+      <pre className="bg-bg-tertiary text-text-primary rounded p-2 overflow-x-auto my-2">
+        <code className={className} {...props}>{children}</code>
+      </pre>
+    ) : (
+      <code className="bg-bg-tertiary text-text-primary px-1 rounded" {...props}>{children}</code>
+    )
+  },
+  p: ({ children }: any) => <p className="my-2 leading-relaxed">{children}</p>,
+  ul: ({ children }: any) => <ul className="list-disc list-inside my-2 space-y-0.5">{children}</ul>,
+  ol: ({ children }: any) => <ol className="list-decimal list-inside my-2 space-y-0.5">{children}</ol>,
+  blockquote: ({ children }: any) => <blockquote className="border-l-2 border-accent/50 pl-3 my-2 text-text-dim italic">{children}</blockquote>,
+  table: ({ children }: any) => <div className="my-2 overflow-x-auto"><table className="min-w-full border border-border rounded">{children}</table></div>,
+  th: ({ children }: any) => <th className="border border-border px-2 py-1 text-left text-xs font-medium text-text-muted bg-bg-tertiary">{children}</th>,
+  td: ({ children }: any) => <td className="border border-border px-2 py-1 text-xs">{children}</td>,
+  a: ({ children, href }: any) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{children}</a>,
+  img: ({ src, alt }: any) => <img src={src} alt={alt || ''} className="max-w-full rounded my-2" />,
+  hr: () => <hr className="my-4 border-border" />,
+}
+
 export default function IdePage() {
   // 桌面端默认「本地」模式；纯网页只能用「远程」服务器工作区
   const [mode, setMode] = useState<IdeMode>(hasLocalIde ? 'local' : 'remote')
@@ -127,7 +151,8 @@ export default function IdePage() {
   const [currentPath, setCurrentPath] = useState('')
   const [content, setContent] = useState('')
   const [dirty, setDirty] = useState(false)
-  const [mdPreview, setMdPreview] = useState(false)
+  // md 视图：编辑 / 预览 / 拆分（议题 #4.1 增加「拆分」并排模式）
+  const [mdView, setMdView] = useState<'edit' | 'preview' | 'split'>('edit')
   const [fontSize, setFontSize] = useState(14)
 
   const [runResult, setRunResult] = useState<RunResult | null>(null)
@@ -197,7 +222,7 @@ export default function IdePage() {
       setCurrentPath(n.path)
       setContent(r.content)
       setDirty(false)
-      setMdPreview(false)
+      setMdView('edit')
     } catch (e) { setError((e as Error)?.message || '读取失败') }
   }, [isLocal])
 
@@ -460,12 +485,19 @@ export default function IdePage() {
           </div>
           <div className="flex items-center gap-2">
             {currentPath && currentPath.toLowerCase().endsWith('.md') && (
-              <button onClick={() => setMdPreview(v => !v)}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 text-sm transition-colors"
-                title={mdPreview ? '切换到编辑模式' : '切换到预览模式'}>
-                {mdPreview ? <Code2 size={14} /> : <Eye size={14} />}
-                {mdPreview ? '编辑' : '预览'}
-              </button>
+              <div className="flex items-center gap-0.5 bg-bg-tertiary rounded p-0.5">
+                {(['edit', 'preview', 'split'] as const).map(v => (
+                  <button key={v} onClick={() => setMdView(v)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                      mdView === v
+                        ? 'bg-accent text-white'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                    title={v === 'edit' ? '编辑' : v === 'preview' ? '预览' : '拆分（编辑+预览并排）'}>
+                    {v === 'edit' ? <><Code2 size={13} /> 编辑</> : v === 'preview' ? <><Eye size={13} /> 预览</> : <><Columns2 size={13} /> 拆分</>}
+                  </button>
+                ))}
+              </div>
             )}
             <div className="flex items-center gap-0.5">
               <button onClick={() => setFontSize(f => Math.max(10, f - 2))} className="p-1 rounded border border-border text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors" title="缩小字体"><ZoomOut size={13} /></button>
@@ -487,45 +519,31 @@ export default function IdePage() {
         <div className="flex-1 min-h-0 overflow-hidden">
           {currentPath ? (
             content || isTextFile(currentPath) ? (
-              currentPath.toLowerCase().endsWith('.md') && mdPreview ? (
-                <div className="h-full overflow-y-auto p-4 bg-bg-primary text-text-secondary markdown-content md-editor-preview max-w-none" style={{ fontSize: `${fontSize}px` }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}
-                    components={{
-                      code: ({ node, className, children, ...props }: any) => {
-                        const match = /language-(\w+)/.exec(className || '')
-                        return match ? (
-                          <pre className="bg-bg-tertiary text-text-primary rounded p-2 overflow-x-auto my-2">
-                            <code className={className} {...props}>{children}</code>
-                          </pre>
-                        ) : (
-                          <code className="bg-bg-tertiary text-text-primary px-1 rounded" {...props}>{children}</code>
-                        )
-                      },
-                      p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc list-inside my-2 space-y-0.5">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal list-inside my-2 space-y-0.5">{children}</ol>,
-                      blockquote: ({ children }) => <blockquote className="border-l-2 border-accent/50 pl-3 my-2 text-text-dim italic">{children}</blockquote>,
-                      table: ({ children }) => <div className="my-2 overflow-x-auto"><table className="min-w-full border border-border rounded">{children}</table></div>,
-                      th: ({ children }) => <th className="border border-border px-2 py-1 text-left text-xs font-medium text-text-muted bg-bg-tertiary">{children}</th>,
-                      td: ({ children }) => <td className="border border-border px-2 py-1 text-xs">{children}</td>,
-                      a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{children}</a>,
-                      img: ({ src, alt }) => <img src={src} alt={alt || ''} className="max-w-full rounded my-2" />,
-                      hr: () => <hr className="my-4 border-border" />,
-                    }}>
-                    {content || ''}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-              <CodeMirror
-                key={currentPath}
-                value={content}
-                height="100%"
-                theme={oneDark}
-                extensions={extensions}
-                onChange={(val) => { setContent(val); setDirty(true) }}
-                className="h-full text-sm" style={{ fontSize: `${fontSize}px` }}
-              />
-              )
+              (() => {
+                const isMd = currentPath.toLowerCase().endsWith('.md')
+                const showEditor = !isMd || mdView !== 'preview'
+                const showPreview = isMd && mdView !== 'edit'
+                const editor = (
+                  <CodeMirror key={currentPath} value={content} height="100%" theme={oneDark}
+                    extensions={extensions} onChange={(val) => { setContent(val); setDirty(true) }}
+                    className="h-full text-sm" style={{ fontSize: `${fontSize}px` }} />
+                )
+                const preview = (
+                  <div className="h-full overflow-y-auto p-4 bg-bg-primary text-text-secondary markdown-content md-editor-preview max-w-none" style={{ fontSize: `${fontSize}px` }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{content || ''}</ReactMarkdown>
+                  </div>
+                )
+                // 拆分模式：编辑器 + 预览并排（议题 #4.1）
+                if (showEditor && showPreview) {
+                  return (
+                    <div className="flex h-full min-h-0">
+                      <div className="w-1/2 min-w-0 border-r border-border">{editor}</div>
+                      <div className="w-1/2 min-w-0">{preview}</div>
+                    </div>
+                  )
+                }
+                return showPreview ? preview : editor
+              })()
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-text-dim text-sm bg-bg-tertiary">
                 <FileCode size={48} className="mb-4 opacity-30" />

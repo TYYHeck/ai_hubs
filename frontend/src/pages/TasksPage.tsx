@@ -301,7 +301,7 @@ export default function TasksPage() {
               <label className="block text-xs text-text-muted mb-1">编排模式</label>
               <select value={form.mode} onChange={e => setForm({...form, mode: e.target.value})}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-accent outline-none">
-                {modes.filter(m => m.id !== 'workflow').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {modes.filter(m => m.id !== 'workflow' && m.id !== 'custom').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
             {enabledWorkflows.length > 0 && (
@@ -555,7 +555,10 @@ export default function TasksPage() {
                               if (isAutoAssign) {
                                 icon = <div className="w-3.5 h-3.5 rounded-full bg-blue-500" />
                                 title = 'AI 分配任务'
-                                desc = `候选 Agent: ${evt.data?.candidates?.join(', ') || '-'}`
+                                // 议题 #11：不再把全部候选 Agent 列出，只报数量，最终选中者见「指派」
+                                desc = evt.data?.candidate_count != null
+                                  ? `正在匹配最合适的 Agent（共 ${evt.data.candidate_count} 个候选）…`
+                                  : '正在匹配最合适的 Agent…'
                                 colorClass = 'text-blue-600 dark:text-blue-400'
                               } else if (isAiAnalysisStart) {
                                 icon = <div className="w-3.5 h-3.5 rounded-full bg-purple-500 animate-pulse" />

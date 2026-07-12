@@ -965,8 +965,10 @@ async def run_auto(
     if not agents:
         raise RuntimeError("没有可用的 Agent，无法自动指派")
 
+    # 议题 #11：候选 Agent 不应把全部 Agent 一股脑列出，只告知候选数量，
+    # 最终选中的 Agent 由下方 auto_assigned 事件与任务「指派」字段体现。
     await _emit_event(None, task_id, "auto_assign_start",
-                      {"assignment": assignment, "candidates": [a.name for a in agents]},
+                      {"assignment": assignment, "candidate_count": len(agents)},
                       event_queue=event_queue)
 
     final_input = user_input
@@ -1000,6 +1002,17 @@ async def run_auto(
 
     if chosen is None:
         chosen = agents[0]
+
+    # 议题 #11：任务「指派：xxxx」只显示最终选中的 Agent，而非全部候选。
+    # run_auto 在指派完成后用独立会话写回 task.assigned_agent。
+    try:
+        async with create_session() as _s:
+            _t = await _s.get(TaskModel, task_id)
+            if _t:
+                _t.assigned_agent = chosen.name
+                await _s.commit()
+    except Exception as _ae:
+        logger.warning(f"更新任务指派 Agent 失败（不影响执行）: {_ae}")
 
     # ── 自动选择工作流模式（议题 #4：覆盖全部 8+ 模式）──
     difficulty = (analysis or {}).get("difficulty", "简单")

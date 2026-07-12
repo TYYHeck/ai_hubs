@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -362,14 +364,42 @@ def read_file(path: str, user_id: int) -> dict:
     }
 
 
+def _default_doc_name(content: str) -> str:
+    """当模型未提供文件名时，从内容推断一个合理的默认文件名（议题 #10）。"""
+    first = (content or "").lstrip()
+    m = re.match(r"^#\s+(.+)$", first)
+    if m:
+        title = m.group(1).strip()
+        slug = re.sub(r"[^\w一-龥\-]+", "_", title).strip("_")
+        if slug:
+            return f"{slug[:40]}.md"
+    return f"document_{int(time.time())}.md"
+
+
 def write_file(path: str, content: str, user_id: int) -> dict:
-    """写入文件到工作区（自动创建父目录，受配额限制）"""
-    if not path or not str(path).strip():
-        return {"ok": False, "error": "路径不能为空，请传入文件相对路径（如 'result.md'）"}
+    """写入文件到工作区（自动创建父目录，受配额限制）。
+
+    议题 #10 修复：模型有时把 path 传成空串或目录，导致「路径不能为空 /
+    路径是目录」反复失败、浪费多轮思考。此处做兜底——
+      - 空路径（或 '.'/'/'）→ 从内容推断默认文件名（如首行 # 标题）；
+      - 路径是目录 → 在该目录下补一个默认文件名。
+    仍失败才返回清晰报错。
+    """
+    raw = (path or "").strip()
     root = _workspace_root(user_id)
-    target = _resolve(root, path)
-    if target.is_dir():
-        return {"ok": False, "error": f"路径是目录: {path}"}
+
+    if not raw or raw in (".", "/"):
+        # 空路径兜底：从内容推断文件名
+        default_name = _default_doc_name(content)
+        target = _resolve(root, default_name)
+        logger.warning(f"write_file 收到空路径，已兜底写入: {default_name}")
+    else:
+        target = _resolve(root, raw)
+        # 路径指向目录 → 在目录内补默认文件名
+        if target.is_dir():
+            default_name = _default_doc_name(content)
+            target = target / default_name
+            logger.warning(f"write_file 路径是目录，已在该目录补默认文件名: {default_name}")
 
     try:
         existing = target.stat().st_size if target.exists() else 0
@@ -386,7 +416,12 @@ def write_file(path: str, content: str, user_id: int) -> dict:
         target.write_text(content, encoding="utf-8")
     except Exception as e:
         return {"ok": False, "error": f"写入失败: {e}"}
-    return {"ok": True, "path": path, "name": target.name, "size": target.stat().st_size}
+    return {
+        "ok": True,
+        "path": str(target.relative_to(root)).replace("\\", "/"),
+        "name": target.name,
+        "size": target.stat().st_size,
+    }
 
 
 def list_files(path: str, user_id: int) -> dict:

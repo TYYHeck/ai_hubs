@@ -178,7 +178,8 @@ async def run_workflow_graph(
                 out = "\n\n---\n\n".join(parts)
             board.write_public(node_id, node_id, out)
         elif ntype == NODE_END:
-            return board.public.get("output", ctx_text)
+            # 出口返回当前累计上下文（各节点接力产出的最新结果），不再依赖 board 的 output 键
+            return ctx_text
 
         # 用本节点输出更新上下文（供下游 agent 节点接力）
         if out:
@@ -197,6 +198,7 @@ async def run_workflow_graph(
     await _emit_event(None, task_id, "workflow_start",
                       {"nodes": len(nodes), "edges": len(edges)},
                       event_queue=event_queue)
-    await traverse(start.get("id"))
+    final = await traverse(start.get("id"))
 
-    return "\n\n---\n\n".join(r for r in results if r) or ctx_text
+    # 优先用出口/末节点返回的最终产出；退化时再拼接各节点结果，最后回退到初始输入
+    return final or "\n\n---\n\n".join(r for r in results if r) or ctx_text
