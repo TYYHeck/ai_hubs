@@ -94,7 +94,8 @@ async def upload_file(
     await session.commit()
     await session.refresh(att)
 
-    placeholder = f"[{kind}#{next_index}]" if next_index else f"[{kind}]"
+    # 始终生成带编号的占位符（兼容 _resolve_attachments 的正则匹配）
+    placeholder = f"[{kind}#{next_index}]"
     return {
         "ok": True,
         "attachment": att.to_dict(),

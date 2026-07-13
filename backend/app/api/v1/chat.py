@@ -219,7 +219,7 @@ async def _resolve_attachments(
         )
 
     # 构建 placeholder → content 的映射
-    placeholder_map: dict[str, str] = {}
+    placeholder_map: dict[re.Pattern, str] = {}
     for att in attachments.values():
         content = _read_content(att)
         # 匹配 [doc#N]、[image#N]、[file#N]（不区分大小写）
@@ -228,6 +228,14 @@ async def _resolve_attachments(
             re.IGNORECASE,
         )
         placeholder_map[pattern] = content
+        # 兼容旧版无编号占位符 [doc] / [image] / [file]（ref_index=0 时生成）
+        if att.ref_index == 0:
+            pattern_no_num = re.compile(
+                rf"\[{re.escape(att.kind)}\]",
+                re.IGNORECASE,
+            )
+            if pattern_no_num not in placeholder_map:
+                placeholder_map[pattern_no_num] = content
 
     # 替换消息中的占位符
     resolved = message

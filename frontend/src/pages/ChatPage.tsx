@@ -133,6 +133,21 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // 同步占位符删除：文本框里删除了 [doc#N] → 自动移除对应附件
+  useEffect(() => {
+    const store = useChatStore.getState()
+    const stateAtts = store.attachments
+    if (!stateAtts.length) return
+    const inputLower = input.toLowerCase()
+    for (const att of stateAtts) {
+      const ph = `[${att.kind}#${att.ref_index}]`.toLowerCase()
+      const phLegacy = att.ref_index === 0 ? `[${att.kind}]`.toLowerCase() : null
+      if (!inputLower.includes(ph) && !(phLegacy && inputLower.includes(phLegacy))) {
+        store.removeAttachment(att.id)
+      }
+    }
+  }, [input])
+
   // 发送 / 排队发送
   const doSend = useCallback(() => {
     const text = input.trim()
@@ -653,7 +668,18 @@ export default function ChatPage() {
                   : a.kind === 'doc' ? <FileText size={12} className="text-blue-600 dark:text-blue-400" />
                   : <Paperclip size={12} className="text-text-muted" />}
                 <span className="text-text-secondary max-w-[140px] truncate">{a.filename}</span>
-                <button onClick={() => removeAttachment(a.id)} className="text-text-dim hover:text-red-500 dark:hover:text-red-400"><X size={11} /></button>
+                <button onClick={() => {
+                  removeAttachment(a.id)
+                  // 同步清理文本框中的占位符（仅清理对应的那一个）
+                  setInput(prev => {
+                    let cleaned = prev.replace(new RegExp(`\\[${a.kind}#${a.ref_index}\\]`, 'gi'), '')
+                    // 兼容旧版无编号格式（仅 ref_index=0 时才清理 [doc]）
+                    if (a.ref_index === 0) {
+                      cleaned = cleaned.replace(new RegExp(`\\[${a.kind}\\]`, 'gi'), '')
+                    }
+                    return cleaned.replace(/\s{2,}/g, ' ').trim()
+                  })
+                }} className="text-text-dim hover:text-red-500 dark:hover:text-red-400"><X size={11} /></button>
               </div>
             ))}
           </div>
@@ -1041,11 +1067,11 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 function ContentWithRefs({ text, highlight, isUser }: { text: string; highlight?: string; isUser?: boolean }) {
-  const parts = text.split(/(\[(?:image|doc|Doc|file)#\d+\])/g)
+  const parts = text.split(/(\[(?:image|doc|Doc|file)(?:#\d+)?\])/g)
   return (
     <>
       {parts.map((p, i) => {
-        if (/^\[(?:image|doc|Doc|file)#\d+\]$/.test(p)) {
+        if (/^\[(?:image|doc|Doc|file)(?:#\d+)?\]$/.test(p)) {
           const kind = p.startsWith('[image') || p.startsWith('[Image') ? 'image' : p.startsWith('[doc') || p.startsWith('[Doc') ? 'doc' : 'file'
           const Icon = kind === 'image' ? ImageIcon : kind === 'doc' ? FileText : Paperclip
           const color = kind === 'image' ? 'text-green-600 dark:text-green-400 border-green-500/40'
