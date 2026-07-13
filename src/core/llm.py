@@ -359,6 +359,52 @@ class OpenAIClient(BaseLLM):
 
     # ======== 响应解析 ========
 
+    @staticmethod
+    def _salvage_malformed_json_src(raw: str, tool_name: str) -> dict:
+        """从残缺 JSON 中尽力抢救参数（同 backend 版本逻辑）"""
+        import re
+        result: dict = {}
+        if not raw.strip():
+            return {"_json_error": "arguments 为空"}
+        if raw.strip()[-1] not in ("}", "]"):
+            repaired = raw.rstrip()
+            brace_diff = repaired.count("{") - repaired.count("}")
+            repaired += "}" * max(brace_diff, 0)
+            quote_count = repaired.count('"')
+            if quote_count % 2 != 0:
+                repaired += '"'
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError:
+                pass
+        if tool_name == "write_file":
+            path_m = re.search(r'"path"\s*:\s*"([^"]*)"', raw)
+            if path_m:
+                result["path"] = path_m.group(1)
+            content_m = re.search(r'"content"\s*:\s*"', raw)
+            if content_m:
+                start = content_m.end()
+                remaining = raw[start:]
+                last_quote = -1
+                i = 0
+                while i < len(remaining):
+                    if remaining[i] == "\\" and i + 1 < len(remaining):
+                        i += 2
+                        continue
+                    if remaining[i] == '"':
+                        last_quote = i
+                    i += 1
+                if last_quote >= 0:
+                    raw_content = remaining[:last_quote]
+                    try:
+                        import codecs
+                        result["content"] = codecs.decode(raw_content, "unicode_escape")
+                    except Exception:
+                        result["content"] = raw_content
+        if not result:
+            result["_json_error"] = f"JSON 解析失败: {raw[:200]}..."
+        return result
+
     def _parse_response(self, response) -> Message:
         """解析 OpenAI 响应为内部 Message"""
         choice = response.choices[0]
@@ -367,10 +413,15 @@ class OpenAIClient(BaseLLM):
         tool_calls: list[ToolCall] = []
         if msg.tool_calls:
             for tc in msg.tool_calls:
+                raw_args = tc.function.arguments
                 try:
-                    args = json.loads(tc.function.arguments)
+                    args = json.loads(raw_args)
                 except json.JSONDecodeError:
-                    args = {}
+                    logger.warning(
+                        f"LLM tool_call JSON 解析失败 [{tc.function.name}]: "
+                        f"len={len(raw_args)}, head={raw_args[:100]!r}, tail={raw_args[-100:]!r}"
+                    )
+                    args = self._salvage_malformed_json_src(raw_args, tc.function.name)
                 tool_calls.append(ToolCall(
                     id=tc.id,
                     name=tc.function.name,

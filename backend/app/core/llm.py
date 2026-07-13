@@ -248,6 +248,75 @@ class LLMManager:
             result.append(chunk)
         return "".join(result)
 
+    @staticmethod
+    def _salvage_malformed_json(raw: str, tool_name: str) -> dict:
+        """从残缺 JSON 中尽力抢救参数。
+
+        常见失败场景：
+        1. LLM 输出被 max_tokens 截断，JSON 未闭合
+        2. content 内嵌的代码未正确转义引号/换行，导致 JSON 提前断裂
+        """
+        import re
+        result: dict = {}
+
+        # 策略1：尝试补全截断的 JSON（追加缺失的 }" 等）
+        if not raw.strip():
+            return {"_json_error": "arguments 为空字符串"}
+        if raw.strip()[-1] not in ("}", "]"):
+            # JSON 可能被截断，尝试补全
+            repaired = raw.rstrip()
+            # 统计未闭合的大括号
+            brace_diff = repaired.count("{") - repaired.count("}")
+            repaired += "}" * max(brace_diff, 0)
+            # 统计未闭合的引号（简单启发）
+            quote_count = repaired.count('"')
+            if quote_count % 2 != 0:
+                repaired += '"'
+            try:
+                result = json.loads(repaired)
+                logger.info(f"JSON 修复成功 [{tool_name}]: 补全 {brace_diff} 个括号")
+                return result
+            except json.JSONDecodeError:
+                pass
+
+        # 策略2：正则提取已知参数（write_file 的 path + content）
+        if tool_name == "write_file":
+            path_m = re.search(r'"path"\s*:\s*"([^"]*)"', raw)
+            if path_m:
+                result["path"] = path_m.group(1)
+            # content 值可能很大且含转义，尝试从 "content": " 开始截取
+            content_m = re.search(r'"content"\s*:\s*"', raw)
+            if content_m:
+                start = content_m.end()
+                # 取到最后一个未转义引号之前
+                remaining = raw[start:]
+                # 找最后一个 " 但排除 \"
+                last_quote = -1
+                i = 0
+                while i < len(remaining):
+                    if remaining[i] == "\\" and i + 1 < len(remaining):
+                        i += 2  # 跳过转义字符
+                        continue
+                    if remaining[i] == '"':
+                        last_quote = i
+                    i += 1
+                if last_quote >= 0:
+                    # 还原 JSON 转义
+                    import codecs
+                    raw_content = remaining[:last_quote]
+                    try:
+                        result["content"] = codecs.decode(raw_content, "unicode_escape")
+                    except Exception:
+                        result["content"] = raw_content
+
+            if result.get("path") and result.get("content"):
+                logger.info(f"JSON 正则抢救成功 [write_file]: path={result['path'][:80]}, content_len={len(result['content'])}")
+
+        if not result:
+            result["_json_error"] = f"JSON 解析失败: {raw[:200]}..."
+
+        return result
+
     async def stream_with_tools(
         self,
         messages: list[dict],
@@ -346,6 +415,15 @@ class LLMManager:
                 # 检查是否有 finish_reason
                 finish = chunk.choices[0].finish_reason
 
+            # 流式完成后记录各工具参数长度（用于诊断截断问题）
+            for idx, entry in tool_calls_map.items():
+                arg_len = len(entry.get("arguments", ""))
+                if arg_len > 500:
+                    logger.debug(
+                        f"LLM tool_call 流式完成 [{entry.get('function_name', '?')}]: "
+                        f"arguments_len={arg_len}"
+                    )
+
             # 没有工具调用 — 对话结束
             if not tool_calls_map:
                 _flush_usage()
@@ -371,10 +449,46 @@ class LLMManager:
             # 执行每个工具调用
             for tc in tc_list:
                 tool_name = tc["function"]["name"]
+                raw_args = tc["function"]["arguments"]
                 try:
-                    tool_args = json.loads(tc["function"]["arguments"])
-                except json.JSONDecodeError:
-                    tool_args = {}
+                    tool_args = json.loads(raw_args)
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"LLM tool_call JSON 解析失败 [{tool_name}]: {e} | "
+                        f"len={len(raw_args)} | "
+                        f"head={raw_args[:120]!r} | "
+                        f"tail={raw_args[-120:]!r}"
+                    )
+                    # 尝试从残缺 JSON 中抢救参数
+                    tool_args = self._salvage_malformed_json(raw_args, tool_name)
+
+                # 仅含 _json_error 且关键参数缺位 → 直接返回错误，不调用实际工具
+                if tool_args.get("_json_error"):
+                    logger.warning(
+                        f"LLM tool_call 参数抢救失败 [{tool_name}]: "
+                        f"raw_len={len(raw_args)}, error={tool_args['_json_error']}"
+                    )
+                    result_str = json.dumps({
+                        "ok": False,
+                        "error": (
+                            f"工具调用参数 JSON 格式错误，无法解析。"
+                            f"原始参数字符串长度 {len(raw_args)} 字符。"
+                            f"请检查 JSON 格式（引号转义、括号闭合）后重试。"
+                            f"建议：若 content 包含大量代码，请确保其中双引号和反斜杠已正确转义。"
+                        ),
+                    }, ensure_ascii=False)
+                    yield {
+                        "type": "tool_result",
+                        "name": tool_name,
+                        "result": result_str,
+                        "call_id": tc["id"],
+                    }
+                    working_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": result_str,
+                    })
+                    continue  # 跳过实际工具执行
 
                 from .tools import get_tool_summary
                 summary = get_tool_summary(tool_name, tool_args)
