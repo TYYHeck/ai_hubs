@@ -294,12 +294,17 @@ async def chat_stream(
                 session.add(conv)
                 await session.flush()
     
-            # 2. 保存用户消息
+            # 1.5 解析附件占位符（在保存前解析，确保历史消息不含未解析的占位符）
+            resolved_message = await _resolve_attachments(
+                req.message, req.attachment_ids, current_user.id, session,
+            )
+
+            # 2. 保存用户消息（使用已解析的内容，避免历史消息残留 [doc#N] 占位符）
             user_msg = Message(
                 conversation_id=conv_id,
                 role="user",
-                content=req.message,
-                tokens_used=_estimate_tokens(req.message),
+                content=resolved_message,
+                tokens_used=_estimate_tokens(resolved_message),
             )
             session.add(user_msg)
             await session.flush()
@@ -400,10 +405,7 @@ async def chat_stream(
     
             for m in history:
                 messages.append({"role": m.role, "content": m.content})
-            # 解析附件占位符，替换为实际文件内容
-            resolved_message = await _resolve_attachments(
-                req.message, req.attachment_ids, current_user.id, session,
-            )
+            # 当前消息已在保存前解析（见上方 1.5），直接使用已解析内容
             messages.append({"role": "user", "content": resolved_message})
     
             # 3.1 构建工具列表：内部工具始终可用，代码执行工具按技能启用
