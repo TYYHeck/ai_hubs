@@ -203,6 +203,17 @@ def run_code(
 
     返回: {"stdout": str, "stderr": str, "exit_code": int, "timed_out": bool, "command": str}
     """
+    # 空代码防护：拒绝执行空代码，避免浪费工具轮次并返回误导性 exit_code=0
+    if not (code and str(code).strip()):
+        return {
+            "stdout": "",
+            "stderr": "代码内容为空，已拒绝执行。请提供有效的代码内容后重试。",
+            "exit_code": -1,
+            "timed_out": False,
+            "command": "",
+            "ok": False,
+            "error": "代码内容为空，已拒绝。请向 run_code 提供非空 code 参数。",
+        }
     args = list(args or [])
     root = _workspace_root(user_id)
     ext = _LANG_TO_EXT.get(language.lower(), ".py")
@@ -427,7 +438,11 @@ def write_file(path: str, content: str, user_id: int) -> dict:
     # 空内容防护：拒绝写入 0 字节文件（议题 #？— 任务流程产生空 document_*.md）
     if not (content and str(content).strip()):
         return {"ok": False,
-                "error": "写入内容为空，已拒绝。请向 write_file 提供非空内容。"}
+                "error": (
+                    "write_file 调用失败：content 参数为空。"
+                    "请提供非空的 path（文件路径）和 content（文件内容）两个参数后重试。"
+                    "例如：write_file(path='output.txt', content='Hello World')"
+                )}
 
     if not raw or raw in (".", "/"):
         # 空路径兜底：从内容推断文件名
