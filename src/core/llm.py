@@ -401,7 +401,21 @@ class OpenAIClient(BaseLLM):
                         result["content"] = codecs.decode(raw_content, "unicode_escape")
                     except Exception:
                         result["content"] = raw_content
-        if not result:
+
+            # 必须参数缺失检测（尤其 write_file：path 有但 content 无 = LLM 输出被截断）
+            missing = []
+            if not result.get("path"):
+                missing.append("path")
+            if not result.get("content") or not str(result.get("content", "")).strip():
+                missing.append("content")
+            if missing:
+                result["_json_error"] = (
+                    f"write_file 参数缺位: 缺少 {', '.join(missing)}。"
+                    f"可能原因：LLM 输出超 max_tokens 限制被截断。"
+                    f"请将大文件拆分为多个较小的 write_file 调用。"
+                )
+
+        if tool_name != "write_file" and not result:
             result["_json_error"] = f"JSON 解析失败: {raw[:200]}..."
         return result
 

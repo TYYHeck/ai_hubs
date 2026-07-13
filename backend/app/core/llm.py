@@ -101,8 +101,10 @@ def get_llm_config() -> dict:
         "api_key": saved.get("api_key", ""),
         "base_url": saved.get("base_url", preset["base_url"]),
         "temperature": saved.get("temperature", 0.7),
-        "max_tokens": saved.get("max_tokens", 4096),
+        "max_tokens": saved.get("max_tokens", 8192),
     }
+
+
 
 
 def get_embedding_config() -> dict:
@@ -169,7 +171,7 @@ class LLMManager:
                 "api_key": user_config["api_key"],
                 "base_url": user_config.get("base_url") or preset["base_url"],
                 "temperature": user_config.get("temperature", 0.7),
-                "max_tokens": user_config.get("max_tokens", 4096),
+                "max_tokens": user_config.get("max_tokens", 8192),
                 "is_user_owned": True,
             }
         cfg = get_llm_config()
@@ -312,7 +314,20 @@ class LLMManager:
             if result.get("path") and result.get("content"):
                 logger.info(f"JSON 正则抢救成功 [write_file]: path={result['path'][:80]}, content_len={len(result['content'])}")
 
-        if not result:
+        # 必须参数缺失检测（尤其 write_file：path 有但 content 无 = LLM 输出被截断）
+        if tool_name == "write_file":
+            missing = []
+            if not result.get("path"):
+                missing.append("path")
+            if not result.get("content") or not str(result.get("content", "")).strip():
+                missing.append("content")
+            if missing:
+                result["_json_error"] = (
+                    f"write_file 参数缺位: 缺少 {', '.join(missing)}。"
+                    f"可能原因：LLM 输出超过 max_tokens 限制被截断。"
+                    f"请将大文件拆分为多个较小的 write_file 调用，或减少单次输出的内容量。"
+                )
+        elif not result:
             result["_json_error"] = f"JSON 解析失败: {raw[:200]}..."
 
         return result
@@ -415,6 +430,17 @@ class LLMManager:
                 # 检查是否有 finish_reason
                 finish = chunk.choices[0].finish_reason
 
+            # finish_reason 截断检测
+            if finish == "length":
+                logger.warning(
+                    f"LLM 响应被 max_tokens 截断 (round {round_idx})！"
+                    f"tool_calls 数量={len(tool_calls_map)}，"
+                    f"各参数长度: { {e.get('function_name','?'): len(e.get('arguments','')) for e in tool_calls_map.values()} }"
+                )
+                # 截断时 tool_call arguments 很可能不完整，标记到各 entry
+                for entry in tool_calls_map.values():
+                    entry["_truncated"] = True
+
             # 流式完成后记录各工具参数长度（用于诊断截断问题）
             for idx, entry in tool_calls_map.items():
                 arg_len = len(entry.get("arguments", ""))
@@ -489,6 +515,27 @@ class LLMManager:
                         "content": result_str,
                     })
                     continue  # 跳过实际工具执行
+
+                # write_file 参数二次校验（JSON 解析成功但 content 可能为空/缺位）
+                if tool_name == "write_file":
+                    if not tool_args.get("path"):
+                        _err = json.dumps({"ok": False, "error": "write_file 缺少 path 参数"}, ensure_ascii=False)
+                        yield {"type": "tool_result", "name": tool_name, "result": _err, "call_id": tc["id"]}
+                        working_messages.append({"role": "tool", "tool_call_id": tc["id"], "content": _err})
+                        continue
+                    content_val = str(tool_args.get("content", ""))
+                    if not content_val.strip():
+                        _err = json.dumps({
+                            "ok": False,
+                            "error": (
+                                f"write_file 的 content 参数为空（path={tool_args.get('path', '?')[:80]}）。"
+                                f"可能原因：LLM 输出超 max_tokens 限制，工具调用参数被截断。"
+                                f"请将生成内容拆分为多次较小的 write_file 调用。"
+                            ),
+                        }, ensure_ascii=False)
+                        yield {"type": "tool_result", "name": tool_name, "result": _err, "call_id": tc["id"]}
+                        working_messages.append({"role": "tool", "tool_call_id": tc["id"], "content": _err})
+                        continue
 
                 from .tools import get_tool_summary
                 summary = get_tool_summary(tool_name, tool_args)
