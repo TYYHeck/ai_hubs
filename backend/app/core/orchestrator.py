@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -69,6 +70,9 @@ _OUTPUT_EXTENSIONS = {
 
 # 扫描前快照（用于检测新增文件）
 _pre_scan_snapshots: dict[int, set] = {}  # user_id -> 执行前文件集合
+
+# 任务级工具执行错误累积（供串行模式后续 Agent 接力排查，根因 #3）
+_task_tool_errors: dict[str, list[str]] = {}  # task_id -> [错误摘要...]
 
 
 def get_pause_event(task_id: str) -> asyncio.Event:
@@ -129,6 +133,11 @@ async def _collect_output_files(user_id: int) -> list[dict]:
             })
 
     return outputs
+
+
+# ── 产出验证（消除「假完成」，根因 #4）──
+# 纯函数实现见 .deliverable，避免在编排器内重复维护。
+from .deliverable import _infer_expected_exts, _verify_deliverable
 
 
 # ── SSE 事件广播注册表（修复「任务卡死在开始阶段」议题）──
@@ -370,8 +379,26 @@ async def _run_with_tools(
                               event_queue=event_queue)
 
         elif evt["type"] == "tool_result":
+            result_text = evt.get("result") or ""
+            # 记录失败的工具返回值，供串行模式后续 Agent 接力排查（根因 #3）
+            try:
+                parsed = json.loads(result_text)
+                if isinstance(parsed, dict):
+                    failed = (
+                        parsed.get("ok") is False
+                        or bool(parsed.get("error"))
+                        or (parsed.get("exit_code") not in (None, 0))
+                        or bool(parsed.get("timed_out"))
+                    )
+                    if failed:
+                        err_msg = parsed.get("error") or parsed.get("stderr") or result_text[:300]
+                        _task_tool_errors.setdefault(task_id, []).append(
+                            f"[{evt['name']}] {str(err_msg)[:300]}"
+                        )
+            except (json.JSONDecodeError, TypeError):
+                pass
             # 工具结果可能很长，摘要截断
-            result_preview = (evt.get("result") or "")[:500]
+            result_preview = result_text[:500]
             await _emit_event(None, task_id, "tool_result",
                               {"agent": agent.name, "tool": evt["name"],
                                "result_preview": result_preview},
@@ -390,7 +417,12 @@ async def run_sequential(
     event_queue: asyncio.Queue,
     user_id: int,
 ) -> str:
-    """串行模式：Agent 1 → Agent 2 → ... 每个收到前一个的输出"""
+    """串行模式：Agent 1 → Agent 2 → ... 每个收到前一个的输出。
+
+    增强（根因 #3）：除前序文本产出外，还向后续 Agent 注入
+    ① 当前工作区文件清单（使其能 read 并修复前序遗留文件，而非从零重写）
+    ② 前序步骤的工具执行错误（若有），引导其优先排查修复。
+    """
     context = user_input
     results = []
 
@@ -400,7 +432,35 @@ async def run_sequential(
                           event_queue=event_queue)
 
         if i > 0:
-            prompt = f"前一步 Agent 的输出：\n{context}\n\n请基于以上输出继续处理：{user_input}"
+            parts = [
+                f"前一步 Agent（{agents[i - 1].name}）的输出：\n{context}",
+                "\n请基于以上继续处理。",
+            ]
+            # ① 工作区文件清单：让后续 Agent 能发现并修复前序遗留文件
+            try:
+                from .sandbox import list_files as _sl
+                ws = _sl(".", user_id)
+                if ws.get("ok"):
+                    files = sorted(
+                        e["name"] for e in ws.get("entries", [])
+                        if e.get("type") == "file"
+                    )
+                    if files:
+                        parts.append(
+                            "\n当前工作区已有文件（如需修改请用 read_file 打开后修正，"
+                            "不要重新生成同名文件）：\n- " + "\n- ".join(files)
+                        )
+            except Exception:
+                pass
+            # ② 前序工具执行错误接力
+            prior_errs = _task_tool_errors.get(task_id, [])
+            if prior_errs:
+                parts.append(
+                    "\n⚠️ 前序步骤出现过工具执行错误，请优先排查并修复：\n- "
+                    + "\n- ".join(prior_errs[-8:])
+                )
+            parts.append(f"\n任务原始要求：{user_input}")
+            prompt = "\n".join(parts)
         else:
             prompt = context
 
@@ -1282,11 +1342,22 @@ async def execute_task(
                 )
 
             task.result = _clean_result(result)
+
             # 真实 token 用量扣减（仅平台免费额度；与 chat 一致）
             if user and not using_own_key and user.role != "admin":
                 user.add_token_usage(_usage_acc["prompt"] + _usage_acc["completion"])
-            task.status = "completed"
+
+            # ── 产出验证（消除「假完成」：按任务描述推断期望产物，缺失/空文件则标记 needs_review）──
+            output_files = await _collect_output_files(user_id)
+            deliver_ok, deliver_reason = _verify_deliverable(task, output_files)
+            task.status = "completed" if deliver_ok else "needs_review"
             task.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            if not deliver_ok:
+                task.error = deliver_reason
+                logger.warning(f"任务产出验证未通过（标记 needs_review）: {task_id} - {deliver_reason}")
+                await _emit_event(session, task_id, "task_needs_review",
+                                  {"reason": deliver_reason, "output_files": output_files},
+                                  event_queue=event_queue)
 
             # ── 记录效率指标（议题 #15）：延迟/消耗/成本/协调轮次 ──
             try:
@@ -1296,18 +1367,20 @@ async def execute_task(
                     model=agents[0].model if agents else "default",
                     agents=len(agents), latency_s=_latency,
                     in_tokens=_usage_acc["prompt"], out_tokens=_usage_acc["completion"],
-                    success=True,
+                    success=deliver_ok,
                     rounds=extra_kw.get("rounds"),
                 )
             except Exception as me:
                 logger.warning(f"效率指标记录失败（不影响主流程）: {me}")
 
-            # ── 扫描工作区产出文件 ──
-            output_files = await _collect_output_files(user_id)
+            # ── 登记工作区产出文件 + 验证结论 ──
             if output_files:
                 meta = dict(task.metadata_ or {})
                 meta["output_files"] = output_files
+                meta["verification"] = {"ok": deliver_ok, "reason": deliver_reason}
                 task.metadata_ = meta
+
+
 
             await session.commit()
 
@@ -1319,6 +1392,7 @@ async def execute_task(
             # 清理暂停事件与用量钩子
             _active_tasks.pop(task_id, None)
             _TASK_USAGE_HOOKS.pop(task_id, None)
+            _task_tool_errors.pop(task_id, None)
             drop_blackboard(task_id)
             return result
 
@@ -1350,6 +1424,7 @@ async def execute_task(
 
             _active_tasks.pop(task_id, None)
             _TASK_USAGE_HOOKS.pop(task_id, None)
+            _task_tool_errors.pop(task_id, None)
             drop_blackboard(task_id)
             raise
 

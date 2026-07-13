@@ -137,6 +137,7 @@ const statusColors: Record<string, string> = {
   failed: 'bg-red-500/20 text-red-600 dark:text-red-400',
   paused: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
   cancelled: 'bg-gray-500/20 text-gray-600 dark:text-gray-400',
+  needs_review: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
 }
 
 export default function TasksPage() {
@@ -424,7 +425,7 @@ export default function TasksPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColors[t.status] || 'text-text-muted'}`}>
-                        {t.status === 'pending' ? '等待中' : t.status === 'running' ? '运行中' : t.status === 'completed' ? '已完成' : t.status === 'failed' ? '失败' : t.status === 'paused' ? '已暂停' : t.status}
+                        {t.status === 'pending' ? '等待中' : t.status === 'running' ? '运行中' : t.status === 'completed' ? '已完成' : t.status === 'failed' ? '失败' : t.status === 'paused' ? '已暂停' : t.status === 'needs_review' ? '待复核' : t.status}
                       </span>
                       <span className="text-text-primary font-medium truncate">{t.title}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">

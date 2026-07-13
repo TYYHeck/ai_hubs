@@ -173,6 +173,24 @@ def _run_cmd(cmd: list[str], cwd: str, timeout: int = _RUN_TIMEOUT) -> subproces
 # 公共 API
 # ═══════════════════════════════════════════════════════════
 
+# 命令式前缀：若以这些词开头，说明传入的是「执行命令」而非代码本身
+# （例如 LLM 把 `python3 xxx.py` 当作整段 python 代码传进来）。
+_SHELL_CMD_PREFIXES = (
+    "python3 ", "python ", "pythonw ", "pip ", "pip3 ",
+    "node ", "npm ", "npx ", "java ", "javac ",
+)
+
+
+def _looks_like_shell_command(code: str, language: str) -> bool:
+    """判断传入 run_code 的内容是否其实是 shell 执行命令（应改用 run_terminal）。"""
+    lang = (language or "").lower()
+    # bash/sh 本身就是脚本语言，命令式写法是合法的，不拦截
+    if lang in ("bash", "sh", "shell", "shell-script", "batch", "cmd"):
+        return False
+    first = (code or "").lstrip().splitlines()[0] if (code or "").strip() else ""
+    return bool(first) and first.startswith(_SHELL_CMD_PREFIXES)
+
+
 def run_code(
     code: str,
     language: str,
@@ -196,6 +214,24 @@ def run_code(
             "exit_code": -1,
             "timed_out": False,
             "command": "",
+        }
+
+    # 检测误把「执行命令」当代码传入（根因 #2：曾把 python3 xxx.py 当作代码运行）
+    first_line = (code or "").lstrip().splitlines()[0] if (code or "").strip() else ""
+    if _looks_like_shell_command(code, language):
+        return {
+            "stdout": "",
+            "stderr": (
+                "检测到你传入的是「执行命令」而非代码本身"
+                f"（如用解释器运行脚本：{first_line!r}）。\n"
+                "请改用 run_terminal 工具直接执行该命令，例如：\n"
+                f"  command = {first_line!r}\n"
+                "并将 language 设为 'bash'（或保持默认）即可。"
+            ),
+            "exit_code": -1,
+            "timed_out": False,
+            "command": "",
+            "hint": "use_run_terminal",
         }
 
     # 生成文件名
@@ -387,6 +423,11 @@ def write_file(path: str, content: str, user_id: int) -> dict:
     """
     raw = (path or "").strip()
     root = _workspace_root(user_id)
+
+    # 空内容防护：拒绝写入 0 字节文件（议题 #？— 任务流程产生空 document_*.md）
+    if not (content and str(content).strip()):
+        return {"ok": False,
+                "error": "写入内容为空，已拒绝。请向 write_file 提供非空内容。"}
 
     if not raw or raw in (".", "/"):
         # 空路径兜底：从内容推断文件名
