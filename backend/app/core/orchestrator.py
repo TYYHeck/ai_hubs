@@ -286,6 +286,7 @@ async def run_single(
             result = await _run_with_tools(
                 task_id, agent, messages, user_id, pause_evt, event_queue,
                 session=session, on_usage=usage_hook,
+                enable_code=enable_code,
             )
         else:
             result = await _run_text_only(
@@ -351,6 +352,7 @@ async def _run_with_tools(
     event_queue: asyncio.Queue,
     session: "AsyncSession | None" = None,
     on_usage: Optional[Callable[[int, int], None]] = None,
+    enable_code: bool = False,
 ) -> str:
     """工具调用模式：LLM 可调用 run_code / write_file 等工具完成实际工作"""
     from functools import partial
