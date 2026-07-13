@@ -7,6 +7,7 @@ from .agent import Agent
 from .task import Task, TaskEvent
 from .skill import Skill
 from .dataset import Dataset, DatasetRecord
+from .rag_chunk import RagChunk
 from .memory import MemoryBranch, MemoryCommit, MemoryEntry, MemorySnapshot
 from .conversation import Conversation, Message
 from .attachment import Attachment

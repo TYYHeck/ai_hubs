@@ -5,14 +5,36 @@
 导入支持 json（对象数组）与 csv（首行表头）；导出同样两种格式。
 """
 
+import asyncio
 import csv
 import io
 import json
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...core.rag import rag_service
+
+logger = logging.getLogger("ai_hubs.datasets")
+
+
+async def _safe_reindex(dataset_id: int) -> None:
+    """后台安全地重索引某数据集（embedding 网络调用可能较慢，故异步执行）。"""
+    try:
+        await rag_service.reindex_dataset(dataset_id)
+    except Exception as e:  # 索引失败不应影响主流程
+        logger.warning(f"数据集 {dataset_id} RAG 重索引失败: {e}")
+
+
+def _schedule_reindex(dataset_id: int) -> None:
+    """非阻塞地安排 RAG 重索引（检索时的惰性索引保证最终一致性）。"""
+    try:
+        asyncio.create_task(_safe_reindex(dataset_id))
+    except Exception:
+        pass
 
 from ...database import get_session
 from ...models.dataset import Dataset, DatasetRecord
@@ -121,6 +143,11 @@ async def delete_dataset(
         raise HTTPException(status_code=404, detail="数据集不存在")
     await session.delete(dataset)  # 级联删除 records
     await session.commit()
+    # 清理该数据集的 RAG 切片
+    try:
+        await rag_service.delete_dataset_chunks(dataset_id)
+    except Exception as e:
+        logger.warning(f"数据集 {dataset_id} RAG 切片清理失败: {e}")
 
 
 # ── 记录管理 ──
@@ -159,6 +186,7 @@ async def add_record(
     await session.refresh(record)
     await _recalc_count(session, dataset_id)
     await session.commit()
+    _schedule_reindex(dataset_id)
     return DatasetRecordResponse.model_validate(record.to_dict()).model_dump()
 
 
@@ -179,6 +207,7 @@ async def delete_record(
     await session.commit()
     await _recalc_count(session, dataset_id)
     await session.commit()
+    _schedule_reindex(dataset_id)
 
 
 @router.put("/{dataset_id}/records/{record_id}")
@@ -205,6 +234,7 @@ async def update_record(
     record.data = new_data
     await session.commit()
     await session.refresh(record)
+    _schedule_reindex(dataset_id)
     return DatasetRecordResponse.model_validate(record.to_dict()).model_dump()
 
 
@@ -233,6 +263,7 @@ async def batch_delete_records(
     await session.commit()
     await _recalc_count(session, dataset_id)
     await session.commit()
+    _schedule_reindex(dataset_id)
 
 
 @router.get("/{dataset_id}/records/search")
@@ -309,6 +340,7 @@ async def import_records(
     await session.commit()
     total = await _recalc_count(session, dataset_id)
     await session.commit()
+    _schedule_reindex(dataset_id)
     return DatasetImportResponse(inserted=inserted, skipped=skipped, total_records=total)
 
 

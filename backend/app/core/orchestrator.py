@@ -27,7 +27,7 @@ from ..models.task import Task as TaskModel, TaskEvent as TaskEventModel
 from .llm import llm_manager
 from .memory import memory_manager
 from .rag import rag_service
-from .tools import TOOL_SYSTEM_PROMPT, should_enable_code_tools, get_enabled_tools
+from .tools import TOOL_SYSTEM_PROMPT, resolve_code_tools_enabled, get_enabled_tools
 from .blackboard import get_blackboard, drop_blackboard
 from .guardrails import guard_output
 from . import scorer as _scorer
@@ -242,9 +242,15 @@ async def run_single(
             system_parts.append(m["content"])
     if rag_ctx:
         system_parts.append(rag_ctx)
+    # 代码/技能工具门控（异步、按技能实际 config 健壮判定）
+    enable_code = await resolve_code_tools_enabled(agent.skills, user_id)
     # 注入工具使用指引（含 create_task 主动调用提示）；无代码权限时不授予代码能力说明
-    if should_enable_code_tools(agent.skills):
+    if enable_code:
         system_parts.append(TOOL_SYSTEM_PROMPT)
+        system_parts.append(
+            "\n\n# 代码技能执行\n当你需要的能力由某个已安装代码技能提供时，调用 run_skill 工具"
+            "并传入技能名称与参数，由框架在沙箱中真实运行，不要自行重写其代码。"
+        )
     else:
         system_parts.append(
             "你可以使用对话类工具与内部 API，但当前未被授予代码执行/文件读写权限，"
@@ -345,7 +351,7 @@ async def _run_with_tools(
 
     async for evt in llm_manager.stream_with_tools(
         messages=messages,
-        tools=get_enabled_tools(agent.skills),
+        tools=get_enabled_tools(enable_code),
         on_usage=on_usage,
         tool_executor=partial(execute_tool, session=session),
         user_id=user_id,

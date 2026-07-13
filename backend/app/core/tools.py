@@ -203,6 +203,35 @@ TOOL_DEFINITIONS: list[dict] = [
     },
 ]
 
+# ── 技能执行工具（代码技能由框架真实沙箱执行，而非仅作提示词）──
+RUN_SKILL_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "run_skill",
+        "description": (
+            "执行一个已安装的「代码技能」。技能代码在隔离沙箱中真实运行"
+            "（优先调用技能定义的 skill_main(ctx)，否则执行脚本本身并以 stdout 作为结果）。"
+            "当某个已激活的代码技能能更直接地完成任务（如数据处理、格式转换、专属算法）时调用本工具，"
+            "传入技能名称与参数。返回技能的结构化结果（skill_main 返回值）与 stdout。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill_name": {
+                    "type": "string",
+                    "description": "要执行的技能名称（须为已安装的代码技能）",
+                },
+                "args": {
+                    "type": "object",
+                    "description": "传给技能的参数对象，将作为 ctx['args'] 传入技能的 skill_main",
+                },
+            },
+            "required": ["skill_name"],
+        },
+    },
+}
+
+
 # 工具名 → 函数，方便调度
 _TOOL_MAP: dict[str, callable] = {
     "run_code": run_code,
@@ -211,6 +240,7 @@ _TOOL_MAP: dict[str, callable] = {
     "write_file": write_file,
     "list_files": list_files,
     "create_task": "_create_task",  # 特殊标记，由 execute_tool 分发
+    "run_skill": "_run_skill",      # 特殊标记，由 execute_tool 分发
 }
 
 
@@ -341,6 +371,19 @@ async def execute_tool(
         # ── create_task 特殊处理（需要数据库会话）──
         if tool_name == "create_task":
             return await _execute_create_task(tool_args, user_id, session)
+
+        # ── run_skill 特殊处理（代码技能真沙箱执行）──
+        if tool_name == "run_skill":
+            from .skill_runtime import execute_skill
+            return json.dumps(
+                await execute_skill(
+                    user_id=user_id,
+                    skill_name=tool_args.get("skill_name", ""),
+                    args=tool_args.get("args"),
+                    session=session,
+                ),
+                ensure_ascii=False,
+            )
 
         # ── 桌面客户端本地代理：优先转发给本地执行 ──
         _LOCAL_TOOLS = {"run_code", "run_terminal", "read_file", "write_file", "list_files"}
@@ -516,14 +559,52 @@ def should_enable_tools(skills: list[str]) -> bool:
 
 
 def should_enable_code_tools(skills: list[str]) -> bool:
-    """判断是否应附加代码执行类工具（run_code/run_terminal/read_file/write_file/list_files）。
+    """（同步、名称级）判断是否需要代码执行类工具。
 
-    仅当用户选用列表中任一 skill 匹配 EXECUTABLE_SKILLS 集时返回 True。
+    向后兼容：仅在技能名命中 EXECUTABLE_SKILLS 时返回 True。
+    更健壮、按技能实际配置判定的版本见 resolve_code_tools_enabled。
     """
     if not skills:
         return False
     requested = {s.lower().strip() for s in skills}
     return bool(requested & {s.lower() for s in EXECUTABLE_SKILLS})
+
+
+async def resolve_code_tools_enabled(skill_names: list[str], user_id: int) -> bool:
+    """（异步、配置级）健壮判断：代码/技能工具是否解锁。
+
+    解锁条件（满足任一）：
+      1) 技能名命中 EXECUTABLE_SKILLS（向后兼容）
+      2) 该技能是「代码技能」——config.code 非空（不再依赖技能名拼写）
+      3) 该技能 config.capabilities 含 "code"
+    这样即便 GitHub 市场装回的技能名与预设不一致，只要它是代码技能就会被正确解锁。
+    """
+    if not skill_names:
+        return False
+    requested = {s.lower().strip() for s in skill_names}
+    if requested & {s.lower() for s in EXECUTABLE_SKILLS}:
+        return True
+    try:
+        from ..database import create_session
+        from ..models.skill import Skill as SkillModel
+        from sqlalchemy import select
+        async with create_session() as session:
+            rows = (await session.execute(
+                select(SkillModel).where(
+                    SkillModel.name.in_(skill_names),
+                    SkillModel.is_installed == True,  # noqa: E712
+                )
+            )).scalars().all()
+        for sk in rows:
+            cfg = sk.config or {}
+            if cfg.get("code"):
+                return True
+            caps = cfg.get("capabilities") or []
+            if isinstance(caps, list) and "code" in [str(c).lower() for c in caps]:
+                return True
+    except Exception as e:
+        logger.warning(f"resolve_code_tools_enabled 失败，回退名称匹配: {e}")
+    return False
 
 
 # 代码执行类工具名（受 Agent skills 约束，须与 EXECUTABLE_SKILLS 语义对应）
@@ -532,18 +613,16 @@ CODE_TOOL_NAMES: set[str] = {
 }
 
 
-def get_enabled_tools(skills: list[str]) -> list[dict]:
-    """按 Agent 的 skills 过滤工具定义。
+def get_enabled_tools(enable_code: bool = False) -> list[dict]:
+    """按是否已解锁代码权限返回工具定义。
 
-    内部工具（call_internal_api、request_user_input、ui_action 等）始终可用；
-    代码执行类工具（run_code/run_terminal/read_file/write_file/list_files）
-    仅当 should_enable_code_tools(skills) 为真时附加。
+    - enable_code=True：返回全部代码执行工具（run_code/run_terminal/read_file/
+      write_file/list_files/create_task）+ run_skill 技能执行工具；
+    - enable_code=False：返回空列表（调用方另行追加内部工具 call_internal_api 等）。
     """
-    enable_code = should_enable_code_tools(skills or [])
-    return [
-        t for t in TOOL_DEFINITIONS
-        if t["function"]["name"] not in CODE_TOOL_NAMES or enable_code
-    ]
+    if not enable_code:
+        return []
+    return [dict(t) for t in TOOL_DEFINITIONS] + [RUN_SKILL_TOOL]
 
 
 def get_tool_summary(tool_name: str, tool_args: dict) -> str:
@@ -585,4 +664,7 @@ def get_tool_summary(tool_name: str, tool_args: dict) -> str:
         if title:
             return f"{type_label}: {title}"
         return f"请求用户{type_label}"
+    elif tool_name == "run_skill":
+        name = tool_args.get("skill_name", "")
+        return f"执行技能: {name}" if name else "执行技能"
     return f"调用 {tool_name}"

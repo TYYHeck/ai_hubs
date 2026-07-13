@@ -35,26 +35,31 @@ PROVIDERS: dict[str, dict] = {
         "name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+        "embedding_models": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
     },
     "deepseek": {
         "name": "DeepSeek (深度求索)",
         "base_url": "https://api.deepseek.com/v1",
         "models": ["deepseek-chat", "deepseek-reasoner"],
+        "embedding_models": [],  # DeepSeek 不提供 embedding 端点
     },
     "zhipu": {
         "name": "智谱 GLM",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "models": ["glm-4", "glm-4-flash", "glm-4-plus"],
+        "embedding_models": ["embedding-3", "embedding-2"],
     },
     "ollama": {
         "name": "Ollama (本地)",
         "base_url": "http://localhost:11434/v1",
         "models": [],  # 动态获取
+        "embedding_models": ["nomic-embed-text", "bge-m3"],
     },
     "custom": {
         "name": "自定义",
         "base_url": "",
         "models": [],
+        "embedding_models": [],
     },
 }
 
@@ -97,6 +102,44 @@ def get_llm_config() -> dict:
         "base_url": saved.get("base_url", preset["base_url"]),
         "temperature": saved.get("temperature", 0.7),
         "max_tokens": saved.get("max_tokens", 4096),
+    }
+
+
+def get_embedding_config() -> dict:
+    """获取 embedding（向量化）配置，与对话 LLM 解耦。
+
+    读取 llm_config.json 的 `embedding` 段：
+      {
+        "enabled": true,
+        "provider": "openai",            # 复用 PROVIDERS 预设（取 embedding_models[0]）
+        "model": "text-embedding-3-small",
+        "base_url": "...",               # 留空则取 provider 预设
+        "api_key": "...",                # 留空则复用对话 LLM 的 api_key
+        "dimensions": null               # 预留（部分模型支持），当前自动探测
+      }
+
+    未启用或无 key 时返回 {"enabled": False}，调用方应回退 BM25。
+    """
+    saved = load_llm_config()
+    emb = saved.get("embedding") or {}
+    if not emb.get("enabled", False):
+        return {"enabled": False}
+
+    provider = emb.get("provider", "openai")
+    preset = PROVIDERS.get(provider, PROVIDERS["openai"])
+    emb_models = preset.get("embedding_models") or []
+
+    model = emb.get("model") or (emb_models[0] if emb_models else "text-embedding-3-small")
+    base_url = emb.get("base_url") or preset.get("base_url", "https://api.openai.com/v1")
+    api_key = emb.get("api_key") or saved.get("api_key", "")
+
+    return {
+        "enabled": True,
+        "provider": provider,
+        "model": model,
+        "base_url": base_url,
+        "api_key": api_key,
+        "dimensions": emb.get("dimensions"),
     }
 
 

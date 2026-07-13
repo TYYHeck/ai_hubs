@@ -32,7 +32,7 @@ from ..deps import get_current_user
 from ...core.llm import llm_manager, get_llm_config, save_llm_config, PROVIDERS
 from ...core.memory import _estimate_tokens
 from ...core.tools import (
-    TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT,
+    TOOL_DEFINITIONS, TOOL_SYSTEM_PROMPT, RUN_SKILL_TOOL,
     should_enable_tools, should_enable_code_tools, execute_tool, get_tool_summary,
 )
 from ...core.orchestrator import _collect_output_files, _snapshot_workspace
@@ -352,6 +352,7 @@ async def chat_stream(
     
             # 注入技能上下文
             skill_ctx = ""
+            has_code_skill = False
             if req.skills:
                 from ...models.skill import Skill as SkillModel
                 sk_stmt = select(SkillModel).where(
@@ -377,23 +378,18 @@ async def chat_stream(
                             + "\n".join(desc_parts)
                         )
 
-                    # 代码工具注入：仅对包含代码的技能追加可执行实现
+                    # 代码技能：不再把源码当提示词（避免不可控 + 上下文污染），
+                    # 而是由框架通过 run_skill 工具在沙箱中真实执行。这里仅把
+                    # 已激活的代码技能名称告知模型，便于其按需调用 run_skill。
                     if code_skills:
+                        names = "、".join(sk.name for sk in code_skills)
                         if not skill_ctx:
                             skill_ctx = "\n\n# 当前激活的技能\n"
-                        code_blocks = []
-                        for sk in code_skills:
-                            cfg = sk.config or {}
-                            code = cfg.get("code") or ""
-                            entry = cfg.get("entry") or "skill.py"
-                            code_view = (code[:2000] + "…") if len(code) > 2000 else code
-                            code_blocks.append(
-                                f"【{sk.name}】入口：{entry}\n```\n{code_view}\n```"
-                            )
                         skill_ctx += (
-                            "\n\n# 技能可执行代码\n以下技能提供了可执行代码，"
-                            "请用 run_terminal 在适用场景下调用：\n\n"
-                            + "\n\n".join(code_blocks)
+                            f"\n\n# 已激活的代码技能\n"
+                            f"你拥有以下可执行代码技能（由框架在隔离沙箱中真实运行）：{names}。\n"
+                            f"在合适场景下调用 run_skill 工具并传入技能名称与参数即可执行，"
+                            f"无需、也不得自行用 run_terminal 重写其代码。"
                         )
     
             # 组装第一条 system message：基础 prompt + 技能上下文
@@ -411,14 +407,15 @@ async def chat_stream(
             messages.append({"role": "user", "content": resolved_message})
     
             # 3.1 构建工具列表：内部工具始终可用，代码执行工具按技能启用
-            code_tools_enabled = should_enable_code_tools(req.skills or [])
-            
+            # 代码技能（config.code 非空）同样解锁代码权限与 run_skill 工具
+            code_tools_enabled = should_enable_code_tools(req.skills or []) or has_code_skill
+
             # 基础工具：始终包含内部 API 调用 + 用户交互 + UI操作
             active_tools = [INTERNAL_API_TOOL, USER_INPUT_TOOL, UI_ACTION_TOOL]
-            
+
             # 代码执行工具：仅选用代码类技能时附加
             if code_tools_enabled:
-                active_tools = TOOL_DEFINITIONS + active_tools
+                active_tools = TOOL_DEFINITIONS + [RUN_SKILL_TOOL] + active_tools
                 # 注入代码工具系统提示
                 if messages and messages[0]["role"] == "system":
                     messages[0]["content"] = messages[0]["content"] + "\n\n" + TOOL_SYSTEM_PROMPT
