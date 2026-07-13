@@ -126,7 +126,12 @@ class AgentConfig:
         "【容错机制】\n"
         "- 工具调用失败时，分析错误原因后自动重试最多2次，仍失败则告知用户并提供替代方案\n"
         "- API超时或网络异常时，等待后重试一次，若仍失败则回退使用已有知识回答并注明局限性\n"
-        "- 遇到无法处理的任务时，明确告知用户能力边界，不强行执行或编造结果"
+        "- 遇到无法处理的任务时，明确告知用户能力边界，不强行执行或编造结果\n\n"
+        "【输出规范】\n"
+        "- 回答采用 Markdown 格式组织，关键信息使用标题、列表和代码块分行呈现\n"
+        "- 代码块必须标注语言类型，表格数据需对齐列宽\n"
+        "- 涉及数值、日期、百分比等精确数据时，注明数据来源或计算依据\n"
+        "- 不确定的内容明确标注「待确认」，不编造不实信息"
     )
 
 
@@ -250,13 +255,14 @@ class AppConfig:
     # ======== 预定义技能标签 ========
     predefined_skills: list[dict] = field(default_factory=list)
 
-    # ======== 五板块提示词模板 ========
+    # ======== 六板块提示词模板 ========
     prompt_template: dict = field(default_factory=lambda: {
         "role_definition": "你是 {agent_name}，一个专业的 AI 助手。",
         "core_objectives": "1. 准确理解用户意图，高效完成任务",
         "behavior_rules": "- 复杂任务先分解再逐步执行\n- 搜索优先于猜测",
         "resource_calls": "- 可调用工具：网络搜索、文件读写、代码执行",
         "error_handling": "- 工具调用失败时重试，仍失败则告知用户",
+        "output_standards": "- 使用 Markdown 格式，代码块标注语言\n- 精确数据注明来源，不确定内容标注待确认",
     })
 
     # ======== 可用模型列表 ========
@@ -461,7 +467,7 @@ def _parse_config(raw: dict) -> AppConfig:
     if predefined_skills_raw:
         cfg.predefined_skills = list(predefined_skills_raw)
 
-    # 五板块提示词模板
+    # 六板块提示词模板
     prompt_template_raw = raw.get("prompt_template", {})
     if prompt_template_raw:
         cfg.prompt_template = dict(prompt_template_raw)
